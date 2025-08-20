@@ -2,6 +2,8 @@
 
 This plugin streamlines blogging in Obsidian for AstroJS static sites by automating post creation, frontmatter setup, and wikilink conversion.
 
+![astro-composer-plugi-demo](https://github.com/user-attachments/assets/794e965b-a122-433f-a081-dcc643b6af8d)
+
 ## Features
 
 - **New Post Dialog**: Prompts for a title when creating a new Markdown file, auto-generating a kebab-case filename ("My Blog Post" → `my-blog-post.md`) and frontmatter with `title`, `date`, `draft`, etc.
