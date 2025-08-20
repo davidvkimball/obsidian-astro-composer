@@ -1,11 +1,12 @@
+
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
-	"version": "1.0.0",
+	"id": "astro-companion",
+	"name": "AstroJS Companion",
+	"version": "0.1.0",
 	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"description": "A companion plugin for AstroJS blogging workflows. Helps manage blog posts with frontmatter, convert wikilinks, and publish drafts.",
+	"author": "AstroJS Companion",
+	"authorUrl": "",
+	"fundingUrl": "",
 	"isDesktopOnly": false
 }

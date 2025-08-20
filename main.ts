@@ -1,85 +1,299 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
 
-// Remember to rename these classes and interfaces!
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TFolder } from 'obsidian';
 
-interface MyPluginSettings {
-	mySetting: string;
+interface AstroCompanionSettings {
+	draftStyle: 'frontmatter' | 'filename';
+	defaultTemplate: string;
+	linkBasePath: string;
+	postsFolder: string;
+	enableAutoRename: boolean;
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+const DEFAULT_SETTINGS: AstroCompanionSettings = {
+	draftStyle: 'frontmatter',
+	defaultTemplate: '---\ntitle: "{{title}}"\nslug: "{{slug}}"\ndate: "{{date}}"\ndraft: true\ndescription: ""\ntags: []\n---\n\n',
+	linkBasePath: '/blog/',
+	postsFolder: 'posts',
+	enableAutoRename: true
 }
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class AstroCompanionPlugin extends Plugin {
+	settings: AstroCompanionSettings;
 
 	async onload() {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
+		// Listen for file creation
+		this.registerEvent(
+			this.app.workspace.on('file-create', (file) => {
+				if (file instanceof TFile && file.extension === 'md') {
+					this.handleNewFileCreation(file);
 				}
+			})
+		);
+
+		// Add commands
+		this.addCommand({
+			id: 'standardize-frontmatter',
+			name: 'Standardize Frontmatter',
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				this.standardizeFrontmatter(view.file);
 			}
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
+		this.addCommand({
+			id: 'convert-wikilinks-astro',
+			name: 'Convert Wikilinks for Astro',
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				this.convertWikilinksForAstro(editor, view.file);
+			}
 		});
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+		this.addCommand({
+			id: 'publish-note',
+			name: 'Publish Note',
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				this.publishNote(editor, view.file);
+			}
+		});
+
+		this.addCommand({
+			id: 'setup-astro-folders',
+			name: 'Setup Astro-friendly folder structure',
+			callback: () => {
+				this.setupAstroFolders();
+			}
+		});
+
+		// Add settings tab
+		this.addSettingTab(new AstroCompanionSettingTab(this.app, this));
 	}
 
-	onunload() {
+	async handleNewFileCreation(file: TFile) {
+		// Only process files in posts folder or if auto-rename is enabled
+		if (!this.settings.enableAutoRename && !file.path.includes(this.settings.postsFolder)) {
+			return;
+		}
 
+		// Delay to ensure file is fully created
+		setTimeout(() => {
+			new PostTitleModal(this.app, file, this).open();
+		}, 100);
+	}
+
+	toKebabCase(str: string): string {
+		return str
+			.toLowerCase()
+			.replace(/[^a-z0-9\s-]/g, '') // Remove invalid characters
+			.trim()
+			.replace(/\s+/g, '-') // Replace spaces with hyphens
+			.replace(/-+/g, '-') // Remove multiple consecutive hyphens
+			.replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+	}
+
+	async renameFileWithTitle(file: TFile, title: string) {
+		const kebabTitle = this.toKebabCase(title);
+		const isDraft = this.settings.draftStyle === 'filename';
+		const prefix = isDraft ? '_' : '';
+		const newName = `${prefix}${kebabTitle}.md`;
+		
+		const folder = file.parent;
+		const newPath = folder ? `${folder.path}/${newName}` : newName;
+		
+		// Check if file with new name already exists
+		const existingFile = this.app.vault.getAbstractFileByPath(newPath);
+		if (existingFile && existingFile !== file) {
+			new Notice(`File with name "${newName}" already exists`);
+			return null;
+		}
+
+		try {
+			await this.app.vault.rename(file, newPath);
+			return this.app.vault.getAbstractFileByPath(newPath) as TFile;
+		} catch (error) {
+			new Notice(`Failed to rename file: ${error.message}`);
+			return null;
+		}
+	}
+
+	async addFrontmatterToFile(file: TFile, title: string, slug?: string) {
+		const content = await this.app.vault.read(file);
+		const actualSlug = slug || this.toKebabCase(title);
+		const date = new Date().toISOString();
+		
+		const template = this.settings.defaultTemplate
+			.replace('{{title}}', title)
+			.replace('{{slug}}', actualSlug)
+			.replace('{{date}}', date);
+
+		// If file already has frontmatter, don't add it again
+		if (content.startsWith('---')) {
+			return;
+		}
+
+		const newContent = template + '\n' + content;
+		await this.app.vault.modify(file, newContent);
+	}
+
+	async standardizeFrontmatter(file: TFile | null) {
+		if (!file) {
+			new Notice('No active file');
+			return;
+		}
+
+		const content = await this.app.vault.read(file);
+		const title = file.basename.replace(/^_/, ''); // Remove draft prefix if present
+		const slug = this.toKebabCase(title);
+		
+		// Parse existing frontmatter or create new
+		let frontmatterEnd = 0;
+		let existingFrontmatter: any = {};
+		
+		if (content.startsWith('---')) {
+			const secondDelimiter = content.indexOf('\n---', 3);
+			if (secondDelimiter !== -1) {
+				frontmatterEnd = secondDelimiter + 4;
+				const frontmatterText = content.slice(4, secondDelimiter);
+				try {
+					// Simple YAML parsing for basic fields
+					frontmatterText.split('\n').forEach(line => {
+						const match = line.match(/^(\w+):\s*(.+)$/);
+						if (match) {
+							const [, key, value] = match;
+							existingFrontmatter[key] = value.replace(/^["']|["']$/g, '');
+						}
+					});
+				} catch (error) {
+					new Notice('Failed to parse existing frontmatter');
+				}
+			}
+		}
+
+		const standardizedFrontmatter = {
+			title: existingFrontmatter.title || title,
+			slug: existingFrontmatter.slug || slug,
+			date: existingFrontmatter.date || new Date().toISOString(),
+			draft: existingFrontmatter.draft !== undefined ? existingFrontmatter.draft : 
+				   (this.settings.draftStyle === 'frontmatter' ? 'true' : 'false'),
+			description: existingFrontmatter.description || '',
+			tags: existingFrontmatter.tags || '[]'
+		};
+
+		const newFrontmatter = Object.entries(standardizedFrontmatter)
+			.map(([key, value]) => `${key}: "${value}"`)
+			.join('\n');
+
+		const bodyContent = content.slice(frontmatterEnd);
+		const newContent = `---\n${newFrontmatter}\n---\n${bodyContent}`;
+		
+		await this.app.vault.modify(file, newContent);
+		new Notice('Frontmatter standardized');
+	}
+
+	async convertWikilinksForAstro(editor: Editor, file: TFile | null) {
+		if (!file) {
+			new Notice('No active file');
+			return;
+		}
+
+		const content = editor.getValue();
+		let newContent = content;
+
+		// Convert wikilinks [[Title]] or [[Title|Display Text]]
+		newContent = newContent.replace(/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g, (match, linkText, _, displayText) => {
+			const display = displayText || linkText;
+			const slug = this.toKebabCase(linkText);
+			return `[${display}](${this.settings.linkBasePath}${slug})`;
+		});
+
+		// Convert image wikilinks ![[image.png]] to Astro-compatible format
+		newContent = newContent.replace(/!\[\[([^\]]+)\]\]/g, (match, imageName) => {
+			const cleanName = imageName.replace(/\.[^/.]+$/, ""); // Remove extension
+			const slug = this.toKebabCase(cleanName);
+			return `![${cleanName}](${this.settings.linkBasePath}images/${imageName})`;
+		});
+
+		// Convert embedded files {{embed.md}} to include format
+		newContent = newContent.replace(/\{\{([^}]+)\}\}/g, (match, fileName) => {
+			const slug = this.toKebabCase(fileName.replace('.md', ''));
+			return `[Embedded: ${fileName}](${this.settings.linkBasePath}${slug})`;
+		});
+
+		editor.setValue(newContent);
+		new Notice('Wikilinks converted for Astro');
+	}
+
+	async publishNote(editor: Editor, file: TFile | null) {
+		if (!file) {
+			new Notice('No active file');
+			return;
+		}
+
+		// First convert wikilinks
+		await this.convertWikilinksForAstro(editor, file);
+
+		// Then handle draft status
+		if (this.settings.draftStyle === 'filename' && file.name.startsWith('_')) {
+			// Remove underscore prefix
+			const newName = file.name.substring(1);
+			const newPath = file.parent ? `${file.parent.path}/${newName}` : newName;
+			await this.app.vault.rename(file, newPath);
+			file = this.app.vault.getAbstractFileByPath(newPath) as TFile;
+		}
+
+		// Update frontmatter
+		const content = await this.app.vault.read(file);
+		let newContent = content;
+
+		// Remove draft: true and add published date
+		newContent = newContent.replace(/draft:\s*true/g, 'draft: false');
+		newContent = newContent.replace(/published:\s*[^\n]*/g, ''); // Remove existing published date
+		
+		// Add published date after date field
+		const publishedDate = new Date().toISOString();
+		newContent = newContent.replace(/(date:\s*[^\n]*\n)/, `$1published: "${publishedDate}"\n`);
+
+		await this.app.vault.modify(file, newContent);
+		new Notice('Note published successfully!');
+	}
+
+	async setupAstroFolders() {
+		const folders = [
+			this.settings.postsFolder,
+			`${this.settings.postsFolder}/images`,
+			'.obsidian-ignore', // Folder for Obsidian files that Astro should ignore
+			`${this.settings.postsFolder}/drafts`
+		];
+
+		for (const folderPath of folders) {
+			const folder = this.app.vault.getAbstractFileByPath(folderPath);
+			if (!folder) {
+				await this.app.vault.createFolder(folderPath);
+			}
+		}
+
+		// Create .gitignore for Astro to ignore Obsidian files
+		const gitignoreContent = `# Obsidian files
+.obsidian/
+*.canvas
+*.excalidraw
+.DS_Store
+.obsidian-ignore/
+`;
+
+		const gitignorePath = '.gitignore';
+		const existingGitignore = this.app.vault.getAbstractFileByPath(gitignorePath);
+		
+		if (!existingGitignore) {
+			await this.app.vault.create(gitignorePath, gitignoreContent);
+		} else {
+			const existing = await this.app.vault.read(existingGitignore as TFile);
+			if (!existing.includes('.obsidian/')) {
+				await this.app.vault.modify(existingGitignore as TFile, existing + '\n' + gitignoreContent);
+			}
+		}
+
+		new Notice('Astro-friendly folder structure created!');
 	}
 
 	async loadSettings() {
@@ -91,44 +305,142 @@ export default class MyPlugin extends Plugin {
 	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
+class PostTitleModal extends Modal {
+	file: TFile;
+	plugin: AstroCompanionPlugin;
+	titleInput: HTMLInputElement;
+
+	constructor(app: App, file: TFile, plugin: AstroCompanionPlugin) {
 		super(app);
+		this.file = file;
+		this.plugin = plugin;
 	}
 
 	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
+		const { contentEl } = this;
+		contentEl.empty();
+
+		contentEl.createEl('h2', { text: 'New Blog Post' });
+		contentEl.createEl('p', { text: 'Enter a title for your blog post:' });
+
+		this.titleInput = contentEl.createEl('input', {
+			type: 'text',
+			placeholder: 'My Awesome Blog Post'
+		});
+		this.titleInput.style.width = '100%';
+		this.titleInput.style.marginBottom = '16px';
+		this.titleInput.focus();
+
+		const buttonContainer = contentEl.createDiv();
+		buttonContainer.style.display = 'flex';
+		buttonContainer.style.gap = '8px';
+		buttonContainer.style.justifyContent = 'flex-end';
+
+		const cancelButton = buttonContainer.createEl('button', { text: 'Cancel' });
+		cancelButton.onclick = () => this.close();
+
+		const createButton = buttonContainer.createEl('button', { text: 'Create' });
+		createButton.classList.add('mod-cta');
+		createButton.onclick = () => this.createPost();
+
+		// Handle Enter key
+		this.titleInput.addEventListener('keypress', (e) => {
+			if (e.key === 'Enter') {
+				this.createPost();
+			}
+		});
+	}
+
+	async createPost() {
+		const title = this.titleInput.value.trim();
+		if (!title) {
+			new Notice('Please enter a title');
+			return;
+		}
+
+		const renamedFile = await this.plugin.renameFileWithTitle(this.file, title);
+		if (renamedFile) {
+			await this.plugin.addFrontmatterToFile(renamedFile, title);
+			new Notice(`Created blog post: ${renamedFile.name}`);
+		}
+		
+		this.close();
 	}
 
 	onClose() {
-		const {contentEl} = this;
+		const { contentEl } = this;
 		contentEl.empty();
 	}
 }
 
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+class AstroCompanionSettingTab extends PluginSettingTab {
+	plugin: AstroCompanionPlugin;
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: AstroCompanionPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
 
 	display(): void {
-		const {containerEl} = this;
-
+		const { containerEl } = this;
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
+			.setName('Draft Style')
+			.setDesc('How to mark posts as drafts')
+			.addDropdown(dropdown => dropdown
+				.addOption('frontmatter', 'Frontmatter (draft: true)')
+				.addOption('filename', 'Filename prefix (_post-name.md)')
+				.setValue(this.plugin.settings.draftStyle)
+				.onChange(async (value: 'frontmatter' | 'filename') => {
+					this.plugin.settings.draftStyle = value;
 					await this.plugin.saveSettings();
 				}));
+
+		new Setting(containerEl)
+			.setName('Posts Folder')
+			.setDesc('Folder name for blog posts')
+			.addText(text => text
+				.setPlaceholder('posts')
+				.setValue(this.plugin.settings.postsFolder)
+				.onChange(async (value) => {
+					this.plugin.settings.postsFolder = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Link Base Path')
+			.setDesc('Base path for converted links')
+			.addText(text => text
+				.setPlaceholder('/blog/')
+				.setValue(this.plugin.settings.linkBasePath)
+				.onChange(async (value) => {
+					this.plugin.settings.linkBasePath = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Auto-rename Files')
+			.setDesc('Automatically show title dialog for new .md files')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.enableAutoRename)
+				.onChange(async (value) => {
+					this.plugin.settings.enableAutoRename = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Default Frontmatter Template')
+			.setDesc('Template for new post frontmatter (use {{title}}, {{slug}}, {{date}})')
+			.addTextArea(text => {
+				text.setPlaceholder('---\ntitle: "{{title}}"\nslug: "{{slug}}"\ndate: "{{date}}"\ndraft: true\n---\n')
+					.setValue(this.plugin.settings.defaultTemplate)
+					.onChange(async (value) => {
+						this.plugin.settings.defaultTemplate = value;
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.style.height = '200px';
+				text.inputEl.style.width = '100%';
+			});
 	}
 }

@@ -6,3 +6,15 @@ channel = "stable-25_05"
 
 [deployment]
 run = ["sh", "-c", "npm i"]
+
+[workflows]
+runButton = "Build Plugin"
+
+[[workflows.workflow]]
+name = "Build Plugin"
+author = 8642560
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run build"
