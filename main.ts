@@ -123,9 +123,14 @@ export default class AstroComposerPlugin extends Plugin {
 		template = template.replace(/\{\{title\}\}/g, title);
 		template = template.replace(/\{\{date\}\}/g, date);
 
-		// For new files created through the modal, just add the template
-		// (they shouldn't have frontmatter yet since we're doing this after user input)
-		const newContent = template + content;
+		// Check if file already has frontmatter
+		if (content.trim().startsWith('---')) {
+			new Notice('File already has frontmatter');
+			return;
+		}
+
+		// Add template to the file (ensuring proper line breaks)
+		const newContent = template + (template.endsWith('\n') ? '' : '\n') + content;
 		await this.app.vault.modify(file, newContent);
 		new Notice(`Added frontmatter with title: ${title}`);
 	}
@@ -347,10 +352,16 @@ class PostTitleModal extends Modal {
 			return;
 		}
 
-		const renamedFile = await this.plugin.renameFileWithTitle(this.file, title);
-		if (renamedFile) {
-			await this.plugin.addFrontmatterToFile(renamedFile, title);
-			new Notice(`Created blog post: ${renamedFile.name}`);
+		try {
+			// First, rename the file
+			const renamedFile = await this.plugin.renameFileWithTitle(this.file, title);
+			if (renamedFile) {
+				// Then add the frontmatter template
+				await this.plugin.addFrontmatterToFile(renamedFile, title);
+				new Notice(`Created blog post: ${renamedFile.name}`);
+			}
+		} catch (error) {
+			new Notice(`Error creating post: ${error.message}`);
 		}
 
 		this.close();
