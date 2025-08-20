@@ -1,4 +1,3 @@
-
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TFolder } from 'obsidian';
 
 interface AstroCompanionSettings {
@@ -23,11 +22,14 @@ export default class AstroCompanionPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		// Listen for file creation
+		// Register file creation event
 		this.registerEvent(
-			this.app.workspace.on('file-create', (file) => {
+			this.app.vault.on('create', (file) => {
 				if (file instanceof TFile && file.extension === 'md') {
-					this.handleNewFileCreation(file);
+					// Only show modal for new markdown files in posts folder
+					if (this.settings.postsFolder && file.path.startsWith(this.settings.postsFolder)) {
+						new PostTitleModal(this.app, file, this).open();
+					}
 				}
 			})
 		);
@@ -96,10 +98,10 @@ export default class AstroCompanionPlugin extends Plugin {
 		const isDraft = this.settings.draftStyle === 'filename';
 		const prefix = isDraft ? '_' : '';
 		const newName = `${prefix}${kebabTitle}.md`;
-		
+
 		const folder = file.parent;
 		const newPath = folder ? `${folder.path}/${newName}` : newName;
-		
+
 		// Check if file with new name already exists
 		const existingFile = this.app.vault.getAbstractFileByPath(newPath);
 		if (existingFile && existingFile !== file) {
@@ -120,7 +122,7 @@ export default class AstroCompanionPlugin extends Plugin {
 		const content = await this.app.vault.read(file);
 		const actualSlug = slug || this.toKebabCase(title);
 		const date = new Date().toISOString();
-		
+
 		const template = this.settings.defaultTemplate
 			.replace('{{title}}', title)
 			.replace('{{slug}}', actualSlug)
@@ -144,11 +146,11 @@ export default class AstroCompanionPlugin extends Plugin {
 		const content = await this.app.vault.read(file);
 		const title = file.basename.replace(/^_/, ''); // Remove draft prefix if present
 		const slug = this.toKebabCase(title);
-		
+
 		// Parse existing frontmatter or create new
 		let frontmatterEnd = 0;
 		let existingFrontmatter: any = {};
-		
+
 		if (content.startsWith('---')) {
 			const secondDelimiter = content.indexOf('\n---', 3);
 			if (secondDelimiter !== -1) {
@@ -185,7 +187,7 @@ export default class AstroCompanionPlugin extends Plugin {
 
 		const bodyContent = content.slice(frontmatterEnd);
 		const newContent = `---\n${newFrontmatter}\n---\n${bodyContent}`;
-		
+
 		await this.app.vault.modify(file, newContent);
 		new Notice('Frontmatter standardized');
 	}
@@ -248,7 +250,7 @@ export default class AstroCompanionPlugin extends Plugin {
 		// Remove draft: true and add published date
 		newContent = newContent.replace(/draft:\s*true/g, 'draft: false');
 		newContent = newContent.replace(/published:\s*[^\n]*/g, ''); // Remove existing published date
-		
+
 		// Add published date after date field
 		const publishedDate = new Date().toISOString();
 		newContent = newContent.replace(/(date:\s*[^\n]*\n)/, `$1published: "${publishedDate}"\n`);
@@ -283,7 +285,7 @@ export default class AstroCompanionPlugin extends Plugin {
 
 		const gitignorePath = '.gitignore';
 		const existingGitignore = this.app.vault.getAbstractFileByPath(gitignorePath);
-		
+
 		if (!existingGitignore) {
 			await this.app.vault.create(gitignorePath, gitignoreContent);
 		} else {
@@ -363,7 +365,7 @@ class PostTitleModal extends Modal {
 			await this.plugin.addFrontmatterToFile(renamedFile, title);
 			new Notice(`Created blog post: ${renamedFile.name}`);
 		}
-		
+
 		this.close();
 	}
 
