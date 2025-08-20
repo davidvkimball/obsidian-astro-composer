@@ -1,11 +1,11 @@
 
 {
-	"id": "astro-companion",
-	"name": "AstroJS Companion",
+	"id": "astro-composer",
+	"name": "Astro Composer",
 	"version": "0.1.0",
 	"minAppVersion": "0.15.0",
 	"description": "A companion plugin for AstroJS blogging workflows. Helps manage blog posts with frontmatter, convert wikilinks, and publish drafts.",
-	"author": "AstroJS Companion",
+	"author": "Astro Composer",
 	"authorUrl": "",
 	"fundingUrl": "",
 	"isDesktopOnly": false

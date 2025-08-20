@@ -16,7 +16,7 @@ const DEFAULT_SETTINGS: AstroCompanionSettings = {
 	enableAutoRename: true
 }
 
-export default class AstroCompanionPlugin extends Plugin {
+export default class AstroComposerPlugin extends Plugin {
 	settings: AstroCompanionSettings;
 
 	async onload() {
@@ -309,10 +309,10 @@ export default class AstroCompanionPlugin extends Plugin {
 
 class PostTitleModal extends Modal {
 	file: TFile;
-	plugin: AstroCompanionPlugin;
+	plugin: AstroComposerPlugin;
 	titleInput: HTMLInputElement;
 
-	constructor(app: App, file: TFile, plugin: AstroCompanionPlugin) {
+	constructor(app: App, file: TFile, plugin: AstroComposerPlugin) {
 		super(app);
 		this.file = file;
 		this.plugin = plugin;
@@ -376,9 +376,9 @@ class PostTitleModal extends Modal {
 }
 
 class AstroCompanionSettingTab extends PluginSettingTab {
-	plugin: AstroCompanionPlugin;
+	plugin: AstroComposerPlugin;
 
-	constructor(app: App, plugin: AstroCompanionPlugin) {
+	constructor(app: App, plugin: AstroComposerPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
