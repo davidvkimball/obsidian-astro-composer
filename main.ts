@@ -188,22 +188,30 @@ export default class AstroComposerPlugin extends Plugin {
 				// Create new file in folder
 				const newFile = await this.app.vault.create(newPath, "");
 
-				// Reveal the new file in the file explorer with multiple attempts
+				// Reveal the new file in the file explorer
 				const folder = this.app.vault.getAbstractFileByPath(
 					folderPath,
 				) as TFolder;
 				if (folder) {
-					// Multiple attempts to ensure folder is revealed and expanded
-					this.app.workspace.trigger("reveal-active-file", folder);
+					// Use the file explorer API to reveal the file
+					const fileExplorer = this.app.workspace.getLeavesOfType("file-explorer")[0];
+					if (fileExplorer && fileExplorer.view) {
+						// @ts-ignore - Access the file explorer view
+						const explorerView = fileExplorer.view;
+						// @ts-ignore - Reveal the file in the explorer
+						if (explorerView.revealInFolder) {
+							explorerView.revealInFolder(newFile);
+						}
+					}
+					
+					// Fallback to the trigger method with delays
+					this.app.workspace.trigger("reveal-active-file", newFile);
 					setTimeout(() => {
 						this.app.workspace.trigger("reveal-active-file", newFile);
-					}, 50);
+					}, 100);
 					setTimeout(() => {
 						this.app.workspace.trigger("reveal-active-file", newFile);
-					}, 200);
-					setTimeout(() => {
-						this.app.workspace.trigger("reveal-active-file", newFile);
-					}, 500);
+					}, 300);
 				}
 
 				// Open the new file in the editor
@@ -351,46 +359,39 @@ export default class AstroComposerPlugin extends Plugin {
 		const content = editor.getValue();
 		let newContent = content;
 
-		// Convert regular wikilinks [[Title]] or [[Title|Display Text]] but NOT image wikilinks ![[
-		// Use negative lookbehind to exclude patterns preceded by !
-		newContent = newContent.replace(
-			/(?<!\!)\[\[([^\]|]+)(\|([^\]]+))?\]\]/g,
-			(match, linkText, _, displayText) => {
-				const display = displayText || linkText;
-				const slug = this.toKebabCase(linkText);
+		// Convert only regular wikilinks [[Title]] or [[Title|Display Text]]
+		// Skip any line that contains ![[
+		const lines = newContent.split('\n');
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+			// Skip lines that contain image wikilinks
+			if (line.includes('![[')) {
+				continue;
+			}
+			
+			// Process regular wikilinks on this line
+			lines[i] = line.replace(
+				/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g,
+				(match, linkText, _, displayText) => {
+					const display = displayText || linkText;
+					const slug = this.toKebabCase(linkText);
 
-				// Ensure leading slash and trailing slash
-				let basePath = this.settings.linkBasePath;
-				if (!basePath.startsWith("/")) {
-					basePath = "/" + basePath;
-				}
-				if (!basePath.endsWith("/")) {
-					basePath = basePath + "/";
-				}
+					// Ensure leading slash and trailing slash
+					let basePath = this.settings.linkBasePath;
+					if (!basePath.startsWith("/")) {
+						basePath = "/" + basePath;
+					}
+					if (!basePath.endsWith("/")) {
+						basePath = basePath + "/";
+					}
 
-				// For folder-based links, URL should be just /linkBasePath/slug/
-				// Don't include postsFolder in the URL path
-				return `[${display}](${basePath}${slug}/)`;
-			},
-		);
-
-		// Convert image wikilinks ![[image.png]] to Astro-compatible format
-		newContent = newContent.replace(
-			/!\[\[([^\]]+)\]\]/g,
-			(match, imageName) => {
-				const cleanName = imageName.replace(/\.[^/.]+$/, ""); // Remove extension
-
-				let basePath = this.settings.linkBasePath;
-				if (!basePath.startsWith("/")) {
-					basePath = "/" + basePath;
-				}
-				if (!basePath.endsWith("/")) {
-					basePath = basePath + "/";
-				}
-
-				return `![${cleanName}](${basePath}images/${imageName})`;
-			},
-		);
+					// For folder-based links, URL should be just /linkBasePath/slug/
+					// Don't include postsFolder in the URL path
+					return `[${display}](${basePath}${slug}/)`;
+				},
+			);
+		}
+		newContent = lines.join('\n');
 
 		// Convert embedded files {{embed.md}} to include format
 		newContent = newContent.replace(/\{\{([^}]+)\}\}/g, (match, fileName) => {
