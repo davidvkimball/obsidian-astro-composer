@@ -26,15 +26,17 @@ export default class AstroComposerPlugin extends Plugin {
 		this.registerEvent(
 			this.app.vault.on('create', (file) => {
 				if (file instanceof TFile && file.extension === 'md') {
-					// Show modal for all new markdown files if auto-rename is enabled
-					// Or only for files in posts folder if specified
-					if (this.settings.enableAutoRename || 
-						(this.settings.postsFolder && file.path.startsWith(this.settings.postsFolder))) {
-						// Small delay to ensure file is fully created
-						setTimeout(() => {
+					// Only show modal for truly new files (empty or very small)
+					// Small delay to ensure file is fully created
+					setTimeout(async () => {
+						const content = await this.app.vault.read(file);
+						// Only trigger for empty files or files with just basic content
+						if (content.trim().length < 50 && 
+							(this.settings.enableAutoRename || 
+							(this.settings.postsFolder && file.path.startsWith(this.settings.postsFolder)))) {
 							new PostTitleModal(this.app, file, this).open();
-						}, 100);
-					}
+						}
+					}, 100);
 				}
 			})
 		);
@@ -114,36 +116,17 @@ export default class AstroComposerPlugin extends Plugin {
 	}
 
 	async addFrontmatterToFile(file: TFile, title: string, slug?: string) {
-		const content = await this.app.vault.read(file);
 		const date = new Date().toISOString();
 
+		// Get the template and replace variables
 		let template = this.settings.defaultTemplate;
-		
-		// Replace template variables
 		template = template.replace(/\{\{title\}\}/g, title);
 		template = template.replace(/\{\{date\}\}/g, date);
 
-		// For new files created through the modal, we want to replace any existing content
-		// with our template since this is a fresh blog post creation
-		let bodyContent = '';
-		
-		// If file has frontmatter, extract the body content (everything after the closing ---)
-		if (content.trim().startsWith('---')) {
-			const secondDelimiter = content.indexOf('\n---', 3);
-			if (secondDelimiter !== -1) {
-				bodyContent = content.slice(secondDelimiter + 4);
-			} else {
-				// Malformed frontmatter, keep original content
-				bodyContent = content;
-			}
-		} else {
-			bodyContent = content;
-		}
-
-		// Create new content with our template and any existing body content
-		const newContent = template + (template.endsWith('\n') ? '' : '\n') + bodyContent;
-		await this.app.vault.modify(file, newContent);
-		new Notice(`Added frontmatter with title: ${title}`);
+		// For new files created through modal, just replace entire content with template
+		// This ensures clean injection without content parsing issues
+		await this.app.vault.modify(file, template);
+		new Notice(`Blog post created with title: ${title}`);
 	}
 
 	async standardizeFrontmatter(file: TFile | null) {
