@@ -24,11 +24,16 @@ export default class AstroComposerPlugin extends Plugin {
 
 		// Register file creation event
 		this.registerEvent(
-			this.app.vault.on('create', (file) => {
+			this.app.workspace.on('file-create', (file) => {
 				if (file instanceof TFile && file.extension === 'md') {
-					// Only show modal for new markdown files in posts folder
-					if (this.settings.postsFolder && file.path.startsWith(this.settings.postsFolder)) {
-						new PostTitleModal(this.app, file, this).open();
+					// Show modal for all new markdown files if auto-rename is enabled
+					// Or only for files in posts folder if specified
+					if (this.settings.enableAutoRename || 
+						(this.settings.postsFolder && file.path.startsWith(this.settings.postsFolder))) {
+						// Small delay to ensure file is fully created
+						setTimeout(() => {
+							new PostTitleModal(this.app, file, this).open();
+						}, 100);
 					}
 				}
 			})
@@ -71,17 +76,7 @@ export default class AstroComposerPlugin extends Plugin {
 		this.addSettingTab(new AstroCompanionSettingTab(this.app, this));
 	}
 
-	async handleNewFileCreation(file: TFile) {
-		// Only process files in posts folder or if auto-rename is enabled
-		if (!this.settings.enableAutoRename && !file.path.includes(this.settings.postsFolder)) {
-			return;
-		}
-
-		// Delay to ensure file is fully created
-		setTimeout(() => {
-			new PostTitleModal(this.app, file, this).open();
-		}, 100);
-	}
+	
 
 	toKebabCase(str: string): string {
 		return str
