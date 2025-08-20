@@ -499,7 +499,7 @@ class AstroComposerSettingTab extends PluginSettingTab {
 			.setDesc("How to mark posts as drafts.")
 			.addDropdown((dropdown) =>
 				dropdown
-					.addOption("frontmatter", "Frontmatter (draft: true)")
+					.addOption("frontmatter", "Frontmatter (draft: true or published: false)")
 					.addOption("filename", "Filename prefix (_post-name.md)")
 					.setValue(this.plugin.settings.draftStyle)
 					.onChange(async (value: "frontmatter" | "filename") => {
