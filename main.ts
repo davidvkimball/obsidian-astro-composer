@@ -118,18 +118,23 @@ export default class AstroComposerPlugin extends Plugin {
 		const actualSlug = slug || this.toKebabCase(title);
 		const date = new Date().toISOString();
 
-		const template = this.settings.defaultTemplate
-			.replace('{{title}}', title)
-			.replace('{{slug}}', actualSlug)
-			.replace('{{date}}', date);
+		let template = this.settings.defaultTemplate;
+		
+		// Replace template variables
+		template = template.replace(/\{\{title\}\}/g, title);
+		template = template.replace(/\{\{slug\}\}/g, actualSlug);
+		template = template.replace(/\{\{date\}\}/g, date);
 
 		// If file already has frontmatter, don't add it again
 		if (content.startsWith('---')) {
+			new Notice('File already has frontmatter');
 			return;
 		}
 
-		const newContent = template + '\n' + content;
+		// Ensure template ends with newline and add content
+		const newContent = template + (template.endsWith('\n') ? '' : '\n') + content;
 		await this.app.vault.modify(file, newContent);
+		new Notice(`Added frontmatter with title: ${title}`);
 	}
 
 	async standardizeFrontmatter(file: TFile | null) {
@@ -157,7 +162,7 @@ export default class AstroComposerPlugin extends Plugin {
 						const match = line.match(/^(\w+):\s*(.+)$/);
 						if (match) {
 							const [, key, value] = match;
-							existingFrontmatter[key] = value.replace(/^["']|["']$/g, '');
+							existingFrontmatter[key] = value.replace(/^["'\[\]]|["'\[\]]$/g, '');
 						}
 					});
 				} catch (error) {
@@ -166,25 +171,21 @@ export default class AstroComposerPlugin extends Plugin {
 			}
 		}
 
-		const standardizedFrontmatter = {
-			title: existingFrontmatter.title || title,
-			slug: existingFrontmatter.slug || slug,
-			date: existingFrontmatter.date || new Date().toISOString(),
-			draft: existingFrontmatter.draft !== undefined ? existingFrontmatter.draft : 
-				   (this.settings.draftStyle === 'frontmatter' ? 'true' : 'false'),
-			description: existingFrontmatter.description || '',
-			tags: existingFrontmatter.tags || '[]'
-		};
+		// Use template from settings and replace variables
+		let template = this.settings.defaultTemplate;
+		template = template.replace(/\{\{title\}\}/g, existingFrontmatter.title || title);
+		template = template.replace(/\{\{slug\}\}/g, existingFrontmatter.slug || slug);
+		template = template.replace(/\{\{date\}\}/g, existingFrontmatter.date || new Date().toISOString());
 
-		const newFrontmatter = Object.entries(standardizedFrontmatter)
-			.map(([key, value]) => `${key}: "${value}"`)
-			.join('\n');
+		// Handle draft status based on settings
+		const draftValue = this.settings.draftStyle === 'frontmatter' ? 'true' : 'false';
+		template = template.replace(/draft:\s*true/g, `draft: ${existingFrontmatter.draft || draftValue}`);
 
 		const bodyContent = content.slice(frontmatterEnd);
-		const newContent = `---\n${newFrontmatter}\n---\n${bodyContent}`;
+		const newContent = template + (template.endsWith('\n') ? '' : '\n') + bodyContent;
 
 		await this.app.vault.modify(file, newContent);
-		new Notice('Frontmatter standardized');
+		new Notice('Frontmatter standardized using template');
 	}
 
 	async convertWikilinksForAstro(editor: Editor, file: TFile | null) {
