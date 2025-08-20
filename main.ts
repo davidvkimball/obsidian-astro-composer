@@ -166,10 +166,15 @@ export default class AstroComposerPlugin extends Plugin {
 				// Create new file in folder
 				const newFile = await this.app.vault.create(newPath, '');
 				
-				// Reveal the folder in the file explorer
+				// Reveal the new file in the file explorer
 				const folder = this.app.vault.getAbstractFileByPath(folderPath) as TFolder;
 				if (folder) {
+					// First reveal the folder to expand it
 					this.app.workspace.trigger('reveal-active-file', folder);
+					// Then reveal the actual file to show it in the expanded folder
+					setTimeout(() => {
+						this.app.workspace.trigger('reveal-active-file', newFile);
+					}, 100);
 				}
 				
 				// Open the new file in the editor
@@ -297,8 +302,14 @@ export default class AstroComposerPlugin extends Plugin {
 		const content = editor.getValue();
 		let newContent = content;
 
-		// Convert wikilinks [[Title]] or [[Title|Display Text]]
+		// Convert wikilinks [[Title]] or [[Title|Display Text]] but exclude image files
 		newContent = newContent.replace(/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g, (match, linkText, _, displayText) => {
+			// Check if this is an image file and skip conversion
+			const imageExtensions = /\.(jpg|jpeg|png|gif|webp|svg|bmp|tiff|ico)$/i;
+			if (imageExtensions.test(linkText)) {
+				return match; // Return original wikilink unchanged for images
+			}
+
 			const display = displayText || linkText;
 			const slug = this.toKebabCase(linkText);
 			
@@ -311,20 +322,13 @@ export default class AstroComposerPlugin extends Plugin {
 				basePath = basePath + '/';
 			}
 			
-			// For folder-based links, don't append index if it matches the index file name setting
-			let finalSlug = slug;
-			if (this.settings.creationMode === 'folder') {
-				// Don't append anything extra for folder-based links
-				return `[${display}](${basePath}${finalSlug}/)`;
-			} else {
-				return `[${display}](${basePath}${finalSlug}/)`;
-			}
+			// For folder-based links, the URL should point to the folder (no index filename)
+			return `[${display}](${basePath}${slug}/)`;
 		});
 
 		// Convert image wikilinks ![[image.png]] to Astro-compatible format
 		newContent = newContent.replace(/!\[\[([^\]]+)\]\]/g, (match, imageName) => {
 			const cleanName = imageName.replace(/\.[^/.]+$/, ""); // Remove extension
-			const slug = this.toKebabCase(cleanName);
 			
 			let basePath = this.settings.linkBasePath;
 			if (!basePath.startsWith('/')) {
