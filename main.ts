@@ -123,14 +123,25 @@ export default class AstroComposerPlugin extends Plugin {
 		template = template.replace(/\{\{title\}\}/g, title);
 		template = template.replace(/\{\{date\}\}/g, date);
 
-		// Check if file already has frontmatter
+		// For new files created through the modal, we want to replace any existing content
+		// with our template since this is a fresh blog post creation
+		let bodyContent = '';
+		
+		// If file has frontmatter, extract the body content (everything after the closing ---)
 		if (content.trim().startsWith('---')) {
-			new Notice('File already has frontmatter');
-			return;
+			const secondDelimiter = content.indexOf('\n---', 3);
+			if (secondDelimiter !== -1) {
+				bodyContent = content.slice(secondDelimiter + 4);
+			} else {
+				// Malformed frontmatter, keep original content
+				bodyContent = content;
+			}
+		} else {
+			bodyContent = content;
 		}
 
-		// Add template to the file (ensuring proper line breaks)
-		const newContent = template + (template.endsWith('\n') ? '' : '\n') + content;
+		// Create new content with our template and any existing body content
+		const newContent = template + (template.endsWith('\n') ? '' : '\n') + bodyContent;
 		await this.app.vault.modify(file, newContent);
 		new Notice(`Added frontmatter with title: ${title}`);
 	}
