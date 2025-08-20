@@ -7,6 +7,7 @@ interface AstroCompanionSettings {
 	postsFolder: string;
 	enableAutoRename: boolean;
 	creationMode: 'file' | 'folder';
+	indexFileName: string;
 }
 
 const DEFAULT_SETTINGS: AstroCompanionSettings = {
@@ -15,7 +16,8 @@ const DEFAULT_SETTINGS: AstroCompanionSettings = {
 	linkBasePath: '/blog/',
 	postsFolder: 'posts',
 	enableAutoRename: true,
-	creationMode: 'file'
+	creationMode: 'file',
+	indexFileName: 'index'
 }
 
 export default class AstroComposerPlugin extends Plugin {
@@ -44,7 +46,24 @@ export default class AstroComposerPlugin extends Plugin {
 						if (content.trim().length === 0 && 
 							(this.settings.enableAutoRename || 
 							(this.settings.postsFolder && file.path.startsWith(this.settings.postsFolder)))) {
-							new PostTitleModal(this.app, file, this).open();
+							
+							// Check if this is already an "Untitled" file in the right location
+							const isAlreadyUntitled = file.name === 'Untitled.md' && 
+								file.path.startsWith(this.settings.postsFolder);
+							
+							if (!isAlreadyUntitled) {
+								// Move to posts folder first as "Untitled"
+								await this.moveToPostsFolder(file);
+							}
+							
+							// Find the moved file and open modal
+							const untitledPath = this.settings.postsFolder ? 
+								`${this.settings.postsFolder}/Untitled.md` : 'Untitled.md';
+							const untitledFile = this.app.vault.getAbstractFileByPath(untitledPath) as TFile;
+							
+							if (untitledFile) {
+								new PostTitleModal(this.app, untitledFile, this).open();
+							}
 						}
 					}, 150);
 				}
@@ -92,7 +111,35 @@ export default class AstroComposerPlugin extends Plugin {
 			.replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
 	}
 
-	async createPostFile(file: TFile, title: string) {
+	async moveToPostsFolder(file: TFile): Promise<TFile | null> {
+		if (!this.settings.postsFolder) {
+			return file; // No posts folder specified, keep original file
+		}
+
+		const targetPath = `${this.settings.postsFolder}/Untitled.md`;
+		
+		// Check if target already exists
+		const existingFile = this.app.vault.getAbstractFileByPath(targetPath);
+		if (existingFile) {
+			return existingFile as TFile; // Use existing untitled file
+		}
+
+		try {
+			// Ensure posts folder exists
+			const postsFolder = this.app.vault.getAbstractFileByPath(this.settings.postsFolder);
+			if (!postsFolder) {
+				await this.app.vault.createFolder(this.settings.postsFolder);
+			}
+
+			await this.app.vault.rename(file, targetPath);
+			return this.app.vault.getAbstractFileByPath(targetPath) as TFile;
+		} catch (error) {
+			new Notice(`Failed to move file to posts folder: ${error.message}`);
+			return file;
+		}
+	}
+
+	async createPostFile(file: TFile, title: string): Promise<TFile | null> {
 		const kebabTitle = this.toKebabCase(title);
 		const isDraft = this.settings.draftStyle === 'filename';
 		
@@ -109,7 +156,8 @@ export default class AstroComposerPlugin extends Plugin {
 				// Folder might already exist, that's okay
 			}
 			
-			const newPath = `${folderPath}/index.md`;
+			const fileName = `${this.settings.indexFileName}.md`;
+			const newPath = `${folderPath}/${fileName}`;
 			
 			// Check if file already exists
 			const existingFile = this.app.vault.getAbstractFileByPath(newPath);
@@ -123,13 +171,18 @@ export default class AstroComposerPlugin extends Plugin {
 				await this.app.vault.delete(file);
 				// Create new file in folder
 				const newFile = await this.app.vault.create(newPath, '');
+				
+				// Open the new file in the editor
+				const leaf = this.app.workspace.getLeaf(false);
+				await leaf.openFile(newFile);
+				
 				return newFile;
 			} catch (error) {
 				new Notice(`Failed to create folder structure: ${error.message}`);
 				return null;
 			}
 		} else {
-			// File-based creation (original behavior)
+			// File-based creation
 			const prefix = isDraft ? '_' : '';
 			const newName = `${prefix}${kebabTitle}.md`;
 			const targetFolder = this.settings.postsFolder || '';
@@ -144,7 +197,13 @@ export default class AstroComposerPlugin extends Plugin {
 
 			try {
 				await this.app.vault.rename(file, newPath);
-				return this.app.vault.getAbstractFileByPath(newPath) as TFile;
+				const newFile = this.app.vault.getAbstractFileByPath(newPath) as TFile;
+				
+				// Open the renamed file in the editor
+				const leaf = this.app.workspace.getLeaf(false);
+				await leaf.openFile(newFile);
+				
+				return newFile;
 			} catch (error) {
 				new Notice(`Failed to rename file: ${error.message}`);
 				return null;
@@ -357,7 +416,6 @@ class PostTitleModal extends Modal {
 			if (newFile) {
 				// Then add the frontmatter template
 				await this.plugin.addFrontmatterToFile(newFile, title);
-				new Notice(`Created blog post: ${newFile.name}`);
 			}
 		} catch (error) {
 			new Notice(`Error creating post: ${error.message}`);
@@ -437,6 +495,17 @@ class AstroCompanionSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.creationMode)
 				.onChange(async (value: 'file' | 'folder') => {
 					this.plugin.settings.creationMode = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Index File Name')
+			.setDesc('Name for the main file in folder-based mode (without .md extension)')
+			.addText(text => text
+				.setPlaceholder('index')
+				.setValue(this.plugin.settings.indexFileName)
+				.onChange(async (value) => {
+					this.plugin.settings.indexFileName = value || 'index';
 					await this.plugin.saveSettings();
 				}));
 
