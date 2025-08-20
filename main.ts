@@ -6,6 +6,7 @@ interface AstroCompanionSettings {
 	linkBasePath: string;
 	postsFolder: string;
 	enableAutoRename: boolean;
+	creationMode: 'file' | 'folder';
 }
 
 const DEFAULT_SETTINGS: AstroCompanionSettings = {
@@ -13,7 +14,8 @@ const DEFAULT_SETTINGS: AstroCompanionSettings = {
 	defaultTemplate: '---\ntitle: "{{title}}"\ndate: "{{date}}"\ndescription: ""\ntags: []\ndraft: true\n---\n\n',
 	linkBasePath: '/blog/',
 	postsFolder: 'posts',
-	enableAutoRename: true
+	enableAutoRename: true,
+	creationMode: 'file'
 }
 
 export default class AstroComposerPlugin extends Plugin {
@@ -74,14 +76,6 @@ export default class AstroComposerPlugin extends Plugin {
 			}
 		});
 
-		this.addCommand({
-			id: 'setup-astro-folders',
-			name: 'Setup Astro-friendly folder structure',
-			callback: () => {
-				this.setupAstroFolders();
-			}
-		});
-
 		// Add settings tab
 		this.addSettingTab(new AstroCompanionSettingTab(this.app, this));
 	}
@@ -98,28 +92,63 @@ export default class AstroComposerPlugin extends Plugin {
 			.replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
 	}
 
-	async renameFileWithTitle(file: TFile, title: string) {
+	async createPostFile(file: TFile, title: string) {
 		const kebabTitle = this.toKebabCase(title);
 		const isDraft = this.settings.draftStyle === 'filename';
-		const prefix = isDraft ? '_' : '';
-		const newName = `${prefix}${kebabTitle}.md`;
+		
+		if (this.settings.creationMode === 'folder') {
+			// Create folder-based structure
+			const prefix = isDraft ? '_' : '';
+			const folderName = `${prefix}${kebabTitle}`;
+			const folderPath = this.settings.postsFolder ? `${this.settings.postsFolder}/${folderName}` : folderName;
+			
+			// Create the folder
+			try {
+				await this.app.vault.createFolder(folderPath);
+			} catch (error) {
+				// Folder might already exist, that's okay
+			}
+			
+			const newPath = `${folderPath}/index.md`;
+			
+			// Check if file already exists
+			const existingFile = this.app.vault.getAbstractFileByPath(newPath);
+			if (existingFile) {
+				new Notice(`File already exists at ${newPath}`);
+				return null;
+			}
+			
+			try {
+				// Delete the original empty file
+				await this.app.vault.delete(file);
+				// Create new file in folder
+				const newFile = await this.app.vault.create(newPath, '');
+				return newFile;
+			} catch (error) {
+				new Notice(`Failed to create folder structure: ${error.message}`);
+				return null;
+			}
+		} else {
+			// File-based creation (original behavior)
+			const prefix = isDraft ? '_' : '';
+			const newName = `${prefix}${kebabTitle}.md`;
+			const targetFolder = this.settings.postsFolder || '';
+			const newPath = targetFolder ? `${targetFolder}/${newName}` : newName;
 
-		const folder = file.parent;
-		const newPath = folder ? `${folder.path}/${newName}` : newName;
+			// Check if file with new name already exists
+			const existingFile = this.app.vault.getAbstractFileByPath(newPath);
+			if (existingFile && existingFile !== file) {
+				new Notice(`File with name "${newName}" already exists`);
+				return null;
+			}
 
-		// Check if file with new name already exists
-		const existingFile = this.app.vault.getAbstractFileByPath(newPath);
-		if (existingFile && existingFile !== file) {
-			new Notice(`File with name "${newName}" already exists`);
-			return null;
-		}
-
-		try {
-			await this.app.vault.rename(file, newPath);
-			return this.app.vault.getAbstractFileByPath(newPath) as TFile;
-		} catch (error) {
-			new Notice(`Failed to rename file: ${error.message}`);
-			return null;
+			try {
+				await this.app.vault.rename(file, newPath);
+				return this.app.vault.getAbstractFileByPath(newPath) as TFile;
+			} catch (error) {
+				new Notice(`Failed to rename file: ${error.message}`);
+				return null;
+			}
 		}
 	}
 
@@ -139,7 +168,6 @@ export default class AstroComposerPlugin extends Plugin {
 		// For new files created through modal, just replace entire content with template
 		// This ensures clean injection without content parsing issues
 		await this.app.vault.modify(file, template);
-		new Notice(`Blog post created with title: ${title}`);
 	}
 
 	async standardizeFrontmatter(file: TFile | null) {
@@ -258,44 +286,7 @@ export default class AstroComposerPlugin extends Plugin {
 		new Notice('Note published successfully!');
 	}
 
-	async setupAstroFolders() {
-		const folders = [
-			this.settings.postsFolder,
-			`${this.settings.postsFolder}/images`,
-			'.obsidian-ignore', // Folder for Obsidian files that Astro should ignore
-			`${this.settings.postsFolder}/drafts`
-		];
-
-		for (const folderPath of folders) {
-			const folder = this.app.vault.getAbstractFileByPath(folderPath);
-			if (!folder) {
-				await this.app.vault.createFolder(folderPath);
-			}
-		}
-
-		// Create .gitignore for Astro to ignore Obsidian files
-		const gitignoreContent = `# Obsidian files
-.obsidian/
-*.canvas
-*.excalidraw
-.DS_Store
-.obsidian-ignore/
-`;
-
-		const gitignorePath = '.gitignore';
-		const existingGitignore = this.app.vault.getAbstractFileByPath(gitignorePath);
-
-		if (!existingGitignore) {
-			await this.app.vault.create(gitignorePath, gitignoreContent);
-		} else {
-			const existing = await this.app.vault.read(existingGitignore as TFile);
-			if (!existing.includes('.obsidian/')) {
-				await this.app.vault.modify(existingGitignore as TFile, existing + '\n' + gitignoreContent);
-			}
-		}
-
-		new Notice('Astro-friendly folder structure created!');
-	}
+	
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -360,15 +351,13 @@ class PostTitleModal extends Modal {
 		}
 
 		try {
-			// First, add the frontmatter template to the current file
-			await this.plugin.addFrontmatterToFile(this.file, title);
+			// First, create/move the file to the right location
+			const newFile = await this.plugin.createPostFile(this.file, title);
 			
-			// Then rename the file with the title
-			const renamedFile = await this.plugin.renameFileWithTitle(this.file, title);
-			if (renamedFile) {
-				new Notice(`Created blog post: ${renamedFile.name}`);
-			} else {
-				new Notice(`Created blog post with title: ${title}`);
+			if (newFile) {
+				// Then add the frontmatter template
+				await this.plugin.addFrontmatterToFile(newFile, title);
+				new Notice(`Created blog post: ${newFile.name}`);
 			}
 		} catch (error) {
 			new Notice(`Error creating post: ${error.message}`);
@@ -436,6 +425,18 @@ class AstroCompanionSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.enableAutoRename)
 				.onChange(async (value) => {
 					this.plugin.settings.enableAutoRename = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Creation Mode')
+			.setDesc('How to create new posts: file-based or folder-based with index.md')
+			.addDropdown(dropdown => dropdown
+				.addOption('file', 'File-based (post-title.md)')
+				.addOption('folder', 'Folder-based (post-title/index.md)')
+				.setValue(this.plugin.settings.creationMode)
+				.onChange(async (value: 'file' | 'folder') => {
+					this.plugin.settings.creationMode = value;
 					await this.plugin.saveSettings();
 				}));
 
