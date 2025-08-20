@@ -189,30 +189,18 @@ export default class AstroComposerPlugin extends Plugin {
 				const newFile = await this.app.vault.create(newPath, "");
 
 				// Reveal the new file in the file explorer
-				const folder = this.app.vault.getAbstractFileByPath(
-					folderPath,
-				) as TFolder;
-				if (folder) {
-					// Use the file explorer API to reveal the file
+				setTimeout(() => {
+					// @ts-ignore - Access the file explorer leaf
 					const fileExplorer = this.app.workspace.getLeavesOfType("file-explorer")[0];
 					if (fileExplorer && fileExplorer.view) {
-						// @ts-ignore - Access the file explorer view
-						const explorerView = fileExplorer.view;
-						// @ts-ignore - Reveal the file in the explorer
-						if (explorerView.revealInFolder) {
-							explorerView.revealInFolder(newFile);
+						// @ts-ignore - Access the file tree
+						const fileTree = fileExplorer.view.tree;
+						if (fileTree) {
+							// @ts-ignore - Reveal the file
+							fileTree.revealFile(newFile);
 						}
 					}
-					
-					// Fallback to the trigger method with delays
-					this.app.workspace.trigger("reveal-active-file", newFile);
-					setTimeout(() => {
-						this.app.workspace.trigger("reveal-active-file", newFile);
-					}, 100);
-					setTimeout(() => {
-						this.app.workspace.trigger("reveal-active-file", newFile);
-					}, 300);
-				}
+				}, 200);
 
 				// Open the new file in the editor
 				const leaf = this.app.workspace.getLeaf(false);
@@ -360,38 +348,25 @@ export default class AstroComposerPlugin extends Plugin {
 		let newContent = content;
 
 		// Convert only regular wikilinks [[Title]] or [[Title|Display Text]]
-		// Skip any line that contains ![[
-		const lines = newContent.split('\n');
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			// Skip lines that contain image wikilinks
-			if (line.includes('![[')) {
-				continue;
-			}
-			
-			// Process regular wikilinks on this line
-			lines[i] = line.replace(
-				/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g,
-				(match, linkText, _, displayText) => {
-					const display = displayText || linkText;
-					const slug = this.toKebabCase(linkText);
+		// Use a more precise regex that excludes image wikilinks
+		newContent = newContent.replace(
+			/(?<!\!)\[\[([^\]|]+)(\|([^\]]+))?\]\]/g,
+			(match, linkText, _, displayText) => {
+				const display = displayText || linkText;
+				const slug = this.toKebabCase(linkText);
 
-					// Ensure leading slash and trailing slash
-					let basePath = this.settings.linkBasePath;
-					if (!basePath.startsWith("/")) {
-						basePath = "/" + basePath;
-					}
-					if (!basePath.endsWith("/")) {
-						basePath = basePath + "/";
-					}
+				// Ensure leading slash and trailing slash
+				let basePath = this.settings.linkBasePath;
+				if (!basePath.startsWith("/")) {
+					basePath = "/" + basePath;
+				}
+				if (!basePath.endsWith("/")) {
+					basePath = basePath + "/";
+				}
 
-					// For folder-based links, URL should be just /linkBasePath/slug/
-					// Don't include postsFolder in the URL path
-					return `[${display}](${basePath}${slug}/)`;
-				},
-			);
-		}
-		newContent = lines.join('\n');
+				return `[${display}](${basePath}${slug}/)`;
+			},
+		);
 
 		// Convert embedded files {{embed.md}} to include format
 		newContent = newContent.replace(/\{\{([^}]+)\}\}/g, (match, fileName) => {
