@@ -353,9 +353,8 @@ export default class AstroComposerPlugin extends Plugin {
 			/(?<!\!)\[\[([^\]|]+)(\|([^\]]+))?\]\]/g,
 			(match, linkText, _, displayText) => {
 				const display = displayText || linkText;
-				const slug = this.toKebabCase(linkText);
 
-				// Ensure leading slash and trailing slash
+				// Ensure leading slash and trailing slash for base path
 				let basePath = this.settings.linkBasePath;
 				if (!basePath.startsWith("/")) {
 					basePath = "/" + basePath;
@@ -364,7 +363,20 @@ export default class AstroComposerPlugin extends Plugin {
 					basePath = basePath + "/";
 				}
 
-				return `[${display}](${basePath}${slug}/)`;
+				// Check if this is a folder-based link (contains posts folder and index filename)
+				const postsPrefix = this.settings.postsFolder ? `${this.settings.postsFolder}/` : "";
+				const indexFileName = this.settings.indexFileName || "index";
+				
+				if (postsPrefix && linkText.startsWith(postsPrefix) && linkText.endsWith(`/${indexFileName}`)) {
+					// This is a folder-based link like "posts/bigg-cheese/index"
+					// Extract just the folder name between postsPrefix and /index
+					const folderPath = linkText.slice(postsPrefix.length, -(indexFileName.length + 1));
+					return `[${display}](${basePath}${folderPath}/)`;
+				} else {
+					// This is a regular file-based link
+					const slug = this.toKebabCase(linkText);
+					return `[${display}](${basePath}${slug}/)`;
+				}
 			},
 		);
 
