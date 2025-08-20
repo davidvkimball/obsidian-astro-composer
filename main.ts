@@ -123,26 +123,8 @@ export default class AstroComposerPlugin extends Plugin {
 		template = template.replace(/\{\{title\}\}/g, title);
 		template = template.replace(/\{\{date\}\}/g, date);
 
-		// If file already has frontmatter, try to update the title property
-		if (content.startsWith('---')) {
-			const secondDelimiter = content.indexOf('\n---', 3);
-			if (secondDelimiter !== -1) {
-				// Check if title property exists
-				const frontmatterText = content.slice(4, secondDelimiter);
-				if (frontmatterText.includes('title:')) {
-					// Update existing title
-					const updatedFrontmatter = frontmatterText.replace(/title:\s*"[^"]*"/, `title: "${title}"`);
-					const newContent = `---\n${updatedFrontmatter}\n---${content.slice(secondDelimiter + 4)}`;
-					await this.app.vault.modify(file, newContent);
-					new Notice(`Updated title to: ${title}`);
-					return;
-				}
-			}
-			new Notice('File already has frontmatter but no title property found');
-			return;
-		}
-
-		// Add template to new file
+		// For new files created through the modal, just add the template
+		// (they shouldn't have frontmatter yet since we're doing this after user input)
 		const newContent = template + content;
 		await this.app.vault.modify(file, newContent);
 		new Notice(`Added frontmatter with title: ${title}`);
