@@ -188,17 +188,22 @@ export default class AstroComposerPlugin extends Plugin {
 				// Create new file in folder
 				const newFile = await this.app.vault.create(newPath, "");
 
-				// Reveal the new file in the file explorer
+				// Reveal the new file in the file explorer with multiple attempts
 				const folder = this.app.vault.getAbstractFileByPath(
 					folderPath,
 				) as TFolder;
 				if (folder) {
-					// First reveal the folder to expand it
+					// Multiple attempts to ensure folder is revealed and expanded
 					this.app.workspace.trigger("reveal-active-file", folder);
-					// Then reveal the actual file to show it in the expanded folder
 					setTimeout(() => {
 						this.app.workspace.trigger("reveal-active-file", newFile);
-					}, 100);
+					}, 50);
+					setTimeout(() => {
+						this.app.workspace.trigger("reveal-active-file", newFile);
+					}, 200);
+					setTimeout(() => {
+						this.app.workspace.trigger("reveal-active-file", newFile);
+					}, 500);
 				}
 
 				// Open the new file in the editor
@@ -346,16 +351,11 @@ export default class AstroComposerPlugin extends Plugin {
 		const content = editor.getValue();
 		let newContent = content;
 
-		// Convert wikilinks [[Title]] or [[Title|Display Text]] but exclude image files
+		// Convert regular wikilinks [[Title]] or [[Title|Display Text]] but NOT image wikilinks ![[
+		// Use negative lookbehind to exclude patterns preceded by !
 		newContent = newContent.replace(
-			/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g,
+			/(?<!\!)\[\[([^\]|]+)(\|([^\]]+))?\]\]/g,
 			(match, linkText, _, displayText) => {
-				// Check if this is an image file and skip conversion
-				const imageExtensions = /\.(jpg|jpeg|png|gif|webp|svg|bmp|tiff|ico)$/i;
-				if (imageExtensions.test(linkText)) {
-					return match; // Return original wikilink unchanged for images
-				}
-
 				const display = displayText || linkText;
 				const slug = this.toKebabCase(linkText);
 
@@ -368,7 +368,8 @@ export default class AstroComposerPlugin extends Plugin {
 					basePath = basePath + "/";
 				}
 
-				// For folder-based links, the URL should point to the folder (no index filename)
+				// For folder-based links, URL should be just /linkBasePath/slug/
+				// Don't include postsFolder in the URL path
 				return `[${display}](${basePath}${slug}/)`;
 			},
 		);
