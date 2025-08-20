@@ -87,13 +87,7 @@ export default class AstroComposerPlugin extends Plugin {
 			}
 		});
 
-		this.addCommand({
-			id: 'publish-note',
-			name: 'Publish Note',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				this.publishNote(editor, view.file);
-			}
-		});
+		
 
 		// Add settings tab
 		this.addSettingTab(new AstroCompanionSettingTab(this.app, this));
@@ -172,6 +166,12 @@ export default class AstroComposerPlugin extends Plugin {
 				// Create new file in folder
 				const newFile = await this.app.vault.create(newPath, '');
 				
+				// Reveal the folder in the file explorer
+				const folder = this.app.vault.getAbstractFileByPath(folderPath) as TFolder;
+				if (folder) {
+					this.app.workspace.trigger('reveal-active-file', folder);
+				}
+				
 				// Open the new file in the editor
 				const leaf = this.app.workspace.getLeaf(false);
 				await leaf.openFile(newFile);
@@ -212,7 +212,11 @@ export default class AstroComposerPlugin extends Plugin {
 	}
 
 	async addFrontmatterToFile(file: TFile, title: string, slug?: string) {
-		const date = new Date().toISOString();
+		// Use a format that Obsidian recognizes as a Date property type
+		const now = new Date();
+		const date = now.getFullYear() + '-' + 
+			String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+			String(now.getDate()).padStart(2, '0');
 
 		// Get the template and replace variables
 		let template = this.settings.defaultTemplate;
@@ -265,7 +269,13 @@ export default class AstroComposerPlugin extends Plugin {
 		// Use template from settings and replace variables
 		let template = this.settings.defaultTemplate;
 		template = template.replace(/\{\{title\}\}/g, existingFrontmatter.title || title);
-		template = template.replace(/\{\{date\}\}/g, existingFrontmatter.date || new Date().toISOString());
+		
+		// Use Obsidian-friendly date format
+		const now = new Date();
+		const dateFormat = now.getFullYear() + '-' + 
+			String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+			String(now.getDate()).padStart(2, '0');
+		template = template.replace(/\{\{date\}\}/g, existingFrontmatter.date || dateFormat);
 
 		// Handle draft status based on settings
 		const draftValue = this.settings.draftStyle === 'frontmatter' ? 'true' : 'false';
@@ -291,59 +301,62 @@ export default class AstroComposerPlugin extends Plugin {
 		newContent = newContent.replace(/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g, (match, linkText, _, displayText) => {
 			const display = displayText || linkText;
 			const slug = this.toKebabCase(linkText);
-			return `[${display}](${this.settings.linkBasePath}${slug})`;
+			
+			// Ensure leading slash and trailing slash
+			let basePath = this.settings.linkBasePath;
+			if (!basePath.startsWith('/')) {
+				basePath = '/' + basePath;
+			}
+			if (!basePath.endsWith('/')) {
+				basePath = basePath + '/';
+			}
+			
+			// For folder-based links, don't append index if it matches the index file name setting
+			let finalSlug = slug;
+			if (this.settings.creationMode === 'folder') {
+				// Don't append anything extra for folder-based links
+				return `[${display}](${basePath}${finalSlug}/)`;
+			} else {
+				return `[${display}](${basePath}${finalSlug}/)`;
+			}
 		});
 
 		// Convert image wikilinks ![[image.png]] to Astro-compatible format
 		newContent = newContent.replace(/!\[\[([^\]]+)\]\]/g, (match, imageName) => {
 			const cleanName = imageName.replace(/\.[^/.]+$/, ""); // Remove extension
 			const slug = this.toKebabCase(cleanName);
-			return `![${cleanName}](${this.settings.linkBasePath}images/${imageName})`;
+			
+			let basePath = this.settings.linkBasePath;
+			if (!basePath.startsWith('/')) {
+				basePath = '/' + basePath;
+			}
+			if (!basePath.endsWith('/')) {
+				basePath = basePath + '/';
+			}
+			
+			return `![${cleanName}](${basePath}images/${imageName})`;
 		});
 
 		// Convert embedded files {{embed.md}} to include format
 		newContent = newContent.replace(/\{\{([^}]+)\}\}/g, (match, fileName) => {
 			const slug = this.toKebabCase(fileName.replace('.md', ''));
-			return `[Embedded: ${fileName}](${this.settings.linkBasePath}${slug})`;
+			
+			let basePath = this.settings.linkBasePath;
+			if (!basePath.startsWith('/')) {
+				basePath = '/' + basePath;
+			}
+			if (!basePath.endsWith('/')) {
+				basePath = basePath + '/';
+			}
+			
+			return `[Embedded: ${fileName}](${basePath}${slug}/)`;
 		});
 
 		editor.setValue(newContent);
 		new Notice('Wikilinks converted for Astro');
 	}
 
-	async publishNote(editor: Editor, file: TFile | null) {
-		if (!file) {
-			new Notice('No active file');
-			return;
-		}
-
-		// First convert wikilinks
-		await this.convertWikilinksForAstro(editor, file);
-
-		// Then handle draft status
-		if (this.settings.draftStyle === 'filename' && file.name.startsWith('_')) {
-			// Remove underscore prefix
-			const newName = file.name.substring(1);
-			const newPath = file.parent ? `${file.parent.path}/${newName}` : newName;
-			await this.app.vault.rename(file, newPath);
-			file = this.app.vault.getAbstractFileByPath(newPath) as TFile;
-		}
-
-		// Update frontmatter
-		const content = await this.app.vault.read(file);
-		let newContent = content;
-
-		// Remove draft: true and add published date
-		newContent = newContent.replace(/draft:\s*true/g, 'draft: false');
-		newContent = newContent.replace(/published:\s*[^\n]*/g, ''); // Remove existing published date
-
-		// Add published date after date field
-		const publishedDate = new Date().toISOString();
-		newContent = newContent.replace(/(date:\s*[^\n]*\n)/, `$1published: "${publishedDate}"\n`);
-
-		await this.app.vault.modify(file, newContent);
-		new Notice('Note published successfully!');
-	}
+	
 
 	
 
