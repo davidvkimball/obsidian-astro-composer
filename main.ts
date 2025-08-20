@@ -24,7 +24,7 @@ export default class AstroComposerPlugin extends Plugin {
 
 		// Register file creation event
 		this.registerEvent(
-			this.app.workspace.on('file-create', (file) => {
+			this.app.vault.on('create', (file) => {
 				if (file instanceof TFile && file.extension === 'md') {
 					// Show modal for all new markdown files if auto-rename is enabled
 					// Or only for files in posts folder if specified
