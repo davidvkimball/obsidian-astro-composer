@@ -22,21 +22,29 @@ export default class AstroComposerPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
+		// Track if we're in the initial vault load phase
+		let isVaultLoading = true;
+		
+		// After a delay, consider vault loading complete
+		setTimeout(() => {
+			isVaultLoading = false;
+		}, 2000);
+
 		// Register file creation event
 		this.registerEvent(
 			this.app.vault.on('create', (file) => {
-				if (file instanceof TFile && file.extension === 'md') {
+				if (file instanceof TFile && file.extension === 'md' && !isVaultLoading) {
 					// Only show modal for truly new files (empty or very small)
 					// Small delay to ensure file is fully created
 					setTimeout(async () => {
 						const content = await this.app.vault.read(file);
-						// Only trigger for empty files or files with just basic content
-						if (content.trim().length < 50 && 
+						// Only trigger for completely empty files or files with minimal content
+						if (content.trim().length === 0 && 
 							(this.settings.enableAutoRename || 
 							(this.settings.postsFolder && file.path.startsWith(this.settings.postsFolder)))) {
 							new PostTitleModal(this.app, file, this).open();
 						}
-					}, 100);
+					}, 150);
 				}
 			})
 		);
@@ -122,6 +130,11 @@ export default class AstroComposerPlugin extends Plugin {
 		let template = this.settings.defaultTemplate;
 		template = template.replace(/\{\{title\}\}/g, title);
 		template = template.replace(/\{\{date\}\}/g, date);
+
+		// Ensure template ends with newlines for proper formatting
+		if (!template.endsWith('\n\n')) {
+			template = template.replace(/\n*$/, '\n\n');
+		}
 
 		// For new files created through modal, just replace entire content with template
 		// This ensures clean injection without content parsing issues
@@ -347,12 +360,15 @@ class PostTitleModal extends Modal {
 		}
 
 		try {
-			// First, rename the file
+			// First, add the frontmatter template to the current file
+			await this.plugin.addFrontmatterToFile(this.file, title);
+			
+			// Then rename the file with the title
 			const renamedFile = await this.plugin.renameFileWithTitle(this.file, title);
 			if (renamedFile) {
-				// Then add the frontmatter template
-				await this.plugin.addFrontmatterToFile(renamedFile, title);
 				new Notice(`Created blog post: ${renamedFile.name}`);
+			} else {
+				new Notice(`Created blog post with title: ${title}`);
 			}
 		} catch (error) {
 			new Notice(`Error creating post: ${error.message}`);
