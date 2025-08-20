@@ -4,9 +4,9 @@
 	"name": "Astro Composer",
 	"version": "0.1.0",
 	"minAppVersion": "0.15.0",
-	"description": "A companion plugin for AstroJS blogging workflows. Helps manage blog posts with frontmatter, convert wikilinks, and publish drafts.",
-	"author": "Astro Composer",
-	"authorUrl": "",
-	"fundingUrl": "",
+	"description": "A companion plugin for Astro blogging workflows. Helps create and manage blog posts with frontmatter and converts wikilinks.",
+	"author": "David V. Kimball",
+	"authorUrl": "https://davidvkimball.com",
+	"fundingUrl": "https://patreon.com/davidvkimball",
 	"isDesktopOnly": false
 }

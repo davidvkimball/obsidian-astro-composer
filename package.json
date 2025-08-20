@@ -1,15 +1,15 @@
 {
-	"name": "obsidian-sample-plugin",
-	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"name": "astro-composer",
+	"version": "0.1.0",
+	"description": "A companion plugin for Astro blogging workflows. Helps create and manage blog posts with frontmatter and converts wikilinks.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
-	"keywords": [],
-	"author": "",
+	"keywords": ["astro", "blog", "frontmatter", "wikilinks"],
+	"author": "David V. Kimball",
 	"license": "MIT",
 	"devDependencies": {
 		"@types/node": "^16.11.6",

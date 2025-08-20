@@ -11,7 +11,7 @@ import {
 	TFolder,
 } from "obsidian";
 
-interface AstroCompanionSettings {
+interface AstroComposerSettings {
 	draftStyle: "frontmatter" | "filename";
 	defaultTemplate: string;
 	linkBasePath: string;
@@ -21,7 +21,7 @@ interface AstroCompanionSettings {
 	indexFileName: string;
 }
 
-const DEFAULT_SETTINGS: AstroCompanionSettings = {
+const DEFAULT_SETTINGS: AstroComposerSettings = {
 	draftStyle: "frontmatter",
 	defaultTemplate:
 		'---\ntitle: "{{title}}"\ndate: "{{date}}"\ndescription: ""\ntags: []\ndraft: true\n---\n\n',
@@ -33,7 +33,7 @@ const DEFAULT_SETTINGS: AstroCompanionSettings = {
 };
 
 export default class AstroComposerPlugin extends Plugin {
-	settings: AstroCompanionSettings;
+	settings: AstroComposerSettings;
 
 	async onload() {
 		await this.loadSettings();
@@ -110,7 +110,7 @@ export default class AstroComposerPlugin extends Plugin {
 		});
 
 		// Add settings tab
-		this.addSettingTab(new AstroCompanionSettingTab(this.app, this));
+		this.addSettingTab(new AstroComposerSettingTab(this.app, this));
 	}
 
 	toKebabCase(str: string): string {
@@ -482,7 +482,7 @@ class PostTitleModal extends Modal {
 	}
 }
 
-class AstroCompanionSettingTab extends PluginSettingTab {
+class AstroComposerSettingTab extends PluginSettingTab {
 	plugin: AstroComposerPlugin;
 
 	constructor(app: App, plugin: AstroComposerPlugin) {
