@@ -10,7 +10,7 @@ interface AstroCompanionSettings {
 
 const DEFAULT_SETTINGS: AstroCompanionSettings = {
 	draftStyle: 'frontmatter',
-	defaultTemplate: '---\ntitle: "{{title}}"\nslug: "{{slug}}"\ndate: "{{date}}"\ndraft: true\ndescription: ""\ntags: []\n---\n\n',
+	defaultTemplate: '---\ntitle: "{{title}}"\ndate: "{{date}}"\ndescription: ""\ntags: []\ndraft: true\n---\n\n',
 	linkBasePath: '/blog/',
 	postsFolder: 'posts',
 	enableAutoRename: true
@@ -115,24 +115,35 @@ export default class AstroComposerPlugin extends Plugin {
 
 	async addFrontmatterToFile(file: TFile, title: string, slug?: string) {
 		const content = await this.app.vault.read(file);
-		const actualSlug = slug || this.toKebabCase(title);
 		const date = new Date().toISOString();
 
 		let template = this.settings.defaultTemplate;
 		
 		// Replace template variables
 		template = template.replace(/\{\{title\}\}/g, title);
-		template = template.replace(/\{\{slug\}\}/g, actualSlug);
 		template = template.replace(/\{\{date\}\}/g, date);
 
-		// If file already has frontmatter, don't add it again
+		// If file already has frontmatter, try to update the title property
 		if (content.startsWith('---')) {
-			new Notice('File already has frontmatter');
+			const secondDelimiter = content.indexOf('\n---', 3);
+			if (secondDelimiter !== -1) {
+				// Check if title property exists
+				const frontmatterText = content.slice(4, secondDelimiter);
+				if (frontmatterText.includes('title:')) {
+					// Update existing title
+					const updatedFrontmatter = frontmatterText.replace(/title:\s*"[^"]*"/, `title: "${title}"`);
+					const newContent = `---\n${updatedFrontmatter}\n---${content.slice(secondDelimiter + 4)}`;
+					await this.app.vault.modify(file, newContent);
+					new Notice(`Updated title to: ${title}`);
+					return;
+				}
+			}
+			new Notice('File already has frontmatter but no title property found');
 			return;
 		}
 
-		// Ensure template ends with newline and add content
-		const newContent = template + (template.endsWith('\n') ? '' : '\n') + content;
+		// Add template to new file
+		const newContent = template + content;
 		await this.app.vault.modify(file, newContent);
 		new Notice(`Added frontmatter with title: ${title}`);
 	}
@@ -145,7 +156,6 @@ export default class AstroComposerPlugin extends Plugin {
 
 		const content = await this.app.vault.read(file);
 		const title = file.basename.replace(/^_/, ''); // Remove draft prefix if present
-		const slug = this.toKebabCase(title);
 
 		// Parse existing frontmatter or create new
 		let frontmatterEnd = 0;
@@ -174,7 +184,6 @@ export default class AstroComposerPlugin extends Plugin {
 		// Use template from settings and replace variables
 		let template = this.settings.defaultTemplate;
 		template = template.replace(/\{\{title\}\}/g, existingFrontmatter.title || title);
-		template = template.replace(/\{\{slug\}\}/g, existingFrontmatter.slug || slug);
 		template = template.replace(/\{\{date\}\}/g, existingFrontmatter.date || new Date().toISOString());
 
 		// Handle draft status based on settings
@@ -429,9 +438,9 @@ class AstroCompanionSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Default Frontmatter Template')
-			.setDesc('Template for new post frontmatter (use {{title}}, {{slug}}, {{date}})')
+			.setDesc('Template for new post frontmatter (use {{title}}, {{date}})')
 			.addTextArea(text => {
-				text.setPlaceholder('---\ntitle: "{{title}}"\nslug: "{{slug}}"\ndate: "{{date}}"\ndraft: true\n---\n')
+				text.setPlaceholder('---\ntitle: "{{title}}"\ndate: "{{date}}"\ndescription: ""\ntags: []\ndraft: true\n---\n')
 					.setValue(this.plugin.settings.defaultTemplate)
 					.onChange(async (value) => {
 						this.plugin.settings.defaultTemplate = value;
