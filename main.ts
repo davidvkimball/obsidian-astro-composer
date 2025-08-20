@@ -444,7 +444,7 @@ class AstroCompanionSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Draft Style')
-			.setDesc('How to mark posts as drafts')
+			.setDesc('How to mark posts as drafts.')
 			.addDropdown(dropdown => dropdown
 				.addOption('frontmatter', 'Frontmatter (draft: true)')
 				.addOption('filename', 'Filename prefix (_post-name.md)')
@@ -456,7 +456,7 @@ class AstroCompanionSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Posts Folder')
-			.setDesc('Folder name for blog posts')
+			.setDesc('Folder name for blog posts (leave blank to use the root folder).')
 			.addText(text => text
 				.setPlaceholder('posts')
 				.setValue(this.plugin.settings.postsFolder)
@@ -467,7 +467,7 @@ class AstroCompanionSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Link Base Path')
-			.setDesc('Base path for converted links')
+			.setDesc('Base path for converted links (leave blank to use the root domain).')
 			.addText(text => text
 				.setPlaceholder('/blog/')
 				.setValue(this.plugin.settings.linkBasePath)
