@@ -12,23 +12,25 @@ import {
 } from "obsidian";
 
 interface AstroComposerSettings {
-	draftStyle: "frontmatter" | "filename";
+	enableUnderscorePrefix: boolean;
 	defaultTemplate: string;
 	linkBasePath: string;
 	postsFolder: string;
 	enableAutoRename: boolean;
+	enableAutoInsertFrontmatter: boolean;
 	creationMode: "file" | "folder";
 	indexFileName: string;
 	dateFormat: string; // Custom date format setting
 }
 
 const DEFAULT_SETTINGS: AstroComposerSettings = {
-	draftStyle: "frontmatter",
+	enableUnderscorePrefix: false, // OFF by default
 	defaultTemplate:
-		'---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\ndraft: true\n---\n\n',
+		'---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\n---\n\n',
 	linkBasePath: "/blog/",
 	postsFolder: "posts",
 	enableAutoRename: true,
+	enableAutoInsertFrontmatter: true, // ON by default
 	creationMode: "file",
 	indexFileName: "index",
 	dateFormat: "YYYY-MM-DD", // Default to a parseable format
@@ -54,7 +56,8 @@ export default class AstroComposerPlugin extends Plugin {
 				if (
 					file instanceof TFile &&
 					file.extension === "md" &&
-					!isVaultLoading
+					!isVaultLoading &&
+					this.settings.enableAutoRename // Only proceed if auto-rename is enabled
 				) {
 					// Only show modal for truly new files (empty or very small)
 					// Small delay to ensure file is fully created
@@ -112,8 +115,7 @@ export default class AstroComposerPlugin extends Plugin {
 		}
 
 		const kebabTitle = this.toKebabCase(title);
-		const isDraft = this.settings.draftStyle === "filename";
-		const prefix = isDraft ? "_" : "";
+		const prefix = this.settings.enableUnderscorePrefix ? "_" : "";
 
 		// Ensure posts folder exists if specified
 		let targetFolder = this.settings.postsFolder || "";
@@ -168,6 +170,11 @@ export default class AstroComposerPlugin extends Plugin {
 				const leaf = this.app.workspace.getLeaf(false);
 				await leaf.openFile(newFile);
 
+				// Add frontmatter only if enabled
+				if (this.settings.enableAutoInsertFrontmatter) {
+					await this.addFrontmatterToFile(newFile, title);
+				}
+
 				return newFile;
 			} catch (error) {
 				new Notice(`Failed to create folder structure: ${error.message}`);
@@ -193,6 +200,11 @@ export default class AstroComposerPlugin extends Plugin {
 				const leaf = this.app.workspace.getLeaf(false);
 				await leaf.openFile(newFile);
 
+				// Add frontmatter only if enabled
+				if (this.settings.enableAutoInsertFrontmatter) {
+					await this.addFrontmatterToFile(newFile, title);
+				}
+
 				return newFile;
 			} catch (error) {
 				new Notice(`Failed to rename file: ${error.message}`);
@@ -208,7 +220,7 @@ export default class AstroComposerPlugin extends Plugin {
 
 		// Get the template and replace variables
 		let template = this.settings.defaultTemplate;
-		template = template.replace(/\{\{title\}\}/g, title); // Revert to simple replacement, no hardcoded quotes
+		template = template.replace(/\{\{title\}\}/g, title); // Simple replacement, quotes from template
 		template = template.replace(/\{\{date\}\}/g, dateString); // Keep unquoted date
 
 		// Ensure template ends with newlines as per defaultTemplate
@@ -256,33 +268,26 @@ export default class AstroComposerPlugin extends Plugin {
 			}
 		}
 
-		// Use template from settings and replace variables
-		let template = this.settings.defaultTemplate;
-		template = template.replace(/\{\{title\}\}/g, existingFrontmatter.title || title); // Revert to simple replacement
-		template = template.replace(
-			/\{\{date\}\}/g,
-			existingFrontmatter.date || window.moment(new Date()).format(this.settings.dateFormat), // Keep unquoted date
-		);
+		// Use template from settings and replace variables only if auto-insert is enabled
+		let template = this.settings.enableAutoInsertFrontmatter ? this.settings.defaultTemplate : "";
+		if (this.settings.enableAutoInsertFrontmatter) {
+			template = template.replace(/\{\{title\}\}/g, existingFrontmatter.title || title); // Simple replacement
+			template = template.replace(
+				/\{\{date\}\}/g,
+				existingFrontmatter.date || window.moment(new Date()).format(this.settings.dateFormat), // Keep unquoted date
+			);
 
-		// Handle draft status based on settings
-		const draftValue =
-			this.settings.draftStyle === "frontmatter" ? "true" : "false";
-		template = template.replace(
-			/draft:\s*true/g,
-			`draft: ${existingFrontmatter.draft || draftValue}`,
-		);
-
-		// Ensure template ends with newlines as per defaultTemplate
-		if (!template.endsWith("\n\n")) {
-			template = template.replace(/\n*$/, "\n\n");
+			// Ensure template ends with newlines as per defaultTemplate
+			if (!template.endsWith("\n\n")) {
+				template = template.replace(/\n*$/, "\n\n");
+			}
 		}
 
 		const bodyContent = content.slice(frontmatterEnd);
-		const newContent =
-			template + (template.endsWith("\n") ? "" : "\n") + bodyContent;
+		const newContent = template + (template.endsWith("\n") ? "" : "\n") + bodyContent;
 
 		await this.app.vault.modify(file, newContent);
-		new Notice("Frontmatter standardized using template");
+		new Notice("Frontmatter standardized using template" + (this.settings.enableAutoInsertFrontmatter ? "" : " (no insertion)"));
 	}
 
 	async convertWikilinksForAstro(editor: Editor, file: TFile | null) {
@@ -463,6 +468,11 @@ class PostTitleModal extends Modal {
 
 class AstroComposerSettingTab extends PluginSettingTab {
 	plugin: AstroComposerPlugin;
+	autoRenameContainer: HTMLElement | null = null;
+	postsFolderContainer: HTMLElement | null = null;
+	underscorePrefixContainer: HTMLElement | null = null;
+	creationModeContainer: HTMLElement | null = null;
+	indexFileContainer: HTMLElement | null = null;
 
 	constructor(app: App, plugin: AstroComposerPlugin) {
 		super(app, plugin);
@@ -473,67 +483,71 @@ class AstroComposerSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
+		// Auto-rename files (top-level toggle)
 		new Setting(containerEl)
-			.setName("Draft Style")
-			.setDesc("How to mark posts as drafts.")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("frontmatter", "Frontmatter (draft: true or published: false)")
-					.addOption("filename", "Filename prefix (_post-name.md)")
-					.setValue(this.plugin.settings.draftStyle)
-					.onChange(async (value: "frontmatter" | "filename") => {
-						this.plugin.settings.draftStyle = value;
+			.setName("Auto-rename files")
+			.setDesc("Automatically show title dialog for new .md files, rename them based on the title, and insert frontmatter if enabled.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.enableAutoRename)
+					.onChange(async (value: boolean) => {
+						this.plugin.settings.enableAutoRename = value;
 						await this.plugin.saveSettings();
-					}),
+						this.updateConditionalFields();
+					})
 			);
 
+		// Auto-insert frontmatter (independent toggle)
 		new Setting(containerEl)
-			.setName("Posts Folder")
-			.setDesc(
-				"Folder name for blog posts (leave blank to use the root folder).",
-			)
+			.setName("Auto-insert frontmatter")
+			.setDesc("Automatically insert the frontmatter template when creating new files or standardizing existing ones.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.enableAutoInsertFrontmatter)
+					.onChange(async (value: boolean) => {
+						this.plugin.settings.enableAutoInsertFrontmatter = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Container for conditionally displayed settings
+		this.autoRenameContainer = containerEl.createDiv({ cls: "auto-rename-fields" });
+		this.autoRenameContainer.style.display = this.plugin.settings.enableAutoRename ? "block" : "none";
+
+		// Posts folder
+		this.postsFolderContainer = this.autoRenameContainer.createDiv();
+		new Setting(this.postsFolderContainer)
+			.setName("Posts folder")
+			.setDesc("Folder name for blog posts (leave blank to use the root folder).")
 			.addText((text) =>
 				text
 					.setPlaceholder("posts")
 					.setValue(this.plugin.settings.postsFolder)
-					.onChange(async (value) => {
+					.onChange(async (value: string) => {
 						this.plugin.settings.postsFolder = value;
 						await this.plugin.saveSettings();
-					}),
+					})
 			);
 
-		new Setting(containerEl)
-			.setName("Link Base Path")
-			.setDesc(
-				"Base path for converted links (leave blank to use the root domain).",
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder("/blog/")
-					.setValue(this.plugin.settings.linkBasePath)
-					.onChange(async (value) => {
-						this.plugin.settings.linkBasePath = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName("Auto-rename Files")
-			.setDesc("Automatically show title dialog for new .md files.")
+		// Use underscore prefix for drafts
+		this.underscorePrefixContainer = this.autoRenameContainer.createDiv();
+		new Setting(this.underscorePrefixContainer)
+			.setName("Use underscore prefix for drafts")
+			.setDesc("Add an underscore prefix (_post-title) to new notes by default when enabled. This hides them from Astro, which can be helpful for post drafts. Disable to skip prefixing.")
 			.addToggle((toggle) =>
 				toggle
-					.setValue(this.plugin.settings.enableAutoRename)
-					.onChange(async (value) => {
-						this.plugin.settings.enableAutoRename = value;
+					.setValue(this.plugin.settings.enableUnderscorePrefix)
+					.onChange(async (value: boolean) => {
+						this.plugin.settings.enableUnderscorePrefix = value;
 						await this.plugin.saveSettings();
-					}),
+					})
 			);
 
-		new Setting(containerEl)
-			.setName("Creation Mode")
-			.setDesc(
-				"How to create new posts: file-based or folder-based with index.md.",
-			)
+		// Creation mode
+		this.creationModeContainer = this.autoRenameContainer.createDiv();
+		new Setting(this.creationModeContainer)
+			.setName("Creation mode")
+			.setDesc("How to create new posts: file-based or folder-based with index.md.")
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOption("file", "File-based (post-title.md)")
@@ -542,52 +556,73 @@ class AstroComposerSettingTab extends PluginSettingTab {
 					.onChange(async (value: "file" | "folder") => {
 						this.plugin.settings.creationMode = value;
 						await this.plugin.saveSettings();
-					}),
+						this.updateIndexFileField();
+					})
 			);
 
-		new Setting(containerEl)
-			.setName("Index File Name")
-			.setDesc(
-				"Name for the main file in folder-based mode (without .md extension).",
-			)
+		// Index File Name field (initially hidden)
+		this.indexFileContainer = this.autoRenameContainer.createDiv({ cls: "index-file-field" });
+		this.indexFileContainer.style.display = this.plugin.settings.creationMode === "folder" ? "block" : "none";
+
+		new Setting(this.indexFileContainer)
+			.setName("Index file name")
+			.setDesc("Name for the main file in folder-based mode (without .md extension).")
 			.addText((text) =>
 				text
 					.setPlaceholder("index")
 					.setValue(this.plugin.settings.indexFileName)
-					.onChange(async (value) => {
+					.onChange(async (value: string) => {
 						this.plugin.settings.indexFileName = value || "index";
 						await this.plugin.saveSettings();
-					}),
+					})
 			);
 
+		// Always visible settings
 		new Setting(containerEl)
-			.setName("Date Format")
-			.setDesc("Format for the date in frontmatter (e.g., YYYY-MM-DD, MMMM D, YYYY, YYYY-MM-DD HH:mm).")
+			.setName("Date format")
+			.setDesc("Format for the date in frontmatter (e.g., YYYY-MM-DD, MMMM D, YYYY, YYYY-MM-DD hh:mm a).")
 			.addText((text) =>
 				text
 					.setPlaceholder("YYYY-MM-DD")
 					.setValue(this.plugin.settings.dateFormat)
-					.onChange(async (value) => {
+					.onChange(async (value: string) => {
 						this.plugin.settings.dateFormat = value || "YYYY-MM-DD";
 						await this.plugin.saveSettings();
-					}),
+					})
 			);
 
 		new Setting(containerEl)
-			.setName("Default Frontmatter Template")
-			.setDesc("Template for new post frontmatter, including {{title}} and {{date}}).")
+			.setName("Frontmatter Template")
+			.setDesc("Used for new posts and when standardizing frontmatter.")
 			.addTextArea((text) => {
+				const plugin = this.plugin; // Capture plugin instance
 				text
 					.setPlaceholder(
-						'---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\ndraft: true\n---\n',
+						'---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\n---\n',
 					)
-					.setValue(this.plugin.settings.defaultTemplate)
-					.onChange(async (value) => {
-						this.plugin.settings.defaultTemplate = value;
-						await this.plugin.saveSettings();
+					.setValue(plugin.settings.defaultTemplate)
+					.onChange(async (value: string) => {
+						plugin.settings.defaultTemplate = value;
+						await plugin.saveSettings();
 					});
 				text.inputEl.style.height = "200px";
 				text.inputEl.style.width = "100%";
 			});
+
+		// Initial updates
+		this.updateConditionalFields();
+		this.updateIndexFileField();
+	}
+
+	updateConditionalFields() {
+		if (this.autoRenameContainer) {
+			this.autoRenameContainer.style.display = this.plugin.settings.enableAutoRename ? "block" : "none";
+		}
+	}
+
+	updateIndexFileField() {
+		if (this.indexFileContainer) {
+			this.indexFileContainer.style.display = this.plugin.settings.creationMode === "folder" ? "block" : "none";
+		}
 	}
 }
