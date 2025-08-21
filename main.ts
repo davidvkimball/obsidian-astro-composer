@@ -42,40 +42,25 @@ export default class AstroComposerPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		// Track if we're in the initial vault load phase
-		let isVaultLoading = true;
-
-		// After a delay, consider vault loading complete
+		// Defer event registration with a short delay
 		setTimeout(() => {
-			isVaultLoading = false;
-		}, 2000);
-
-		// Register file creation event
-		this.registerEvent(
-			this.app.vault.on("create", (file) => {
-				if (
-					file instanceof TFile &&
-					file.extension === "md" &&
-					!isVaultLoading &&
-					this.settings.automatePostCreation // Only proceed if automate post creation is enabled
-				) {
-					// Only show modal for truly new files (empty or very small)
-					// Small delay to ensure file is fully created
-					setTimeout(async () => {
-						const content = await this.app.vault.read(file);
+			if (this.settings.automatePostCreation) {
+				this.registerEvent(
+					this.app.vault.on("create", (file) => {
 						if (
-							content.trim().length === 0 &&
-							(this.settings.automatePostCreation ||
-								(this.settings.postsFolder &&
-									file.path.startsWith(this.settings.postsFolder)))
+							file instanceof TFile &&
+							file.extension === "md"
 						) {
-							// Open modal without moving the file yet
-							new PostTitleModal(this.app, file, this).open();
+							// Use metadata cache to check if file is empty
+							const cache = this.app.metadataCache.getCache(file.path);
+							if (!cache || !cache.sections || cache.sections.length === 0) {
+								new PostTitleModal(this.app, file, this).open();
+							}
 						}
-					}, 300); // Increased delay to ensure file is ready
-				}
-			}),
-		);
+					})
+				);
+			}
+		}, 300); // Reduced delay to balance performance and reliability
 
 		// Add commands
 		this.addCommand({
@@ -447,8 +432,8 @@ class PostTitleModal extends Modal {
 			// Process the file creation based on title
 			const newFile = await this.plugin.createPostFile(this.file, title);
 
-			if (newFile) {
-				// Add properties to the new file
+			if (newFile && this.plugin.settings.autoInsertProperties) {
+				// Add properties to the new file only if enabled
 				await this.plugin.addPropertiesToFile(newFile, title);
 			}
 		} catch (error) {
