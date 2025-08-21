@@ -102,8 +102,8 @@ export default class AstroComposerPlugin extends Plugin {
 		});
 
 		this.addCommand({
-			id: "convert-wikilinks-astro",
-			name: "Convert Wikilinks for Astro",
+			id: "convert-internal-links-astro",
+			name: "Convert Internal Links for Astro",
 			editorCallback: (editor: Editor, view: MarkdownView) => {
 				this.convertWikilinksForAstro(editor, view.file);
 			},
@@ -347,8 +347,7 @@ export default class AstroComposerPlugin extends Plugin {
 		const content = editor.getValue();
 		let newContent = content;
 
-		// Convert only regular wikilinks [[Title]] or [[Title|Display Text]]
-		// Use a more precise regex that excludes image wikilinks
+		// Convert wikilinks [[Title]] or [[Title|Display Text]]
 		newContent = newContent.replace(
 			/(?<!\!)\[\[([^\]|]+)(\|([^\]]+))?\]\]/g,
 			(match, linkText, _, displayText) => {
@@ -380,6 +379,39 @@ export default class AstroComposerPlugin extends Plugin {
 			},
 		);
 
+		// Convert Markdown links [text](path)
+		newContent = newContent.replace(
+			/(?<!\!)\[(.*?)\]\(([^)]+\.md)\)/g,
+			(match, displayText, linkPath) => {
+				// Ensure leading slash and trailing slash for base path
+				let basePath = this.settings.linkBasePath;
+				if (!basePath.startsWith("/")) {
+					basePath = "/" + basePath;
+				}
+				if (!basePath.endsWith("/")) {
+					basePath = basePath + "/";
+				}
+
+				// Normalize the link path (remove leading/trailing slashes, handle relative paths)
+				let normalizedPath = linkPath
+					.replace(/^\.\.?\//, "") // Remove leading ../ or ./
+					.replace(/\.md$/, "") // Remove .md extension
+					.replace(/^\/|\/$/, ""); // Remove leading/trailing slashes
+
+				// Check if this is a folder-based link (ends with /index)
+				const indexFileName = this.settings.indexFileName || "index";
+				if (normalizedPath.endsWith(`/${indexFileName}`)) {
+					// Extract the folder path
+					const folderPath = normalizedPath.slice(0, -(indexFileName.length + 1));
+					return `[${displayText}](${basePath}${folderPath}/)`;
+				} else {
+					// This is a file-based link, convert to kebab case if needed
+					const slug = this.toKebabCase(normalizedPath);
+					return `[${displayText}](${basePath}${slug}/)`;
+				}
+			},
+		);
+
 		// Convert embedded files {{embed.md}} to include format
 		newContent = newContent.replace(/\{\{([^}]+)\}\}/g, (match, fileName) => {
 			const slug = this.toKebabCase(fileName.replace(".md", ""));
@@ -396,7 +428,7 @@ export default class AstroComposerPlugin extends Plugin {
 		});
 
 		editor.setValue(newContent);
-		new Notice("Wikilinks converted for Astro");
+		new Notice("Wikilinks and Markdown links converted for Astro");
 	}
 
 	async loadSettings() {

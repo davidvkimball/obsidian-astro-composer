@@ -1,6 +1,6 @@
 {
 	"name": "astro-composer",
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"description": "A companion plugin for Astro blogging workflows. Helps create and manage blog posts with frontmatter and converts wikilinks.",
 	"main": "main.js",
 	"scripts": {
