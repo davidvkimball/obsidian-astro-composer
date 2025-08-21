@@ -19,17 +19,19 @@ interface AstroComposerSettings {
 	enableAutoRename: boolean;
 	creationMode: "file" | "folder";
 	indexFileName: string;
+	dateFormat: string; // Custom date format setting
 }
 
 const DEFAULT_SETTINGS: AstroComposerSettings = {
 	draftStyle: "frontmatter",
 	defaultTemplate:
-		'---\ntitle: "{{title}}"\ndate: "{{date}}"\ndescription: ""\ntags: []\ndraft: true\n---\n\n',
+		'---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\ndraft: true\n---\n\n',
 	linkBasePath: "/blog/",
 	postsFolder: "posts",
 	enableAutoRename: true,
 	creationMode: "file",
 	indexFileName: "index",
+	dateFormat: "YYYY-MM-DD", // Default to a parseable format
 };
 
 export default class AstroComposerPlugin extends Plugin {
@@ -58,36 +60,16 @@ export default class AstroComposerPlugin extends Plugin {
 					// Small delay to ensure file is fully created
 					setTimeout(async () => {
 						const content = await this.app.vault.read(file);
-						// Only trigger for completely empty files or files with minimal content
 						if (
 							content.trim().length === 0 &&
 							(this.settings.enableAutoRename ||
 								(this.settings.postsFolder &&
 									file.path.startsWith(this.settings.postsFolder)))
 						) {
-							// Check if this is already an "Untitled" file in the right location
-							const isAlreadyUntitled =
-								file.name === "Untitled.md" &&
-								file.path.startsWith(this.settings.postsFolder);
-
-							if (!isAlreadyUntitled) {
-								// Move to posts folder first as "Untitled"
-								await this.moveToPostsFolder(file);
-							}
-
-							// Find the moved file and open modal
-							const untitledPath = this.settings.postsFolder
-								? `${this.settings.postsFolder}/Untitled.md`
-								: "Untitled.md";
-							const untitledFile = this.app.vault.getAbstractFileByPath(
-								untitledPath,
-							) as TFile;
-
-							if (untitledFile) {
-								new PostTitleModal(this.app, untitledFile, this).open();
-							}
+							// Open modal without moving the file yet
+							new PostTitleModal(this.app, file, this).open();
 						}
-					}, 150);
+					}, 300); // Increased delay to ensure file is ready
 				}
 			}),
 		);
@@ -102,8 +84,8 @@ export default class AstroComposerPlugin extends Plugin {
 		});
 
 		this.addCommand({
-			id: "convert-internal-links-astro",
-			name: "Convert Internal Links for Astro",
+			id: "convert-wikilinks-astro",
+			name: "Convert Wikilinks for Astro",
 			editorCallback: (editor: Editor, view: MarkdownView) => {
 				this.convertWikilinksForAstro(editor, view.file);
 			},
@@ -123,53 +105,34 @@ export default class AstroComposerPlugin extends Plugin {
 			.replace(/^-|-$/g, ""); // Remove leading/trailing hyphens
 	}
 
-	async moveToPostsFolder(file: TFile): Promise<TFile | null> {
-		if (!this.settings.postsFolder) {
-			return file; // No posts folder specified, keep original file
-		}
-
-		const targetPath = `${this.settings.postsFolder}/Untitled.md`;
-
-		// Check if target already exists
-		const existingFile = this.app.vault.getAbstractFileByPath(targetPath);
-		if (existingFile) {
-			return existingFile as TFile; // Use existing untitled file
-		}
-
-		try {
-			// Ensure posts folder exists
-			const postsFolder = this.app.vault.getAbstractFileByPath(
-				this.settings.postsFolder,
-			);
-			if (!postsFolder) {
-				await this.app.vault.createFolder(this.settings.postsFolder);
-			}
-
-			await this.app.vault.rename(file, targetPath);
-			return this.app.vault.getAbstractFileByPath(targetPath) as TFile;
-		} catch (error) {
-			new Notice(`Failed to move file to posts folder: ${error.message}`);
-			return file;
-		}
-	}
-
 	async createPostFile(file: TFile, title: string): Promise<TFile | null> {
+		if (!title) {
+			new Notice("Title is required to create a post.");
+			return null;
+		}
+
 		const kebabTitle = this.toKebabCase(title);
 		const isDraft = this.settings.draftStyle === "filename";
+		const prefix = isDraft ? "_" : "";
+
+		// Ensure posts folder exists if specified
+		let targetFolder = this.settings.postsFolder || "";
+		if (targetFolder) {
+			const postsFolder = this.app.vault.getAbstractFileByPath(targetFolder);
+			if (!postsFolder) {
+				await this.app.vault.createFolder(targetFolder);
+			}
+		}
 
 		if (this.settings.creationMode === "folder") {
 			// Create folder-based structure
-			const prefix = isDraft ? "_" : "";
 			const folderName = `${prefix}${kebabTitle}`;
-			const folderPath = this.settings.postsFolder
-				? `${this.settings.postsFolder}/${folderName}`
-				: folderName;
+			const folderPath = targetFolder ? `${targetFolder}/${folderName}` : folderName;
 
-			// Create the folder
 			try {
 				await this.app.vault.createFolder(folderPath);
 			} catch (error) {
-				// Folder might already exist, that's okay
+				// Folder might already exist, proceed
 			}
 
 			const fileName = `${this.settings.indexFileName}.md`;
@@ -183,10 +146,9 @@ export default class AstroComposerPlugin extends Plugin {
 			}
 
 			try {
-				// Delete the original empty file
-				await this.app.vault.delete(file);
-				// Create new file in folder
-				const newFile = await this.app.vault.create(newPath, "");
+				// Move the original file to the new location
+				await this.app.vault.rename(file, newPath);
+				const newFile = this.app.vault.getAbstractFileByPath(newPath) as TFile;
 
 				// Reveal the new file in the file explorer
 				setTimeout(() => {
@@ -213,9 +175,7 @@ export default class AstroComposerPlugin extends Plugin {
 			}
 		} else {
 			// File-based creation
-			const prefix = isDraft ? "_" : "";
 			const newName = `${prefix}${kebabTitle}.md`;
-			const targetFolder = this.settings.postsFolder || "";
 			const newPath = targetFolder ? `${targetFolder}/${newName}` : newName;
 
 			// Check if file with new name already exists
@@ -242,27 +202,21 @@ export default class AstroComposerPlugin extends Plugin {
 	}
 
 	async addFrontmatterToFile(file: TFile, title: string, slug?: string) {
-		// Use a format that Obsidian recognizes as a Date property type
+		// Use the plugin's custom date format with Obsidian's built-in moment
 		const now = new Date();
-		const date =
-			now.getFullYear() +
-			"-" +
-			String(now.getMonth() + 1).padStart(2, "0") +
-			"-" +
-			String(now.getDate()).padStart(2, "0");
+		const dateString = window.moment(now).format(this.settings.dateFormat);
 
 		// Get the template and replace variables
 		let template = this.settings.defaultTemplate;
-		template = template.replace(/\{\{title\}\}/g, title);
-		template = template.replace(/\{\{date\}\}/g, date);
+		template = template.replace(/\{\{title\}\}/g, title); // Revert to simple replacement, no hardcoded quotes
+		template = template.replace(/\{\{date\}\}/g, dateString); // Keep unquoted date
 
-		// Ensure template ends with newlines for proper formatting
+		// Ensure template ends with newlines as per defaultTemplate
 		if (!template.endsWith("\n\n")) {
 			template = template.replace(/\n*$/, "\n\n");
 		}
 
 		// For new files created through modal, just replace entire content with template
-		// This ensures clean injection without content parsing issues
 		await this.app.vault.modify(file, template);
 	}
 
@@ -304,22 +258,10 @@ export default class AstroComposerPlugin extends Plugin {
 
 		// Use template from settings and replace variables
 		let template = this.settings.defaultTemplate;
-		template = template.replace(
-			/\{\{title\}\}/g,
-			existingFrontmatter.title || title,
-		);
-
-		// Use Obsidian-friendly date format
-		const now = new Date();
-		const dateFormat =
-			now.getFullYear() +
-			"-" +
-			String(now.getMonth() + 1).padStart(2, "0") +
-			"-" +
-			String(now.getDate()).padStart(2, "0");
+		template = template.replace(/\{\{title\}\}/g, existingFrontmatter.title || title); // Revert to simple replacement
 		template = template.replace(
 			/\{\{date\}\}/g,
-			existingFrontmatter.date || dateFormat,
+			existingFrontmatter.date || window.moment(new Date()).format(this.settings.dateFormat), // Keep unquoted date
 		);
 
 		// Handle draft status based on settings
@@ -329,6 +271,11 @@ export default class AstroComposerPlugin extends Plugin {
 			/draft:\s*true/g,
 			`draft: ${existingFrontmatter.draft || draftValue}`,
 		);
+
+		// Ensure template ends with newlines as per defaultTemplate
+		if (!template.endsWith("\n\n")) {
+			template = template.replace(/\n*$/, "\n\n");
+		}
 
 		const bodyContent = content.slice(frontmatterEnd);
 		const newContent =
@@ -494,11 +441,11 @@ class PostTitleModal extends Modal {
 		}
 
 		try {
-			// First, create/move the file to the right location
+			// Process the file creation based on title
 			const newFile = await this.plugin.createPostFile(this.file, title);
 
 			if (newFile) {
-				// Then add the frontmatter template
+				// Add frontmatter to the new file
 				await this.plugin.addFrontmatterToFile(newFile, title);
 			}
 		} catch (error) {
@@ -614,12 +561,25 @@ class AstroComposerSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
+			.setName("Date Format")
+			.setDesc("Format for the date in frontmatter (e.g., YYYY-MM-DD, MMMM D, YYYY, YYYY-MM-DD HH:mm).")
+			.addText((text) =>
+				text
+					.setPlaceholder("YYYY-MM-DD")
+					.setValue(this.plugin.settings.dateFormat)
+					.onChange(async (value) => {
+						this.plugin.settings.dateFormat = value || "YYYY-MM-DD";
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
 			.setName("Default Frontmatter Template")
-			.setDesc("Template for new post frontmatter (use {{title}}, {{date}}).")
+			.setDesc("Template for new post frontmatter, including {{title}} and {{date}}).")
 			.addTextArea((text) => {
 				text
 					.setPlaceholder(
-						'---\ntitle: "{{title}}"\ndate: "{{date}}"\ndescription: ""\ntags: []\ndraft: true\n---\n',
+						'---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\ndraft: true\n---\n',
 					)
 					.setValue(this.plugin.settings.defaultTemplate)
 					.onChange(async (value) => {
