@@ -16,8 +16,8 @@ interface AstroComposerSettings {
 	defaultTemplate: string;
 	linkBasePath: string;
 	postsFolder: string;
-	enableAutoRename: boolean;
-	enableAutoInsertFrontmatter: boolean;
+	automatePostCreation: boolean;
+	autoInsertProperties: boolean;
 	creationMode: "file" | "folder";
 	indexFileName: string;
 	dateFormat: string; // Custom date format setting
@@ -29,8 +29,8 @@ const DEFAULT_SETTINGS: AstroComposerSettings = {
 		'---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\n---\n\n',
 	linkBasePath: "/blog/", // Restored with default value
 	postsFolder: "posts",
-	enableAutoRename: true,
-	enableAutoInsertFrontmatter: true, // ON by default
+	automatePostCreation: true,
+	autoInsertProperties: true, // ON by default
 	creationMode: "file",
 	indexFileName: "index",
 	dateFormat: "YYYY-MM-DD", // Default to a parseable format
@@ -57,7 +57,7 @@ export default class AstroComposerPlugin extends Plugin {
 					file instanceof TFile &&
 					file.extension === "md" &&
 					!isVaultLoading &&
-					this.settings.enableAutoRename // Only proceed if auto-rename is enabled
+					this.settings.automatePostCreation // Only proceed if automate post creation is enabled
 				) {
 					// Only show modal for truly new files (empty or very small)
 					// Small delay to ensure file is fully created
@@ -65,7 +65,7 @@ export default class AstroComposerPlugin extends Plugin {
 						const content = await this.app.vault.read(file);
 						if (
 							content.trim().length === 0 &&
-							(this.settings.enableAutoRename ||
+							(this.settings.automatePostCreation ||
 								(this.settings.postsFolder &&
 									file.path.startsWith(this.settings.postsFolder)))
 						) {
@@ -79,10 +79,10 @@ export default class AstroComposerPlugin extends Plugin {
 
 		// Add commands
 		this.addCommand({
-			id: "standardize-frontmatter",
-			name: "Standardize Frontmatter",
+			id: "standardize-properties",
+			name: "Standardize Properties",
 			editorCallback: (editor: Editor, view: MarkdownView) => {
-				this.standardizeFrontmatter(view.file);
+				this.standardizeProperties(view.file);
 			},
 		});
 
@@ -143,7 +143,7 @@ export default class AstroComposerPlugin extends Plugin {
 			// Check if file already exists
 			const existingFile = this.app.vault.getAbstractFileByPath(newPath);
 			if (existingFile) {
-				new Notice(`File already exists at ${newPath}`);
+				new Notice(`File already exists at ${newPath}.`);
 				return null;
 			}
 
@@ -170,14 +170,14 @@ export default class AstroComposerPlugin extends Plugin {
 				const leaf = this.app.workspace.getLeaf(false);
 				await leaf.openFile(newFile);
 
-				// Add frontmatter only if enabled
-				if (this.settings.enableAutoInsertFrontmatter) {
-					await this.addFrontmatterToFile(newFile, title);
+				// Add properties only if enabled
+				if (this.settings.autoInsertProperties) {
+					await this.addPropertiesToFile(newFile, title);
 				}
 
 				return newFile;
 			} catch (error) {
-				new Notice(`Failed to create folder structure: ${error.message}`);
+				new Notice(`Failed to create folder structure: ${error.message}.`);
 				return null;
 			}
 		} else {
@@ -188,7 +188,7 @@ export default class AstroComposerPlugin extends Plugin {
 			// Check if file with new name already exists
 			const existingFile = this.app.vault.getAbstractFileByPath(newPath);
 			if (existingFile && existingFile !== file) {
-				new Notice(`File with name "${newName}" already exists`);
+				new Notice(`File with name "${newName}" already exists.`);
 				return null;
 			}
 
@@ -200,20 +200,20 @@ export default class AstroComposerPlugin extends Plugin {
 				const leaf = this.app.workspace.getLeaf(false);
 				await leaf.openFile(newFile);
 
-				// Add frontmatter only if enabled
-				if (this.settings.enableAutoInsertFrontmatter) {
-					await this.addFrontmatterToFile(newFile, title);
+				// Add properties only if enabled
+				if (this.settings.autoInsertProperties) {
+					await this.addPropertiesToFile(newFile, title);
 				}
 
 				return newFile;
 			} catch (error) {
-				new Notice(`Failed to rename file: ${error.message}`);
+				new Notice(`Failed to rename file: ${error.message}.`);
 				return null;
 			}
 		}
 	}
 
-	async addFrontmatterToFile(file: TFile, title: string, slug?: string) {
+	async addPropertiesToFile(file: TFile, title: string, slug?: string) {
 		// Use the plugin's custom date format with Obsidian's built-in moment
 		const now = new Date();
 		const dateString = window.moment(now).format(this.settings.dateFormat);
@@ -232,67 +232,65 @@ export default class AstroComposerPlugin extends Plugin {
 		await this.app.vault.modify(file, template);
 	}
 
-	async standardizeFrontmatter(file: TFile | null) {
+	async standardizeProperties(file: TFile | null) {
 		if (!file) {
-			new Notice("No active file");
+			new Notice("No active file.");
 			return;
 		}
 
 		const content = await this.app.vault.read(file);
 		const title = file.basename.replace(/^_/, ""); // Remove draft prefix if present
 
-		// Parse existing frontmatter or create new
-		let frontmatterEnd = 0;
-		let existingFrontmatter: any = {};
+		// Parse existing properties or create new
+		let propertiesEnd = 0;
+		let existingProperties: any = {};
 
 		if (content.startsWith("---")) {
 			const secondDelimiter = content.indexOf("\n---", 3);
 			if (secondDelimiter !== -1) {
-				frontmatterEnd = secondDelimiter + 4;
-				const frontmatterText = content.slice(4, secondDelimiter);
+				propertiesEnd = secondDelimiter + 4;
+				const propertiesText = content.slice(4, secondDelimiter);
 				try {
 					// Simple YAML parsing for basic fields
-					frontmatterText.split("\n").forEach((line) => {
+					propertiesText.split("\n").forEach((line) => {
 						const match = line.match(/^(\w+):\s*(.+)$/);
 						if (match) {
 							const [, key, value] = match;
-							existingFrontmatter[key] = value.replace(
+							existingProperties[key] = value.replace(
 								/^["'\[\]]|["'\[\]]$/g,
 								"",
 							);
 						}
 					});
 				} catch (error) {
-					new Notice("Failed to parse existing frontmatter");
+					new Notice("Failed to parse existing properties.");
 				}
 			}
 		}
 
-		// Use template from settings and replace variables only if auto-insert is enabled
-		let template = this.settings.enableAutoInsertFrontmatter ? this.settings.defaultTemplate : "";
-		if (this.settings.enableAutoInsertFrontmatter) {
-			template = template.replace(/\{\{title\}\}/g, existingFrontmatter.title || title); // Simple replacement
-			template = template.replace(
-				/\{\{date\}\}/g,
-				existingFrontmatter.date || window.moment(new Date()).format(this.settings.dateFormat), // Keep unquoted date
-			);
+		// Always use the user-defined template for standardization
+		let template = this.settings.defaultTemplate;
+		template = template.replace(/\{\{title\}\}/g, existingProperties.title || title); // Simple replacement
+		template = template.replace(
+			/\{\{date\}\}/g,
+			existingProperties.date || window.moment(new Date()).format(this.settings.dateFormat), // Keep unquoted date
+		);
 
-			// Ensure template ends with newlines as per defaultTemplate
-			if (!template.endsWith("\n\n")) {
-				template = template.replace(/\n*$/, "\n\n");
-			}
+		// Ensure template ends with newlines as per defaultTemplate
+		if (!template.endsWith("\n\n")) {
+			template = template.replace(/\n*$/, "\n\n");
 		}
 
-		const bodyContent = content.slice(frontmatterEnd);
+		const bodyContent = content.slice(propertiesEnd);
 		const newContent = template + (template.endsWith("\n") ? "" : "\n") + bodyContent;
 
 		await this.app.vault.modify(file, newContent);
-		new Notice("Frontmatter standardized using template" + (this.settings.enableAutoInsertFrontmatter ? "" : " (no insertion)"));
+		new Notice("Properties standardized using template.");
 	}
 
 	async convertWikilinksForAstro(editor: Editor, file: TFile | null) {
 		if (!file) {
-			new Notice("No active file");
+			new Notice("No active file.");
 			return;
 		}
 
@@ -380,7 +378,7 @@ export default class AstroComposerPlugin extends Plugin {
 		});
 
 		editor.setValue(newContent);
-		new Notice("All internal links converted for Astro");
+		new Notice("All internal links converted for Astro.");
 	}
 
 	async loadSettings() {
@@ -441,7 +439,7 @@ class PostTitleModal extends Modal {
 	async createPost() {
 		const title = this.titleInput.value.trim();
 		if (!title) {
-			new Notice("Please enter a title");
+			new Notice("Please enter a title.");
 			return;
 		}
 
@@ -450,11 +448,11 @@ class PostTitleModal extends Modal {
 			const newFile = await this.plugin.createPostFile(this.file, title);
 
 			if (newFile) {
-				// Add frontmatter to the new file
-				await this.plugin.addFrontmatterToFile(newFile, title);
+				// Add properties to the new file
+				await this.plugin.addPropertiesToFile(newFile, title);
 			}
 		} catch (error) {
-			new Notice(`Error creating post: ${error.message}`);
+			new Notice(`Error creating post: ${error.message}.`);
 		}
 
 		this.close();
@@ -483,36 +481,36 @@ class AstroComposerSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		// Auto-rename files (top-level toggle)
+		// Automate post creation (top-level toggle)
 		new Setting(containerEl)
-			.setName("Auto-rename files")
-			.setDesc("Automatically show title dialog for new .md files, rename them based on the title, and insert frontmatter if enabled.")
+			.setName("Automate post creation")
+			.setDesc("Automatically show title dialog for new .md files, rename them based on the title, and insert properties if enabled.")
 			.addToggle((toggle) =>
 				toggle
-					.setValue(this.plugin.settings.enableAutoRename)
+					.setValue(this.plugin.settings.automatePostCreation)
 					.onChange(async (value: boolean) => {
-						this.plugin.settings.enableAutoRename = value;
+						this.plugin.settings.automatePostCreation = value;
 						await this.plugin.saveSettings();
 						this.updateConditionalFields();
 					})
 			);
 
-		// Auto-insert frontmatter (independent toggle)
+		// Auto-insert properties (independent toggle)
 		new Setting(containerEl)
-			.setName("Auto-insert frontmatter")
-			.setDesc("Automatically insert the frontmatter template when creating new files or standardizing existing ones.")
+			.setName("Auto-insert properties")
+			.setDesc("Automatically insert the properties template when creating new files (requires 'Automate post creation' to be enabled).")
 			.addToggle((toggle) =>
 				toggle
-					.setValue(this.plugin.settings.enableAutoInsertFrontmatter)
+					.setValue(this.plugin.settings.autoInsertProperties)
 					.onChange(async (value: boolean) => {
-						this.plugin.settings.enableAutoInsertFrontmatter = value;
+						this.plugin.settings.autoInsertProperties = value;
 						await this.plugin.saveSettings();
 					})
 			);
 
 		// Container for conditionally displayed settings
 		this.autoRenameContainer = containerEl.createDiv({ cls: "auto-rename-fields" });
-		this.autoRenameContainer.style.display = this.plugin.settings.enableAutoRename ? "block" : "none";
+		this.autoRenameContainer.style.display = this.plugin.settings.automatePostCreation ? "block" : "none";
 
 		// Posts folder
 		this.postsFolderContainer = this.autoRenameContainer.createDiv();
@@ -594,7 +592,7 @@ class AstroComposerSettingTab extends PluginSettingTab {
 		// Always visible settings
 		new Setting(containerEl)
 			.setName("Date format")
-			.setDesc("Format for the date in frontmatter (e.g., YYYY-MM-DD, MMMM D, YYYY, YYYY-MM-DD hh:mm a).")
+			.setDesc("Format for the date in properties (e.g., YYYY-MM-DD, MMMM D, YYYY, YYYY-MM-DD hh:mm a).")
 			.addText((text) =>
 				text
 					.setPlaceholder("YYYY-MM-DD")
@@ -606,8 +604,8 @@ class AstroComposerSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Frontmatter Template")
-			.setDesc("Used for new posts and when standardizing frontmatter.")
+			.setName("Properties template")
+			.setDesc("Used for new posts and when standardizing properties.")
 			.addTextArea((text) => {
 				const plugin = this.plugin; // Capture plugin instance
 				text
@@ -630,7 +628,7 @@ class AstroComposerSettingTab extends PluginSettingTab {
 
 	updateConditionalFields() {
 		if (this.autoRenameContainer) {
-			this.autoRenameContainer.style.display = this.plugin.settings.enableAutoRename ? "block" : "none";
+			this.autoRenameContainer.style.display = this.plugin.settings.automatePostCreation ? "block" : "none";
 		}
 	}
 
