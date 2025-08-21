@@ -27,7 +27,7 @@ const DEFAULT_SETTINGS: AstroComposerSettings = {
 	enableUnderscorePrefix: false, // OFF by default
 	defaultTemplate:
 		'---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\n---\n\n',
-	linkBasePath: "/blog/",
+	linkBasePath: "/blog/", // Restored with default value
 	postsFolder: "posts",
 	enableAutoRename: true,
 	enableAutoInsertFrontmatter: true, // ON by default
@@ -88,7 +88,7 @@ export default class AstroComposerPlugin extends Plugin {
 
 		this.addCommand({
 			id: "convert-wikilinks-astro",
-			name: "Convert Wikilinks for Astro",
+			name: "Convert internal links for Astro",
 			editorCallback: (editor: Editor, view: MarkdownView) => {
 				this.convertWikilinksForAstro(editor, view.file);
 			},
@@ -380,7 +380,7 @@ export default class AstroComposerPlugin extends Plugin {
 		});
 
 		editor.setValue(newContent);
-		new Notice("Wikilinks and Markdown links converted for Astro");
+		new Notice("All internal links converted for Astro");
 	}
 
 	async loadSettings() {
@@ -573,6 +573,20 @@ class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.indexFileName)
 					.onChange(async (value: string) => {
 						this.plugin.settings.indexFileName = value || "index";
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Link base path (always visible)
+		new Setting(containerEl)
+			.setName("Link base path")
+			.setDesc("Base path for converted links (e.g., /blog/, leave blank for root domain).")
+			.addText((text) =>
+				text
+					.setPlaceholder("/blog/")
+					.setValue(this.plugin.settings.linkBasePath)
+					.onChange(async (value: string) => {
+						this.plugin.settings.linkBasePath = value;
 						await this.plugin.saveSettings();
 					})
 			);
