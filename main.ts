@@ -35,7 +35,7 @@ const DEFAULT_SETTINGS: AstroComposerSettings = {
 	autoInsertProperties: true,
 	creationMode: "file",
 	indexFileName: "index",
-	dateFormat: "YYYY-MM-DD",
+	dateFormat: "YYYY-MM-DD HH:mm",
 	excludedDirectories: "",
 	onlyAutomateInPostsFolder: false,
 };
@@ -281,7 +281,7 @@ export default class AstroComposerPlugin extends Plugin {
 		let propertiesEnd = 0;
 		const existingProperties: Record<string, string> = {};
 
-		// Parse existing frontmatter
+		// Parse existing properties
 		if (content.startsWith("---")) {
 			const secondDelimiter = content.indexOf("\n---", 3);
 			if (secondDelimiter !== -1) {
@@ -302,26 +302,22 @@ export default class AstroComposerPlugin extends Plugin {
 			}
 		}
 
-		// Extract template properties and their order, including any content after frontmatter
+		// Extract template properties and their order
 		const templateLines = this.settings.defaultTemplate.split("\n");
 		const templateProps: string[] = [];
 		const templateValues: Record<string, string> = {};
-		let inFrontmatter = false;
-		let templateContent = "";
-		let frontmatterEndIndex = 0;
+		let inProperties = false;
 
 		for (let i = 0; i < templateLines.length; i++) {
 			const line = templateLines[i];
 			if (line === "---") {
-				inFrontmatter = !inFrontmatter;
-				if (!inFrontmatter) {
-					frontmatterEndIndex = i;
-					templateContent = templateLines.slice(i + 1).join("\n");
-					break;
+				inProperties = !inProperties;
+				if (!inProperties) {
+					break; // Stop at second --- to exclude post-property content
 				}
 				continue;
 			}
-			if (inFrontmatter) {
+			if (inProperties) {
 				const match = line.match(/^(\w+):\s*(.+)$/);
 				if (match) {
 					const [, key, value] = match;
@@ -332,6 +328,7 @@ export default class AstroComposerPlugin extends Plugin {
 		}
 
 		// Preserve existing values, fill missing ones
+		const dateString = window.moment(new Date()).format(this.settings.dateFormat);
 		const finalProps: Record<string, string> = {};
 		for (const key of templateProps) {
 			if (key in existingProperties) {
@@ -340,7 +337,7 @@ export default class AstroComposerPlugin extends Plugin {
 				if (key === "title") {
 					finalProps[key] = `"${title}"`;
 				} else if (key === "date") {
-					finalProps[key] = window.moment(new Date()).format(this.settings.dateFormat);
+					finalProps[key] = dateString;
 				} else {
 					finalProps[key] = templateValues[key];
 				}
@@ -354,36 +351,24 @@ export default class AstroComposerPlugin extends Plugin {
 			}
 		}
 
-		// Build new content using the template as a base
-		let newContent = "";
-		inFrontmatter = false;
-		for (let i = 0; i < templateLines.length; i++) {
-			const line = templateLines[i];
-			if (line === "---") {
-				inFrontmatter = !inFrontmatter;
-				newContent += line + "\n";
-				continue;
-			}
-			if (inFrontmatter) {
-				const match = line.match(/^(\w+):\s*(.+)$/);
-				if (match) {
-					const key = match[1];
-					newContent += `${key}: ${finalProps[key]}\n`;
-				} else {
-					newContent += line + "\n";
-				}
-			} else {
-				// Add remaining template lines after frontmatter
-				newContent += templateLines.slice(i).join("\n");
-				break;
+		// Build new property content
+		let newContent = "---\n";
+		for (const key of templateProps) {
+			newContent += `${key}: ${finalProps[key]}\n`;
+		}
+		// Add unrecognized properties to the end
+		for (const key in finalProps) {
+			if (!templateProps.includes(key)) {
+				newContent += `${key}: ${finalProps[key]}\n`;
 			}
 		}
+		newContent += "---";
 
-		// Replace template placeholders
+		// Replace template placeholders in the properties only
 		newContent = newContent.replace(/\{\{title\}\}/g, title);
-		newContent = newContent.replace(/\{\{date\}\}/g, window.moment(new Date()).format(this.settings.dateFormat));
+		newContent = newContent.replace(/\{\{date\}\}/g, dateString);
 
-		// Append original body content
+		// Append the original body content (everything after the second --- or the entire content if no properties)
 		const bodyContent = content.slice(propertiesEnd).trimStart();
 		newContent += bodyContent ? "\n" + bodyContent : "";
 
@@ -687,33 +672,42 @@ class AstroComposerSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Date format")
-			.setDesc("Format for the date in properties (e.g., YYYY-MM-DD, MMMM D, YYYY, YYYY-MM-DD hh:mm a).")
+			.setDesc("Format for the date in properties (e.g., YYYY-MM-DD, MMMM D, YYYY, YYYY-MM-DD HH:mm).")
 			.addText((text) =>
 				text
-					.setPlaceholder("YYYY-MM-DD")
+					.setPlaceholder("YYYY-MM-DD HH:mm")
 					.setValue(this.plugin.settings.dateFormat)
 					.onChange(async (value: string) => {
-						this.plugin.settings.dateFormat = value || "YYYY-MM-DD";
+						this.plugin.settings.dateFormat = value || "YYYY-MM-DD HH:mm";
 						await this.plugin.saveSettings();
 					})
 			);
 
 		new Setting(containerEl)
-			.setName("Properties template")
-			.setDesc("Used for new posts and when standardizing properties.")
-			.addTextArea((text) => {
-				const plugin = this.plugin;
-				text
-					.setPlaceholder(
-						'---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\n---\n',
-					)
-					.setValue(plugin.settings.defaultTemplate)
-					.onChange(async (value: string) => {
-						plugin.settings.defaultTemplate = value;
-						await plugin.saveSettings();
-					});
-				text.inputEl.classList.add("astro-composer-template-textarea");
-			});
+		.setName("Properties template")
+		.addTextArea((text) => {
+			const plugin = this.plugin;
+			text
+				.setPlaceholder(
+					'---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\n---\n',
+				)
+				.setValue(plugin.settings.defaultTemplate)
+				.onChange(async (value: string) => {
+					plugin.settings.defaultTemplate = value;
+					await plugin.saveSettings();
+				});
+			text.inputEl.classList.add("astro-composer-template-textarea");
+			return text;
+		})
+		.then((setting) => {
+			setting.descEl.empty();
+			const descDiv = setting.descEl.createEl("div");
+			descDiv.innerHTML = 
+				"Used for new posts and when standardizing properties.<br />" +
+				"Variables include {{title}} and {{date}}.<br />" +
+				"Do not wrap {{date}} in quotes as it represents a datetime value, not a string.<br />" +
+				"The 'standardize properties' command ignores anything below the second '---' line.";
+		});
 
 		this.updateConditionalFields();
 		this.updateIndexFileField();
