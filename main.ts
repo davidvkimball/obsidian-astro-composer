@@ -20,32 +20,38 @@ interface AstroComposerSettings {
 	autoInsertProperties: boolean;
 	creationMode: "file" | "folder";
 	indexFileName: string;
-	dateFormat: string; // Custom date format setting
-	excludedDirectories: string; // New setting for excluded directories
-	onlyAutomateInPostsFolder: boolean; // New toggle to restrict automation
+	dateFormat: string;
+	excludedDirectories: string;
+	onlyAutomateInPostsFolder: boolean;
 }
 
 const DEFAULT_SETTINGS: AstroComposerSettings = {
-	enableUnderscorePrefix: false, // OFF by default
+	enableUnderscorePrefix: false,
 	defaultTemplate:
 		'---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\n---\n\n',
-	linkBasePath: "/blog/", // Restored with default value
+	linkBasePath: "/blog/",
 	postsFolder: "posts",
 	automatePostCreation: true,
-	autoInsertProperties: true, // ON by default
+	autoInsertProperties: true,
 	creationMode: "file",
 	indexFileName: "index",
-	dateFormat: "YYYY-MM-DD", // Default to a parseable format
-	excludedDirectories: "", // Default to no exclusions
-	onlyAutomateInPostsFolder: false, // Off by default
+	dateFormat: "YYYY-MM-DD",
+	excludedDirectories: "",
+	onlyAutomateInPostsFolder: false,
 };
 
 export default class AstroComposerPlugin extends Plugin {
 	settings: AstroComposerSettings;
-	private createEvent: (file: TFile) => void; // Updated type to match event handler
+	private createEvent: (file: TFile) => void;
 
 	async onload() {
 		await this.loadSettings();
+
+		// Load CSS
+		const cssLink = document.createElement("link");
+		cssLink.rel = "stylesheet";
+		cssLink.href = this.manifest.dir + "/styles.css";
+		document.head.appendChild(cssLink);
 
 		// Initial event registration
 		this.registerCreateEvent();
@@ -55,7 +61,9 @@ export default class AstroComposerPlugin extends Plugin {
 			id: "standardize-properties",
 			name: "Standardize Properties",
 			editorCallback: (editor: Editor, view: MarkdownView) => {
-				this.standardizeProperties(view.file);
+				if (view.file instanceof TFile) {
+					this.standardizeProperties(view.file);
+				}
 			},
 		});
 
@@ -63,7 +71,9 @@ export default class AstroComposerPlugin extends Plugin {
 			id: "convert-wikilinks-astro",
 			name: "Convert internal links for Astro",
 			editorCallback: (editor: Editor, view: MarkdownView) => {
-				this.convertWikilinksForAstro(editor, view.file);
+				if (view.file instanceof TFile) {
+					this.convertWikilinksForAstro(editor, view.file);
+				}
 			},
 		});
 
@@ -71,13 +81,11 @@ export default class AstroComposerPlugin extends Plugin {
 		this.addSettingTab(new AstroComposerSettingTab(this.app, this));
 	}
 
-	public registerCreateEvent() { // Changed from protected to public
-		// Unregister existing event if it exists
+	public registerCreateEvent() {
 		if (this.createEvent) {
 			this.app.vault.off("create", this.createEvent);
 		}
 
-		// Register new event only if automatePostCreation is true
 		if (this.settings.automatePostCreation) {
 			this.createEvent = (file: TFile) => {
 				if (file instanceof TFile && file.extension === "md") {
@@ -120,11 +128,11 @@ export default class AstroComposerPlugin extends Plugin {
 	toKebabCase(str: string): string {
 		return str
 			.toLowerCase()
-			.replace(/[^a-z0-9\s-]/g, "") // Remove invalid characters
+			.replace(/[^a-z0-9\s-]/g, "")
 			.trim()
-			.replace(/\s+/g, "-") // Replace spaces with hyphens
-			.replace(/-+/g, "-") // Remove multiple consecutive hyphens
-			.replace(/^-|-$/g, ""); // Remove leading/trailing hyphens
+			.replace(/\s+/g, "-")
+			.replace(/-+/g, "-")
+			.replace(/^-|-$/g, "");
 	}
 
 	async createPostFile(file: TFile, title: string): Promise<TFile | null> {
@@ -139,7 +147,7 @@ export default class AstroComposerPlugin extends Plugin {
 		let targetFolder = this.settings.postsFolder || "";
 		if (targetFolder) {
 			const postsFolder = this.app.vault.getAbstractFileByPath(targetFolder);
-			if (!postsFolder) {
+			if (!(postsFolder instanceof TFolder)) {
 				await this.app.vault.createFolder(targetFolder);
 			}
 		}
@@ -149,7 +157,10 @@ export default class AstroComposerPlugin extends Plugin {
 			const folderPath = targetFolder ? `${targetFolder}/${folderName}` : folderName;
 
 			try {
-				await this.app.vault.createFolder(folderPath);
+				const folder = this.app.vault.getAbstractFileByPath(folderPath);
+				if (!(folder instanceof TFolder)) {
+					await this.app.vault.createFolder(folderPath);
+				}
 			} catch (error) {
 				// Folder might already exist, proceed
 			}
@@ -158,22 +169,23 @@ export default class AstroComposerPlugin extends Plugin {
 			const newPath = `${folderPath}/${fileName}`;
 
 			const existingFile = this.app.vault.getAbstractFileByPath(newPath);
-			if (existingFile) {
+			if (existingFile instanceof TFile) {
 				new Notice(`File already exists at ${newPath}.`);
 				return null;
 			}
 
 			try {
 				await this.app.vault.rename(file, newPath);
-				const newFile = this.app.vault.getAbstractFileByPath(newPath) as TFile;
+				const newFile = this.app.vault.getAbstractFileByPath(newPath);
+				if (!(newFile instanceof TFile)) {
+					return null;
+				}
 
-				// @ts-ignore
 				setTimeout(() => {
 					const fileExplorer = this.app.workspace.getLeavesOfType("file-explorer")[0];
 					if (fileExplorer && fileExplorer.view) {
-						// @ts-ignore
-						const fileTree = fileExplorer.view.tree;
-						if (fileTree) {
+						const fileTree = (fileExplorer.view as any).tree;
+						if (fileTree && newFile instanceof TFile) {
 							fileTree.revealFile(newFile);
 						}
 					}
@@ -196,14 +208,17 @@ export default class AstroComposerPlugin extends Plugin {
 			const newPath = targetFolder ? `${targetFolder}/${newName}` : newName;
 
 			const existingFile = this.app.vault.getAbstractFileByPath(newPath);
-			if (existingFile && existingFile !== file) {
+			if (existingFile instanceof TFile && existingFile !== file) {
 				new Notice(`File with name "${newName}" already exists.`);
 				return null;
 			}
 
 			try {
 				await this.app.vault.rename(file, newPath);
-				const newFile = this.app.vault.getAbstractFileByPath(newPath) as TFile;
+				const newFile = this.app.vault.getAbstractFileByPath(newPath);
+				if (!(newFile instanceof TFile)) {
+					return null;
+				}
 
 				const leaf = this.app.workspace.getLeaf(false);
 				await leaf.openFile(newFile);
@@ -236,7 +251,7 @@ export default class AstroComposerPlugin extends Plugin {
 	}
 
 	async standardizeProperties(file: TFile | null) {
-		if (!file) {
+		if (!(file instanceof TFile)) {
 			new Notice("No active file.");
 			return;
 		}
@@ -285,7 +300,7 @@ export default class AstroComposerPlugin extends Plugin {
 	}
 
 	async convertWikilinksForAstro(editor: Editor, file: TFile | null) {
-		if (!file) {
+		if (!(file instanceof TFile)) {
 			new Notice("No active file.");
 			return;
 		}
@@ -294,8 +309,8 @@ export default class AstroComposerPlugin extends Plugin {
 		let newContent = content;
 
 		newContent = newContent.replace(
-			/(?<!\!)\[\[([^\]|]+)(\|([^\]]+))?\]\]/g,
-			(match, linkText, _, displayText) => {
+			/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g,
+			(match, linkText, _pipe, displayText) => {
 				const display = displayText || linkText;
 
 				let basePath = this.settings.linkBasePath;
@@ -316,7 +331,7 @@ export default class AstroComposerPlugin extends Plugin {
 		);
 
 		newContent = newContent.replace(
-			/(?<!\!)\[(.*?)\]\(([^)]+\.md)\)/g,
+			/\[(.*?)\]\(([^)]+\.md)\)/g,
 			(match, displayText, linkPath) => {
 				let basePath = this.settings.linkBasePath;
 				if (!basePath.startsWith("/")) basePath = "/" + basePath;
@@ -382,21 +397,16 @@ class PostTitleModal extends Modal {
 		this.titleInput = contentEl.createEl("input", {
 			type: "text",
 			placeholder: "My Awesome Blog Post",
+			cls: "astro-composer-title-input"
 		});
-		this.titleInput.style.width = "100%";
-		this.titleInput.style.marginBottom = "16px";
 		this.titleInput.focus();
 
-		const buttonContainer = contentEl.createDiv();
-		buttonContainer.style.display = "flex";
-		buttonContainer.style.gap = "8px";
-		buttonContainer.style.justifyContent = "flex-end";
+		const buttonContainer = contentEl.createDiv({ cls: "astro-composer-button-container" });
 
-		const cancelButton = buttonContainer.createEl("button", { text: "Cancel" });
+		const cancelButton = buttonContainer.createEl("button", { text: "Cancel", cls: "astro-composer-cancel-button" });
 		cancelButton.onclick = () => this.close();
 
-		const createButton = buttonContainer.createEl("button", { text: "Create" });
-		createButton.classList.add("mod-cta");
+		const createButton = buttonContainer.createEl("button", { text: "Create", cls: ["astro-composer-create-button", "mod-cta"] });
 		createButton.onclick = () => this.createPost();
 
 		this.titleInput.addEventListener("keypress", (e) => {
@@ -449,7 +459,6 @@ class AstroComposerSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		// Automate post creation (top-level toggle)
 		new Setting(containerEl)
 			.setName("Automate post creation")
 			.setDesc("Automatically show title dialog for new .md files, rename them based on the title, and insert properties if enabled.")
@@ -458,18 +467,16 @@ class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.automatePostCreation)
 					.onChange(async (value: boolean) => {
 						this.plugin.settings.automatePostCreation = value;
-						this.plugin.settings.autoInsertProperties = value; // Sync with automatePostCreation
+						this.plugin.settings.autoInsertProperties = value;
 						await this.plugin.saveSettings();
-						this.plugin.registerCreateEvent(); // Re-register event based on new setting
+						this.plugin.registerCreateEvent();
 						this.updateConditionalFields();
 					})
 			);
 
-		// Container for conditionally displayed settings
 		this.autoRenameContainer = containerEl.createDiv({ cls: "auto-rename-fields" });
 		this.autoRenameContainer.style.display = this.plugin.settings.automatePostCreation ? "block" : "none";
 
-		// Auto-insert properties (nested and conditional toggle)
 		this.autoInsertContainer = this.autoRenameContainer.createDiv();
 		new Setting(this.autoInsertContainer)
 			.setName("Auto-insert properties")
@@ -484,11 +491,10 @@ class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// Posts folder
 		this.postsFolderContainer = this.autoRenameContainer.createDiv();
 		new Setting(this.postsFolderContainer)
 			.setName("Posts folder")
-			.setDesc("Folder name for blog posts (leave blank to use the vault folder).")
+			.setDesc("Folder name for blog posts (leave blank to use the vault folder). You can specify the default location for new notes in Obsidian's 'Files and links' settings.")
 			.addText((text) =>
 				text
 					.setPlaceholder("posts")
@@ -499,7 +505,6 @@ class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// Only automate in this folder toggle
 		this.onlyAutomateContainer = this.autoRenameContainer.createDiv();
 		new Setting(this.onlyAutomateContainer)
 			.setName("Only automate in this folder")
@@ -514,7 +519,6 @@ class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// Excluded directories field
 		this.excludedDirsContainer = this.autoRenameContainer.createDiv({ cls: "excluded-dirs-field" });
 		this.excludedDirsContainer.style.display = !this.plugin.settings.onlyAutomateInPostsFolder ? "block" : "none";
 
@@ -531,7 +535,6 @@ class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// Creation mode
 		this.creationModeContainer = this.autoRenameContainer.createDiv();
 		new Setting(this.creationModeContainer)
 			.setName("Creation mode")
@@ -548,7 +551,6 @@ class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// Index File Name field (initially hidden)
 		this.indexFileContainer = this.autoRenameContainer.createDiv({ cls: "index-file-field" });
 		this.indexFileContainer.style.display = this.plugin.settings.creationMode === "folder" ? "block" : "none";
 
@@ -565,7 +567,6 @@ class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// Use underscore prefix for drafts
 		this.underscorePrefixContainer = this.autoRenameContainer.createDiv();
 		new Setting(this.underscorePrefixContainer)
 			.setName("Use underscore prefix for drafts")
@@ -579,7 +580,6 @@ class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// Link base path (always visible)
 		new Setting(containerEl)
 			.setName("Link base path")
 			.setDesc("Base path for converted links (e.g., /blog/, leave blank for root domain).")
@@ -593,7 +593,6 @@ class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// Always visible settings
 		new Setting(containerEl)
 			.setName("Date format")
 			.setDesc("Format for the date in properties (e.g., YYYY-MM-DD, MMMM D, YYYY, YYYY-MM-DD hh:mm a).")
@@ -621,11 +620,9 @@ class AstroComposerSettingTab extends PluginSettingTab {
 						plugin.settings.defaultTemplate = value;
 						await plugin.saveSettings();
 					});
-				text.inputEl.style.height = "200px";
-				text.inputEl.style.width = "100%";
+				text.inputEl.classList.add("astro-composer-template-textarea");
 			});
 
-		// Initial updates
 		this.updateConditionalFields();
 		this.updateIndexFileField();
 		this.updateExcludedDirsField();
