@@ -28,7 +28,7 @@ interface AstroComposerSettings {
 const DEFAULT_SETTINGS: AstroComposerSettings = {
 	enableUnderscorePrefix: false,
 	defaultTemplate:
-		'---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\n---\n\n',
+		'---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\n---\n',
 	linkBasePath: "/blog/",
 	postsFolder: "posts",
 	automatePostCreation: true,
@@ -266,10 +266,7 @@ export default class AstroComposerPlugin extends Plugin {
 		template = template.replace(/\{\{title\}\}/g, title);
 		template = template.replace(/\{\{date\}\}/g, dateString);
 
-		if (!template.endsWith("\n\n")) {
-			template = template.replace(/\n*$/, "\n\n");
-		}
-
+		// Ensure no extra newlines or --- are added beyond the template
 		await this.app.vault.modify(file, template);
 	}
 
@@ -281,10 +278,10 @@ export default class AstroComposerPlugin extends Plugin {
 
 		const content = await this.app.vault.read(file);
 		const title = file.basename.replace(/^_/, "");
-
 		let propertiesEnd = 0;
-		let existingProperties: any = {};
+		const existingProperties: Record<string, string> = {};
 
+		// Parse existing frontmatter
 		if (content.startsWith("---")) {
 			const secondDelimiter = content.indexOf("\n---", 3);
 			if (secondDelimiter !== -1) {
@@ -295,28 +292,100 @@ export default class AstroComposerPlugin extends Plugin {
 						const match = line.match(/^(\w+):\s*(.+)$/);
 						if (match) {
 							const [, key, value] = match;
-							existingProperties[key] = value.replace(/^["'\[\]]|["'\[\]]$/g, "");
+							existingProperties[key] = value;
 						}
 					});
 				} catch (error) {
 					new Notice("Failed to parse existing properties.");
+					return;
 				}
 			}
 		}
 
-		let template = this.settings.defaultTemplate;
-		template = template.replace(/\{\{title\}\}/g, existingProperties.title || title);
-		template = template.replace(
-			/\{\{date\}\}/g,
-			existingProperties.date || window.moment(new Date()).format(this.settings.dateFormat)
-		);
+		// Extract template properties and their order, including any content after frontmatter
+		const templateLines = this.settings.defaultTemplate.split("\n");
+		const templateProps: string[] = [];
+		const templateValues: Record<string, string> = {};
+		let inFrontmatter = false;
+		let templateContent = "";
+		let frontmatterEndIndex = 0;
 
-		if (!template.endsWith("\n\n")) {
-			template = template.replace(/\n*$/, "\n\n");
+		for (let i = 0; i < templateLines.length; i++) {
+			const line = templateLines[i];
+			if (line === "---") {
+				inFrontmatter = !inFrontmatter;
+				if (!inFrontmatter) {
+					frontmatterEndIndex = i;
+					templateContent = templateLines.slice(i + 1).join("\n");
+					break;
+				}
+				continue;
+			}
+			if (inFrontmatter) {
+				const match = line.match(/^(\w+):\s*(.+)$/);
+				if (match) {
+					const [, key, value] = match;
+					templateProps.push(key);
+					templateValues[key] = value;
+				}
+			}
 		}
 
-		const bodyContent = content.slice(propertiesEnd);
-		const newContent = template + (template.endsWith("\n") ? "" : "\n") + bodyContent;
+		// Preserve existing values, fill missing ones
+		const finalProps: Record<string, string> = {};
+		for (const key of templateProps) {
+			if (key in existingProperties) {
+				finalProps[key] = existingProperties[key];
+			} else {
+				if (key === "title") {
+					finalProps[key] = `"${title}"`;
+				} else if (key === "date") {
+					finalProps[key] = window.moment(new Date()).format(this.settings.dateFormat);
+				} else {
+					finalProps[key] = templateValues[key];
+				}
+			}
+		}
+
+		// Add unrecognized properties
+		for (const key in existingProperties) {
+			if (!templateProps.includes(key)) {
+				finalProps[key] = existingProperties[key];
+			}
+		}
+
+		// Build new content using the template as a base
+		let newContent = "";
+		inFrontmatter = false;
+		for (let i = 0; i < templateLines.length; i++) {
+			const line = templateLines[i];
+			if (line === "---") {
+				inFrontmatter = !inFrontmatter;
+				newContent += line + "\n";
+				continue;
+			}
+			if (inFrontmatter) {
+				const match = line.match(/^(\w+):\s*(.+)$/);
+				if (match) {
+					const key = match[1];
+					newContent += `${key}: ${finalProps[key]}\n`;
+				} else {
+					newContent += line + "\n";
+				}
+			} else {
+				// Add remaining template lines after frontmatter
+				newContent += templateLines.slice(i).join("\n");
+				break;
+			}
+		}
+
+		// Replace template placeholders
+		newContent = newContent.replace(/\{\{title\}\}/g, title);
+		newContent = newContent.replace(/\{\{date\}\}/g, window.moment(new Date()).format(this.settings.dateFormat));
+
+		// Append original body content
+		const bodyContent = content.slice(propertiesEnd).trimStart();
+		newContent += bodyContent ? "\n" + bodyContent : "";
 
 		await this.app.vault.modify(file, newContent);
 		new Notice("Properties standardized using template.");
