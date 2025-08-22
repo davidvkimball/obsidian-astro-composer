@@ -53,8 +53,10 @@ export default class AstroComposerPlugin extends Plugin {
 		cssLink.href = this.manifest.dir + "/styles.css";
 		document.head.appendChild(cssLink);
 
-		// Initial event registration
-		this.registerCreateEvent();
+		// Wait for the vault to be fully loaded before registering the create event
+		this.app.workspace.onLayoutReady(() => {
+			this.registerCreateEvent();
+		});
 
 		// Add commands
 		this.addCommand({
@@ -87,11 +89,32 @@ export default class AstroComposerPlugin extends Plugin {
 		}
 
 		if (this.settings.automatePostCreation) {
-			this.createEvent = (file: TFile) => {
+			// Debounce to prevent multiple modals from rapid file creations
+			let lastProcessedTime = 0;
+			const DEBOUNCE_MS = 500;
+
+			this.createEvent = async (file: TFile) => {
+				const now = Date.now();
+				if (now - lastProcessedTime < DEBOUNCE_MS) {
+					return; // Skip if within debounce period
+				}
+				lastProcessedTime = now;
+
 				if (file instanceof TFile && file.extension === "md") {
 					const filePath = file.path;
 					const postsFolder = this.settings.postsFolder || "";
 
+					// Check if file is newly created by user (recent creation time and empty content)
+					const stat = await this.app.vault.adapter.stat(file.path);
+					const isNewNote = stat?.mtime && (now - stat.mtime < 1000); // Created within last second
+					const content = await this.app.vault.read(file);
+					const isEmpty = content.trim() === "";
+
+					if (!isNewNote || !isEmpty) {
+						return; // Skip if not a user-initiated new note
+					}
+
+					// Check folder restrictions
 					if (this.settings.onlyAutomateInPostsFolder) {
 						if (
 							!postsFolder ||
@@ -497,7 +520,7 @@ class AstroComposerSettingTab extends PluginSettingTab {
 			.setDesc("Folder name for blog posts (leave blank to use the vault folder). You can specify the default location for new notes in Obsidian's 'Files and links' settings.")
 			.addText((text) =>
 				text
-					.setPlaceholder("posts")
+					.setPlaceholder("Enter folder path")
 					.setValue(this.plugin.settings.postsFolder)
 					.onChange(async (value: string) => {
 						this.plugin.settings.postsFolder = value;
