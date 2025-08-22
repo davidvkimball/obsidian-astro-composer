@@ -21,6 +21,8 @@ interface AstroComposerSettings {
 	creationMode: "file" | "folder";
 	indexFileName: string;
 	dateFormat: string; // Custom date format setting
+	excludedDirectories: string; // New setting for excluded directories
+	onlyAutomateInPostsFolder: boolean; // New toggle to restrict automation
 }
 
 const DEFAULT_SETTINGS: AstroComposerSettings = {
@@ -34,33 +36,19 @@ const DEFAULT_SETTINGS: AstroComposerSettings = {
 	creationMode: "file",
 	indexFileName: "index",
 	dateFormat: "YYYY-MM-DD", // Default to a parseable format
+	excludedDirectories: "", // Default to no exclusions
+	onlyAutomateInPostsFolder: false, // Off by default
 };
 
 export default class AstroComposerPlugin extends Plugin {
 	settings: AstroComposerSettings;
+	private createEvent: (file: TFile) => void; // Updated type to match event handler
 
 	async onload() {
 		await this.loadSettings();
 
-		// Defer event registration with a short delay
-		setTimeout(() => {
-			if (this.settings.automatePostCreation) {
-				this.registerEvent(
-					this.app.vault.on("create", (file) => {
-						if (
-							file instanceof TFile &&
-							file.extension === "md"
-						) {
-							// Use metadata cache to check if file is empty
-							const cache = this.app.metadataCache.getCache(file.path);
-							if (!cache || !cache.sections || cache.sections.length === 0) {
-								new PostTitleModal(this.app, file, this).open();
-							}
-						}
-					})
-				);
-			}
-		}, 300); // Reduced delay to balance performance and reliability
+		// Initial event registration
+		this.registerCreateEvent();
 
 		// Add commands
 		this.addCommand({
@@ -83,6 +71,52 @@ export default class AstroComposerPlugin extends Plugin {
 		this.addSettingTab(new AstroComposerSettingTab(this.app, this));
 	}
 
+	public registerCreateEvent() { // Changed from protected to public
+		// Unregister existing event if it exists
+		if (this.createEvent) {
+			this.app.vault.off("create", this.createEvent);
+		}
+
+		// Register new event only if automatePostCreation is true
+		if (this.settings.automatePostCreation) {
+			this.createEvent = (file: TFile) => {
+				if (file instanceof TFile && file.extension === "md") {
+					const filePath = file.path;
+					const postsFolder = this.settings.postsFolder || "";
+
+					if (this.settings.onlyAutomateInPostsFolder) {
+						if (
+							!postsFolder ||
+							filePath.startsWith(postsFolder + "/") ||
+							filePath === postsFolder
+						) {
+							const cache = this.app.metadataCache.getCache(file.path);
+							if (!cache || !cache.sections || cache.sections.length === 0) {
+								new PostTitleModal(this.app, file, this).open();
+							}
+						}
+					} else {
+						const excludedDirs = this.settings.excludedDirectories
+							.split("|")
+							.map((dir) => dir.trim())
+							.filter((dir) => dir.length > 0);
+						const isExcluded = excludedDirs.some((dir) =>
+							filePath.startsWith(dir + "/") || filePath === dir
+						);
+
+						if (!isExcluded) {
+							const cache = this.app.metadataCache.getCache(file.path);
+							if (!cache || !cache.sections || cache.sections.length === 0) {
+								new PostTitleModal(this.app, file, this).open();
+							}
+						}
+					}
+				}
+			};
+			this.registerEvent(this.app.vault.on("create", this.createEvent));
+		}
+	}
+
 	toKebabCase(str: string): string {
 		return str
 			.toLowerCase()
@@ -102,7 +136,6 @@ export default class AstroComposerPlugin extends Plugin {
 		const kebabTitle = this.toKebabCase(title);
 		const prefix = this.settings.enableUnderscorePrefix ? "_" : "";
 
-		// Ensure posts folder exists if specified
 		let targetFolder = this.settings.postsFolder || "";
 		if (targetFolder) {
 			const postsFolder = this.app.vault.getAbstractFileByPath(targetFolder);
@@ -112,7 +145,6 @@ export default class AstroComposerPlugin extends Plugin {
 		}
 
 		if (this.settings.creationMode === "folder") {
-			// Create folder-based structure
 			const folderName = `${prefix}${kebabTitle}`;
 			const folderPath = targetFolder ? `${targetFolder}/${folderName}` : folderName;
 
@@ -125,7 +157,6 @@ export default class AstroComposerPlugin extends Plugin {
 			const fileName = `${this.settings.indexFileName}.md`;
 			const newPath = `${folderPath}/${fileName}`;
 
-			// Check if file already exists
 			const existingFile = this.app.vault.getAbstractFileByPath(newPath);
 			if (existingFile) {
 				new Notice(`File already exists at ${newPath}.`);
@@ -133,29 +164,24 @@ export default class AstroComposerPlugin extends Plugin {
 			}
 
 			try {
-				// Move the original file to the new location
 				await this.app.vault.rename(file, newPath);
 				const newFile = this.app.vault.getAbstractFileByPath(newPath) as TFile;
 
-				// Reveal the new file in the file explorer
+				// @ts-ignore
 				setTimeout(() => {
-					// @ts-ignore - Access the file explorer leaf
 					const fileExplorer = this.app.workspace.getLeavesOfType("file-explorer")[0];
 					if (fileExplorer && fileExplorer.view) {
-						// @ts-ignore - Access the file tree
+						// @ts-ignore
 						const fileTree = fileExplorer.view.tree;
 						if (fileTree) {
-							// @ts-ignore - Reveal the file
 							fileTree.revealFile(newFile);
 						}
 					}
 				}, 200);
 
-				// Open the new file in the editor
 				const leaf = this.app.workspace.getLeaf(false);
 				await leaf.openFile(newFile);
 
-				// Add properties only if enabled
 				if (this.settings.autoInsertProperties) {
 					await this.addPropertiesToFile(newFile, title);
 				}
@@ -166,11 +192,9 @@ export default class AstroComposerPlugin extends Plugin {
 				return null;
 			}
 		} else {
-			// File-based creation
 			const newName = `${prefix}${kebabTitle}.md`;
 			const newPath = targetFolder ? `${targetFolder}/${newName}` : newName;
 
-			// Check if file with new name already exists
 			const existingFile = this.app.vault.getAbstractFileByPath(newPath);
 			if (existingFile && existingFile !== file) {
 				new Notice(`File with name "${newName}" already exists.`);
@@ -181,11 +205,9 @@ export default class AstroComposerPlugin extends Plugin {
 				await this.app.vault.rename(file, newPath);
 				const newFile = this.app.vault.getAbstractFileByPath(newPath) as TFile;
 
-				// Open the renamed file in the editor
 				const leaf = this.app.workspace.getLeaf(false);
 				await leaf.openFile(newFile);
 
-				// Add properties only if enabled
 				if (this.settings.autoInsertProperties) {
 					await this.addPropertiesToFile(newFile, title);
 				}
@@ -199,21 +221,17 @@ export default class AstroComposerPlugin extends Plugin {
 	}
 
 	async addPropertiesToFile(file: TFile, title: string, slug?: string) {
-		// Use the plugin's custom date format with Obsidian's built-in moment
 		const now = new Date();
 		const dateString = window.moment(now).format(this.settings.dateFormat);
 
-		// Get the template and replace variables
 		let template = this.settings.defaultTemplate;
-		template = template.replace(/\{\{title\}\}/g, title); // Simple replacement, quotes from template
-		template = template.replace(/\{\{date\}\}/g, dateString); // Keep unquoted date
+		template = template.replace(/\{\{title\}\}/g, title);
+		template = template.replace(/\{\{date\}\}/g, dateString);
 
-		// Ensure template ends with newlines as per defaultTemplate
 		if (!template.endsWith("\n\n")) {
 			template = template.replace(/\n*$/, "\n\n");
 		}
 
-		// For new files created through modal, just replace entire content with template
 		await this.app.vault.modify(file, template);
 	}
 
@@ -224,9 +242,8 @@ export default class AstroComposerPlugin extends Plugin {
 		}
 
 		const content = await this.app.vault.read(file);
-		const title = file.basename.replace(/^_/, ""); // Remove draft prefix if present
+		const title = file.basename.replace(/^_/, "");
 
-		// Parse existing properties or create new
 		let propertiesEnd = 0;
 		let existingProperties: any = {};
 
@@ -236,15 +253,11 @@ export default class AstroComposerPlugin extends Plugin {
 				propertiesEnd = secondDelimiter + 4;
 				const propertiesText = content.slice(4, secondDelimiter);
 				try {
-					// Simple YAML parsing for basic fields
 					propertiesText.split("\n").forEach((line) => {
 						const match = line.match(/^(\w+):\s*(.+)$/);
 						if (match) {
 							const [, key, value] = match;
-							existingProperties[key] = value.replace(
-								/^["'\[\]]|["'\[\]]$/g,
-								"",
-							);
+							existingProperties[key] = value.replace(/^["'\[\]]|["'\[\]]$/g, "");
 						}
 					});
 				} catch (error) {
@@ -253,15 +266,13 @@ export default class AstroComposerPlugin extends Plugin {
 			}
 		}
 
-		// Always use the user-defined template for standardization
 		let template = this.settings.defaultTemplate;
-		template = template.replace(/\{\{title\}\}/g, existingProperties.title || title); // Simple replacement
+		template = template.replace(/\{\{title\}\}/g, existingProperties.title || title);
 		template = template.replace(
 			/\{\{date\}\}/g,
-			existingProperties.date || window.moment(new Date()).format(this.settings.dateFormat), // Keep unquoted date
+			existingProperties.date || window.moment(new Date()).format(this.settings.dateFormat)
 		);
 
-		// Ensure template ends with newlines as per defaultTemplate
 		if (!template.endsWith("\n\n")) {
 			template = template.replace(/\n*$/, "\n\n");
 		}
@@ -282,82 +293,57 @@ export default class AstroComposerPlugin extends Plugin {
 		const content = editor.getValue();
 		let newContent = content;
 
-		// Convert wikilinks [[Title]] or [[Title|Display Text]]
 		newContent = newContent.replace(
 			/(?<!\!)\[\[([^\]|]+)(\|([^\]]+))?\]\]/g,
 			(match, linkText, _, displayText) => {
 				const display = displayText || linkText;
 
-				// Ensure leading slash and trailing slash for base path
 				let basePath = this.settings.linkBasePath;
-				if (!basePath.startsWith("/")) {
-					basePath = "/" + basePath;
-				}
-				if (!basePath.endsWith("/")) {
-					basePath = basePath + "/";
-				}
+				if (!basePath.startsWith("/")) basePath = "/" + basePath;
+				if (!basePath.endsWith("/")) basePath = basePath + "/";
 
-				// Check if this is a folder-based link (contains posts folder and index filename)
 				const postsPrefix = this.settings.postsFolder ? `${this.settings.postsFolder}/` : "";
 				const indexFileName = this.settings.indexFileName || "index";
-				
+
 				if (postsPrefix && linkText.startsWith(postsPrefix) && linkText.endsWith(`/${indexFileName}`)) {
-					// This is a folder-based link like "posts/bigg-cheese/index"
-					// Extract just the folder name between postsPrefix and /index
 					const folderPath = linkText.slice(postsPrefix.length, -(indexFileName.length + 1));
 					return `[${display}](${basePath}${folderPath}/)`;
 				} else {
-					// This is a regular file-based link
 					const slug = this.toKebabCase(linkText);
 					return `[${display}](${basePath}${slug}/)`;
 				}
-			},
+			}
 		);
 
-		// Convert Markdown links [text](path)
 		newContent = newContent.replace(
 			/(?<!\!)\[(.*?)\]\(([^)]+\.md)\)/g,
 			(match, displayText, linkPath) => {
-				// Ensure leading slash and trailing slash for base path
 				let basePath = this.settings.linkBasePath;
-				if (!basePath.startsWith("/")) {
-					basePath = "/" + basePath;
-				}
-				if (!basePath.endsWith("/")) {
-					basePath = basePath + "/";
-				}
+				if (!basePath.startsWith("/")) basePath = "/" + basePath;
+				if (!basePath.endsWith("/")) basePath = basePath + "/";
 
-				// Normalize the link path (remove leading/trailing slashes, handle relative paths)
 				let normalizedPath = linkPath
-					.replace(/^\.\.?\//, "") // Remove leading ../ or ./
-					.replace(/\.md$/, "") // Remove .md extension
-					.replace(/^\/|\/$/, ""); // Remove leading/trailing slashes
+					.replace(/^\.\.?\//, "")
+					.replace(/\.md$/, "")
+					.replace(/^\/|\/$/, "");
 
-				// Check if this is a folder-based link (ends with /index)
 				const indexFileName = this.settings.indexFileName || "index";
 				if (normalizedPath.endsWith(`/${indexFileName}`)) {
-					// Extract the folder path
 					const folderPath = normalizedPath.slice(0, -(indexFileName.length + 1));
 					return `[${displayText}](${basePath}${folderPath}/)`;
 				} else {
-					// This is a file-based link, convert to kebab case if needed
 					const slug = this.toKebabCase(normalizedPath);
 					return `[${displayText}](${basePath}${slug}/)`;
 				}
-			},
+			}
 		);
 
-		// Convert embedded files {{embed.md}} to include format
 		newContent = newContent.replace(/\{\{([^}]+)\}\}/g, (match, fileName) => {
 			const slug = this.toKebabCase(fileName.replace(".md", ""));
 
 			let basePath = this.settings.linkBasePath;
-			if (!basePath.startsWith("/")) {
-				basePath = "/" + basePath;
-			}
-			if (!basePath.endsWith("/")) {
-				basePath = basePath + "/";
-			}
+			if (!basePath.startsWith("/")) basePath = "/" + basePath;
+			if (!basePath.endsWith("/")) basePath = basePath + "/";
 
 			return `[Embedded: ${fileName}](${basePath}${slug}/)`;
 		});
@@ -413,11 +399,8 @@ class PostTitleModal extends Modal {
 		createButton.classList.add("mod-cta");
 		createButton.onclick = () => this.createPost();
 
-		// Handle Enter key
 		this.titleInput.addEventListener("keypress", (e) => {
-			if (e.key === "Enter") {
-				this.createPost();
-			}
+			if (e.key === "Enter") this.createPost();
 		});
 	}
 
@@ -429,11 +412,8 @@ class PostTitleModal extends Modal {
 		}
 
 		try {
-			// Process the file creation based on title
 			const newFile = await this.plugin.createPostFile(this.file, title);
-
 			if (newFile && this.plugin.settings.autoInsertProperties) {
-				// Add properties to the new file only if enabled
 				await this.plugin.addPropertiesToFile(newFile, title);
 			}
 		} catch (error) {
@@ -453,9 +433,12 @@ class AstroComposerSettingTab extends PluginSettingTab {
 	plugin: AstroComposerPlugin;
 	autoRenameContainer: HTMLElement | null = null;
 	postsFolderContainer: HTMLElement | null = null;
-	underscorePrefixContainer: HTMLElement | null = null;
+	onlyAutomateContainer: HTMLElement | null = null;
 	creationModeContainer: HTMLElement | null = null;
 	indexFileContainer: HTMLElement | null = null;
+	excludedDirsContainer: HTMLElement | null = null;
+	underscorePrefixContainer: HTMLElement | null = null;
+	autoInsertContainer: HTMLElement | null = null;
 
 	constructor(app: App, plugin: AstroComposerPlugin) {
 		super(app, plugin);
@@ -475,21 +458,10 @@ class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.automatePostCreation)
 					.onChange(async (value: boolean) => {
 						this.plugin.settings.automatePostCreation = value;
+						this.plugin.settings.autoInsertProperties = value; // Sync with automatePostCreation
 						await this.plugin.saveSettings();
+						this.plugin.registerCreateEvent(); // Re-register event based on new setting
 						this.updateConditionalFields();
-					})
-			);
-
-		// Auto-insert properties (independent toggle)
-		new Setting(containerEl)
-			.setName("Auto-insert properties")
-			.setDesc("Automatically insert the properties template when creating new files (requires 'Automate post creation' to be enabled).")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.autoInsertProperties)
-					.onChange(async (value: boolean) => {
-						this.plugin.settings.autoInsertProperties = value;
-						await this.plugin.saveSettings();
 					})
 			);
 
@@ -497,11 +469,26 @@ class AstroComposerSettingTab extends PluginSettingTab {
 		this.autoRenameContainer = containerEl.createDiv({ cls: "auto-rename-fields" });
 		this.autoRenameContainer.style.display = this.plugin.settings.automatePostCreation ? "block" : "none";
 
+		// Auto-insert properties (nested and conditional toggle)
+		this.autoInsertContainer = this.autoRenameContainer.createDiv();
+		new Setting(this.autoInsertContainer)
+			.setName("Auto-insert properties")
+			.setDesc("Automatically insert the properties template when creating new files (requires 'Automate post creation' to be enabled).")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.autoInsertProperties)
+					.setDisabled(!this.plugin.settings.automatePostCreation)
+					.onChange(async (value: boolean) => {
+						this.plugin.settings.autoInsertProperties = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
 		// Posts folder
 		this.postsFolderContainer = this.autoRenameContainer.createDiv();
 		new Setting(this.postsFolderContainer)
 			.setName("Posts folder")
-			.setDesc("Folder name for blog posts (leave blank to use the root folder).")
+			.setDesc("Folder name for blog posts (leave blank to use the vault folder).")
 			.addText((text) =>
 				text
 					.setPlaceholder("posts")
@@ -512,16 +499,34 @@ class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// Use underscore prefix for drafts
-		this.underscorePrefixContainer = this.autoRenameContainer.createDiv();
-		new Setting(this.underscorePrefixContainer)
-			.setName("Use underscore prefix for drafts")
-			.setDesc("Add an underscore prefix (_post-title) to new notes by default when enabled. This hides them from Astro, which can be helpful for post drafts. Disable to skip prefixing.")
+		// Only automate in this folder toggle
+		this.onlyAutomateContainer = this.autoRenameContainer.createDiv();
+		new Setting(this.onlyAutomateContainer)
+			.setName("Only automate in this folder")
+			.setDesc("When enabled, automation will only trigger for new .md files within the specified Posts folder and subfolders.")
 			.addToggle((toggle) =>
 				toggle
-					.setValue(this.plugin.settings.enableUnderscorePrefix)
+					.setValue(this.plugin.settings.onlyAutomateInPostsFolder)
 					.onChange(async (value: boolean) => {
-						this.plugin.settings.enableUnderscorePrefix = value;
+						this.plugin.settings.onlyAutomateInPostsFolder = value;
+						await this.plugin.saveSettings();
+						this.updateExcludedDirsField();
+					})
+			);
+
+		// Excluded directories field
+		this.excludedDirsContainer = this.autoRenameContainer.createDiv({ cls: "excluded-dirs-field" });
+		this.excludedDirsContainer.style.display = !this.plugin.settings.onlyAutomateInPostsFolder ? "block" : "none";
+
+		new Setting(this.excludedDirsContainer)
+			.setName("Excluded directories")
+			.setDesc("Directories to exclude from automatic post creation (e.g., pages|posts/example). Excluded directories and their child folders will be ignored. Use '|' to separate multiple directories.")
+			.addText((text) =>
+				text
+					.setPlaceholder("pages|posts/example")
+					.setValue(this.plugin.settings.excludedDirectories)
+					.onChange(async (value: string) => {
+						this.plugin.settings.excludedDirectories = value;
 						await this.plugin.saveSettings();
 					})
 			);
@@ -560,6 +565,20 @@ class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
+		// Use underscore prefix for drafts
+		this.underscorePrefixContainer = this.autoRenameContainer.createDiv();
+		new Setting(this.underscorePrefixContainer)
+			.setName("Use underscore prefix for drafts")
+			.setDesc("Add an underscore prefix (_post-title) to new notes by default when enabled. This hides them from Astro, which can be helpful for post drafts. Disable to skip prefixing.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.enableUnderscorePrefix)
+					.onChange(async (value: boolean) => {
+						this.plugin.settings.enableUnderscorePrefix = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
 		// Link base path (always visible)
 		new Setting(containerEl)
 			.setName("Link base path")
@@ -592,7 +611,7 @@ class AstroComposerSettingTab extends PluginSettingTab {
 			.setName("Properties template")
 			.setDesc("Used for new posts and when standardizing properties.")
 			.addTextArea((text) => {
-				const plugin = this.plugin; // Capture plugin instance
+				const plugin = this.plugin;
 				text
 					.setPlaceholder(
 						'---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\n---\n',
@@ -609,6 +628,7 @@ class AstroComposerSettingTab extends PluginSettingTab {
 		// Initial updates
 		this.updateConditionalFields();
 		this.updateIndexFileField();
+		this.updateExcludedDirsField();
 	}
 
 	updateConditionalFields() {
@@ -620,6 +640,12 @@ class AstroComposerSettingTab extends PluginSettingTab {
 	updateIndexFileField() {
 		if (this.indexFileContainer) {
 			this.indexFileContainer.style.display = this.plugin.settings.creationMode === "folder" ? "block" : "none";
+		}
+	}
+
+	updateExcludedDirsField() {
+		if (this.excludedDirsContainer) {
+			this.excludedDirsContainer.style.display = !this.plugin.settings.onlyAutomateInPostsFolder ? "block" : "none";
 		}
 	}
 }
