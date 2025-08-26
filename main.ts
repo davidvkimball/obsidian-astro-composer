@@ -58,10 +58,11 @@ export default class AstroComposerPlugin extends Plugin {
 			this.registerCreateEvent();
 		});
 
-		// Add commands
+		// Add commands with icons
 		this.addCommand({
 			id: "standardize-properties",
 			name: "Standardize Properties",
+			icon: "file-check",
 			editorCallback: (editor: Editor, view: MarkdownView) => {
 				if (view.file instanceof TFile) {
 					this.standardizeProperties(view.file);
@@ -72,6 +73,7 @@ export default class AstroComposerPlugin extends Plugin {
 		this.addCommand({
 			id: "convert-wikilinks-astro",
 			name: "Convert internal links for Astro",
+			icon: "link-2",
 			editorCallback: (editor: Editor, view: MarkdownView) => {
 				if (view.file instanceof TFile) {
 					this.convertWikilinksForAstro(editor, view.file);
@@ -118,8 +120,7 @@ export default class AstroComposerPlugin extends Plugin {
 					if (this.settings.onlyAutomateInPostsFolder) {
 						if (
 							!postsFolder ||
-							filePath.startsWith(postsFolder + "/") ||
-							filePath === postsFolder
+							(filePath.startsWith(postsFolder + "/") || filePath === postsFolder)
 						) {
 							const cache = this.app.metadataCache.getCache(file.path);
 							if (!cache || !cache.sections || cache.sections.length === 0) {
