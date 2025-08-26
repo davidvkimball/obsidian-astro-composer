@@ -1,4 +1,3 @@
-
 {
 	"id": "astro-composer",
 	"name": "Astro Composer",
@@ -8,5 +7,6 @@
 	"author": "David V. Kimball",
 	"authorUrl": "https://davidvkimball.com",
 	"fundingUrl": "https://patreon.com/davidvkimball",
-	"isDesktopOnly": false
+	"isDesktopOnly": false,
+	"css": "styles.css"
 }

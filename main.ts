@@ -47,12 +47,6 @@ export default class AstroComposerPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		// Load CSS
-		const cssLink = document.createElement("link");
-		cssLink.rel = "stylesheet";
-		cssLink.href = this.manifest.dir + "/styles.css";
-		document.head.appendChild(cssLink);
-
 		// Wait for the vault to be fully loaded before registering the create event
 		this.app.workspace.onLayoutReady(() => {
 			this.registerCreateEvent();
@@ -277,29 +271,36 @@ export default class AstroComposerPlugin extends Plugin {
 			return;
 		}
 
+		// Wait briefly to allow editor state to stabilize
+		await new Promise(resolve => setTimeout(resolve, 100));
+
+		// Re-read content to ensure latest state after editor changes
 		const content = await this.app.vault.read(file);
 		const title = file.basename.replace(/^_/, "");
 		let propertiesEnd = 0;
 		const existingProperties: Record<string, string> = {};
 
-		// Parse existing properties
+		// Parse existing properties with fallback for missing second ---
 		if (content.startsWith("---")) {
-			const secondDelimiter = content.indexOf("\n---", 3);
-			if (secondDelimiter !== -1) {
-				propertiesEnd = secondDelimiter + 4;
-				const propertiesText = content.slice(4, secondDelimiter).trim();
-				try {
-					propertiesText.split("\n").forEach((line) => {
-						const match = line.match(/^(\w+):\s*(.+)$/);
-						if (match) {
-							const [, key, value] = match;
-							existingProperties[key] = value;
-						}
-					});
-				} catch (error) {
-					new Notice("Failed to parse existing properties.");
-					return;
-				}
+			propertiesEnd = content.indexOf("\n---", 3);
+			if (propertiesEnd === -1) {
+				propertiesEnd = content.length; // Treat entire content as frontmatter if no second ---
+			} else {
+				propertiesEnd += 4; // Move past the second ---
+			}
+			const propertiesText = content.slice(4, propertiesEnd - 4).trim();
+			try {
+				propertiesText.split("\n").forEach((line) => {
+					const match = line.match(/^(\w+):\s*(.+)$/);
+					if (match) {
+						const [, key, value] = match;
+						existingProperties[key] = value;
+					}
+				});
+			} catch (error) {
+				console.log("Failed to parse properties:", propertiesText, error);
+				// Fallback to template if parsing fails
+				new Notice("Falling back to template due to parsing error.");
 			}
 		}
 
@@ -328,13 +329,11 @@ export default class AstroComposerPlugin extends Plugin {
 			}
 		}
 
-		// Preserve existing values, fill missing ones with template defaults
+		// Preserve all existing properties, fill missing ones with template defaults
 		const dateString = window.moment(new Date()).format(this.settings.dateFormat);
-		const finalProps: Record<string, string> = {};
+		const finalProps: Record<string, string> = { ...existingProperties }; // Start with all existing properties
 		for (const key of templateProps) {
-			if (key in existingProperties) {
-				finalProps[key] = existingProperties[key];
-			} else {
+			if (!(key in finalProps)) {
 				if (key === "title") {
 					finalProps[key] = `"${title}"`;
 				} else if (key === "date") {
@@ -345,19 +344,12 @@ export default class AstroComposerPlugin extends Plugin {
 			}
 		}
 
-		// Add unrecognized properties from the existing content
-		for (const key in existingProperties) {
-			if (!templateProps.includes(key)) {
-				finalProps[key] = existingProperties[key];
-			}
-		}
-
-		// Build new property content with all template fields
+		// Build new property content with template fields first, then unexpected properties
 		let newContent = "---\n";
 		for (const key of templateProps) {
 			newContent += `${key}: ${finalProps[key]}\n`;
 		}
-		// Add unrecognized properties to the end
+		// Append any unexpected properties that weren't in the template
 		for (const key in finalProps) {
 			if (!templateProps.includes(key)) {
 				newContent += `${key}: ${finalProps[key]}\n`;
@@ -682,7 +674,7 @@ class AstroComposerSettingTab extends PluginSettingTab {
 			.addText((text) =>
 				text
 					.setPlaceholder("YYYY-MM-DD HH:mm")
-					.setValue(this.plugin.settings.dateFormat) // Fixed from this.settings to this.plugin.settings
+					.setValue(this.plugin.settings.dateFormat)
 					.onChange(async (value: string) => {
 						this.plugin.settings.dateFormat = value || "YYYY-MM-DD HH:mm";
 						await this.plugin.saveSettings();
