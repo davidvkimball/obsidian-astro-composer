@@ -287,7 +287,7 @@ export default class AstroComposerPlugin extends Plugin {
 			const secondDelimiter = content.indexOf("\n---", 3);
 			if (secondDelimiter !== -1) {
 				propertiesEnd = secondDelimiter + 4;
-				const propertiesText = content.slice(4, secondDelimiter);
+				const propertiesText = content.slice(4, secondDelimiter).trim();
 				try {
 					propertiesText.split("\n").forEach((line) => {
 						const match = line.match(/^(\w+):\s*(.+)$/);
@@ -303,14 +303,14 @@ export default class AstroComposerPlugin extends Plugin {
 			}
 		}
 
-		// Extract template properties and their order
+		// Re-parse the template to get the latest structure
 		const templateLines = this.settings.defaultTemplate.split("\n");
 		const templateProps: string[] = [];
 		const templateValues: Record<string, string> = {};
 		let inProperties = false;
 
 		for (let i = 0; i < templateLines.length; i++) {
-			const line = templateLines[i];
+			const line = templateLines[i].trim();
 			if (line === "---") {
 				inProperties = !inProperties;
 				if (!inProperties) {
@@ -328,7 +328,7 @@ export default class AstroComposerPlugin extends Plugin {
 			}
 		}
 
-		// Preserve existing values, fill missing ones
+		// Preserve existing values, fill missing ones with template defaults
 		const dateString = window.moment(new Date()).format(this.settings.dateFormat);
 		const finalProps: Record<string, string> = {};
 		for (const key of templateProps) {
@@ -340,19 +340,19 @@ export default class AstroComposerPlugin extends Plugin {
 				} else if (key === "date") {
 					finalProps[key] = dateString;
 				} else {
-					finalProps[key] = templateValues[key];
+					finalProps[key] = templateValues[key] || ""; // Use template default or empty if not set
 				}
 			}
 		}
 
-		// Add unrecognized properties
+		// Add unrecognized properties from the existing content
 		for (const key in existingProperties) {
 			if (!templateProps.includes(key)) {
 				finalProps[key] = existingProperties[key];
 			}
 		}
 
-		// Build new property content
+		// Build new property content with all template fields
 		let newContent = "---\n";
 		for (const key of templateProps) {
 			newContent += `${key}: ${finalProps[key]}\n`;
@@ -365,12 +365,8 @@ export default class AstroComposerPlugin extends Plugin {
 		}
 		newContent += "---";
 
-		// Replace template placeholders in the properties only
-		newContent = newContent.replace(/\{\{title\}\}/g, title);
-		newContent = newContent.replace(/\{\{date\}\}/g, dateString);
-
 		// Append the original body content (everything after the second --- or the entire content if no properties)
-		const bodyContent = content.slice(propertiesEnd).trimStart();
+		const bodyContent = content.slice(propertiesEnd).trim();
 		newContent += bodyContent ? "\n" + bodyContent : "";
 
 		await this.app.vault.modify(file, newContent);
@@ -386,52 +382,61 @@ export default class AstroComposerPlugin extends Plugin {
 		const content = editor.getValue();
 		let newContent = content;
 
+		// Define common image extensions
+		const imageExtensions = /\.(png|jpg|jpeg|gif|svg)$/i;
+
+		// Handle regular Wikilinks (non-image)
 		newContent = newContent.replace(
 			/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g,
 			(match, linkText, _pipe, displayText) => {
-				const display = displayText || linkText;
+				// Check if it's an image Wikilink
+				if (imageExtensions.test(linkText)) {
+					return match; // Ignore and return original image Wikilink
+				}
+
+				const display = displayText || linkText.replace(/\.md$/, "");
+				const slug = this.toKebabCase(linkText.replace(/\.md$/, ""));
 
 				let basePath = this.settings.linkBasePath;
 				if (!basePath.startsWith("/")) basePath = "/" + basePath;
 				if (!basePath.endsWith("/")) basePath = basePath + "/";
 
-				const postsPrefix = this.settings.postsFolder ? `${this.settings.postsFolder}/` : "";
-				const indexFileName = this.settings.indexFileName || "index";
-
-				if (postsPrefix && linkText.startsWith(postsPrefix) && linkText.endsWith(`/${indexFileName}`)) {
-					const folderPath = linkText.slice(postsPrefix.length, -(indexFileName.length + 1));
-					return `[${display}](${basePath}${folderPath}/)`;
-				} else {
-					const slug = this.toKebabCase(linkText);
-					return `[${display}](${basePath}${slug}/)`;
-				}
+				return `[${display}](${basePath}${slug}/)`;
 			}
 		);
 
+		// Handle standard Markdown links (non-image, non-external)
 		newContent = newContent.replace(
-			/\[(.*?)\]\(([^)]+\.md)\)/g,
+			/\[([^\]]+)\]\(([^)]+\.md)\)/g,
 			(match, displayText, linkPath) => {
+				// Check if it's an image link or external link
+				if (imageExtensions.test(linkPath) || linkPath.match(/^https?:\/\//)) {
+					return match; // Ignore image or external links
+				}
+
+				const slug = this.toKebabCase(linkPath.replace(/\.md$/, ""));
+
 				let basePath = this.settings.linkBasePath;
 				if (!basePath.startsWith("/")) basePath = "/" + basePath;
 				if (!basePath.endsWith("/")) basePath = basePath + "/";
 
-				let normalizedPath = linkPath
-					.replace(/^\.\.?\//, "")
-					.replace(/\.md$/, "")
-					.replace(/^\/|\/$/, "");
-
-				const indexFileName = this.settings.indexFileName || "index";
-				if (normalizedPath.endsWith(`/${indexFileName}`)) {
-					const folderPath = normalizedPath.slice(0, -(indexFileName.length + 1));
-					return `[${displayText}](${basePath}${folderPath}/)`;
-				} else {
-					const slug = this.toKebabCase(normalizedPath);
-					return `[${displayText}](${basePath}${slug}/)`;
-				}
+				return `[${displayText}](${basePath}${slug}/)`;
 			}
 		);
 
+		// Handle image links in Markdown format (e.g., ![Image](mountains.png))
+		newContent = newContent.replace(
+			/!\[(.*?)\]\(([^)]+)\)/g,
+			(match) => {
+				return match; // Ignore all image links
+			}
+		);
+
+		// Handle {{embed}} syntax
 		newContent = newContent.replace(/\{\{([^}]+)\}\}/g, (match, fileName) => {
+			if (imageExtensions.test(fileName)) {
+				return match; // Ignore embedded images
+			}
 			const slug = this.toKebabCase(fileName.replace(".md", ""));
 
 			let basePath = this.settings.linkBasePath;
@@ -677,7 +682,7 @@ class AstroComposerSettingTab extends PluginSettingTab {
 			.addText((text) =>
 				text
 					.setPlaceholder("YYYY-MM-DD HH:mm")
-					.setValue(this.plugin.settings.dateFormat)
+					.setValue(this.plugin.settings.dateFormat) // Fixed from this.settings to this.plugin.settings
 					.onChange(async (value: string) => {
 						this.plugin.settings.dateFormat = value || "YYYY-MM-DD HH:mm";
 						await this.plugin.saveSettings();
