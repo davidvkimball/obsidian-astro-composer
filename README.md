@@ -4,6 +4,10 @@ This plugin streamlines blogging in Obsidian for Astro static sites with automat
 
 ![astro-composer-plugin-demo](https://github.com/user-attachments/assets/794e965b-a122-433f-a081-dcc643b6af8d)
 
+## Video Guide
+
+📺 [Astro Composer Plugin for Obsidian Video Guide](https://www.youtube.com/watch?v=VVs9RytpTfc)
+
 ## Features
 
 - **New Post Dialog**: When enabled, prompts for a title when creating a new Markdown file via Obsidian's "New note" action, auto-generating a kebab-case filename (e.g., "My Blog Post" → `my-blog-post.md`) and optionally inserting frontmatter with `title`, `date`, etc.
