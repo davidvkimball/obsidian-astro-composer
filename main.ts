@@ -28,14 +28,14 @@ interface AstroComposerSettings {
 const DEFAULT_SETTINGS: AstroComposerSettings = {
 	enableUnderscorePrefix: false,
 	defaultTemplate:
-		'---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\n---\n',
+		'---\ntitle: "{{title}}"\ndate: {{date}}\n---\n',
 	linkBasePath: "/blog/",
 	postsFolder: "posts",
 	automatePostCreation: true,
 	autoInsertProperties: true,
 	creationMode: "file",
 	indexFileName: "index",
-	dateFormat: "YYYY-MM-DD HH:mm",
+	dateFormat: "YYYY-MM-DD",
 	excludedDirectories: "",
 	onlyAutomateInPostsFolder: false,
 };
@@ -278,7 +278,7 @@ export default class AstroComposerPlugin extends Plugin {
 		const content = await this.app.vault.read(file);
 		const title = file.basename.replace(/^_/, "");
 		let propertiesEnd = 0;
-		const existingProperties: Record<string, string> = {};
+		const existingProperties: Record<string, string[]> = {}; // Changed to array for tags
 
 		// Parse existing properties with fallback for missing second ---
 		if (content.startsWith("---")) {
@@ -294,7 +294,22 @@ export default class AstroComposerPlugin extends Plugin {
 					const match = line.match(/^(\w+):\s*(.+)$/);
 					if (match) {
 						const [, key, value] = match;
-						existingProperties[key] = value;
+						if (key === "tags") {
+							// Handle YAML list format
+							const tagMatch = line.match(/^tags:\s*(?:-?\s*([^\s-]+)(?:\s*-?\s*([^\s-]+))*)?$/);
+							if (tagMatch) {
+								const tags = [];
+								for (let i = 1; i < tagMatch.length; i++) {
+									if (tagMatch[i]) tags.push(tagMatch[i].trim());
+								}
+								existingProperties[key] = tags.length ? tags : [];
+							} else {
+								// Fallback to single value or array parsing
+								existingProperties[key] = value.split(",").map(t => t.trim()).filter(t => t);
+							}
+						} else {
+							existingProperties[key] = [value];
+						}
 					}
 				});
 			} catch (error) {
@@ -304,10 +319,10 @@ export default class AstroComposerPlugin extends Plugin {
 			}
 		}
 
-		// Re-parse the template to get the latest structure
+		// Parse template to get required fields and defaults
 		const templateLines = this.settings.defaultTemplate.split("\n");
 		const templateProps: string[] = [];
-		const templateValues: Record<string, string> = {};
+		const templateValues: Record<string, string[]> = {};
 		let inProperties = false;
 
 		for (let i = 0; i < templateLines.length; i++) {
@@ -324,40 +339,59 @@ export default class AstroComposerPlugin extends Plugin {
 				if (match) {
 					const [, key, value] = match;
 					templateProps.push(key);
-					templateValues[key] = value;
+					if (key === "tags") {
+						// Handle template tags as YAML list or array
+						if (value.startsWith("[")) {
+							// Parse JSON-style array [tag1, tag2]
+							const tags = value
+								.replace(/[\[\]]/g, "")
+								.split(",")
+								.map(t => t.trim())
+								.filter(t => t);
+							templateValues[key] = tags.length ? tags : [];
+						} else if (value.includes("-")) {
+							// Parse YAML list format
+							const tags = value.split("-").map(t => t.trim()).filter(t => t);
+							templateValues[key] = tags;
+						} else {
+							// Single tag or empty
+							templateValues[key] = value ? [value.trim()] : [];
+						}
+					} else {
+						templateValues[key] = [value.replace(/\{\{title\}\}/g, title).replace(/\{\{date\}\}/g, window.moment(new Date()).format(this.settings.dateFormat))];
+					}
 				}
 			}
 		}
 
 		// Preserve all existing properties, fill missing ones with template defaults
-		const dateString = window.moment(new Date()).format(this.settings.dateFormat);
-		const finalProps: Record<string, string> = { ...existingProperties }; // Start with all existing properties
+		const finalProps: Record<string, string[]> = { ...existingProperties };
 		for (const key of templateProps) {
-			if (!(key in finalProps)) {
-				if (key === "title") {
-					finalProps[key] = `"${title}"`;
-				} else if (key === "date") {
-					finalProps[key] = dateString;
-				} else {
-					finalProps[key] = templateValues[key] || ""; // Use template default or empty if not set
-				}
+			if (!(key in existingProperties)) {
+				finalProps[key] = templateValues[key] || [];
+			} else if (key === "tags" && templateValues[key] && templateValues[key].length > 0) {
+				// Only overwrite tags if template provides a non-empty list
+				finalProps[key] = templateValues[key];
 			}
 		}
 
-		// Build new property content with template fields first, then unexpected properties
+		// Build new property content
 		let newContent = "---\n";
-		for (const key of templateProps) {
-			newContent += `${key}: ${finalProps[key]}\n`;
-		}
-		// Append any unexpected properties that weren't in the template
 		for (const key in finalProps) {
-			if (!templateProps.includes(key)) {
-				newContent += `${key}: ${finalProps[key]}\n`;
+			if (finalProps[key].length > 0) {
+				if (key === "tags") {
+					newContent += "tags:\n";
+					finalProps[key].forEach(tag => {
+						newContent += `  - ${tag}\n`;
+					});
+				} else {
+					newContent += `${key}: ${finalProps[key][0]}\n`;
+				}
 			}
 		}
 		newContent += "---";
 
-		// Append the original body content (everything after the second --- or the entire content if no properties)
+		// Append the original body content
 		const bodyContent = content.slice(propertiesEnd).trim();
 		newContent += bodyContent ? "\n" + bodyContent : "";
 
@@ -673,10 +707,10 @@ class AstroComposerSettingTab extends PluginSettingTab {
 			.setDesc("Format for the date in properties (e.g., YYYY-MM-DD, MMMM D, YYYY, YYYY-MM-DD HH:mm).")
 			.addText((text) =>
 				text
-					.setPlaceholder("YYYY-MM-DD HH:mm")
+					.setPlaceholder("YYYY-MM-DD")
 					.setValue(this.plugin.settings.dateFormat)
 					.onChange(async (value: string) => {
-						this.plugin.settings.dateFormat = value || "YYYY-MM-DD HH:mm";
+						this.plugin.settings.dateFormat = value || "YYYY-MM-DD";
 						await this.plugin.saveSettings();
 					})
 			);
@@ -687,7 +721,7 @@ class AstroComposerSettingTab extends PluginSettingTab {
 			const plugin = this.plugin;
 			text
 				.setPlaceholder(
-					'---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\n---\n',
+					'---\ntitle: "{{title}}"\ndate: {{date}}\n---\n',
 				)
 				.setValue(plugin.settings.defaultTemplate)
 				.onChange(async (value: string) => {
