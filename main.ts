@@ -278,7 +278,7 @@ export default class AstroComposerPlugin extends Plugin {
 		const content = await this.app.vault.read(file);
 		const title = file.basename.replace(/^_/, "");
 		let propertiesEnd = 0;
-		const existingProperties: Record<string, string[]> = {}; // Changed to array for tags
+		const existingProperties: Record<string, string[]> = {};
 
 		// Parse existing properties with fallback for missing second ---
 		if (content.startsWith("---")) {
@@ -290,30 +290,23 @@ export default class AstroComposerPlugin extends Plugin {
 			}
 			const propertiesText = content.slice(4, propertiesEnd - 4).trim();
 			try {
+				let currentKey: string | null = null;
 				propertiesText.split("\n").forEach((line) => {
-					const match = line.match(/^(\w+):\s*(.+)$/);
+					const match = line.match(/^(\w+):\s*(.+)?$/);
 					if (match) {
 						const [, key, value] = match;
+						currentKey = key;
 						if (key === "tags") {
-							// Handle YAML list format
-							const tagMatch = line.match(/^tags:\s*(?:-?\s*([^\s-]+)(?:\s*-?\s*([^\s-]+))*)?$/);
-							if (tagMatch) {
-								const tags = [];
-								for (let i = 1; i < tagMatch.length; i++) {
-									if (tagMatch[i]) tags.push(tagMatch[i].trim());
-								}
-								existingProperties[key] = tags.length ? tags : [];
-							} else {
-								// Fallback to single value or array parsing
-								existingProperties[key] = value.split(",").map(t => t.trim()).filter(t => t);
-							}
-						} else {
-							existingProperties[key] = [value];
+							existingProperties[key] = [];
+						} else if (value) {
+							existingProperties[key] = [value.trim()];
 						}
+					} else if (currentKey === "tags" && line.trim().startsWith("- ")) {
+						const tag = line.trim().replace(/^-\s*/, "");
+						if (tag) existingProperties["tags"].push(tag);
 					}
 				});
 			} catch (error) {
-				console.log("Failed to parse properties:", propertiesText, error);
 				// Fallback to template if parsing fails
 				new Notice("Falling back to template due to parsing error.");
 			}
@@ -335,13 +328,13 @@ export default class AstroComposerPlugin extends Plugin {
 				continue;
 			}
 			if (inProperties) {
-				const match = line.match(/^(\w+):\s*(.+)$/);
+				const match = line.match(/^(\w+):\s*(.+)?$/);
 				if (match) {
 					const [, key, value] = match;
 					templateProps.push(key);
 					if (key === "tags") {
 						// Handle template tags as YAML list or array
-						if (value.startsWith("[")) {
+						if (value && value.startsWith("[")) {
 							// Parse JSON-style array [tag1, tag2]
 							const tags = value
 								.replace(/[\[\]]/g, "")
@@ -349,29 +342,35 @@ export default class AstroComposerPlugin extends Plugin {
 								.map(t => t.trim())
 								.filter(t => t);
 							templateValues[key] = tags.length ? tags : [];
-						} else if (value.includes("-")) {
-							// Parse YAML list format
-							const tags = value.split("-").map(t => t.trim()).filter(t => t);
-							templateValues[key] = tags;
 						} else {
-							// Single tag or empty
-							templateValues[key] = value ? [value.trim()] : [];
+							templateValues[key] = [];
+							// Look ahead for tag list
+							for (let j = i + 1; j < templateLines.length; j++) {
+								const nextLine = templateLines[j].trim();
+								if (nextLine.startsWith("- ")) {
+									const tag = nextLine.replace(/^-\s*/, "").trim();
+									if (tag) templateValues[key].push(tag);
+								} else if (nextLine === "---") {
+									break;
+								}
+							}
 						}
-					} else {
+					} else if (value) {
 						templateValues[key] = [value.replace(/\{\{title\}\}/g, title).replace(/\{\{date\}\}/g, window.moment(new Date()).format(this.settings.dateFormat))];
 					}
 				}
 			}
 		}
 
-		// Preserve all existing properties, fill missing ones with template defaults
+		// Preserve all existing properties, merge missing or template tags
 		const finalProps: Record<string, string[]> = { ...existingProperties };
 		for (const key of templateProps) {
 			if (!(key in existingProperties)) {
 				finalProps[key] = templateValues[key] || [];
 			} else if (key === "tags" && templateValues[key] && templateValues[key].length > 0) {
-				// Only overwrite tags if template provides a non-empty list
-				finalProps[key] = templateValues[key];
+				// Preserve all existing tags and ensure all template tags are included
+				const allTags = [...existingProperties[key], ...templateValues[key].filter(tag => !existingProperties[key].includes(tag))];
+				finalProps[key] = allTags;
 			}
 		}
 
@@ -391,9 +390,9 @@ export default class AstroComposerPlugin extends Plugin {
 		}
 		newContent += "---";
 
-		// Append the original body content
-		const bodyContent = content.slice(propertiesEnd).trim();
-		newContent += bodyContent ? "\n" + bodyContent : "";
+		// Append the original body content, preserving exact trailing newlines
+		const bodyContent = content.slice(propertiesEnd);
+		newContent += bodyContent;
 
 		await this.app.vault.modify(file, newContent);
 		new Notice("Properties standardized using template.");
