@@ -1,7 +1,7 @@
 {
 	"id": "astro-composer",
 	"name": "Astro Composer",
-	"version": "0.4.7",
+	"version": "0.4.8",
 	"minAppVersion": "0.15.0",
 	"description": "Create and manage notes as Astro blog posts with automatic file renaming, frontmatter insertion, and internal link conversion.",
 	"author": "David V. Kimball",

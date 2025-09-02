@@ -28,7 +28,7 @@ interface AstroComposerSettings {
 const DEFAULT_SETTINGS: AstroComposerSettings = {
 	enableUnderscorePrefix: false,
 	defaultTemplate:
-		'---\ntitle: "{{title}}"\ndate: {{date}}\n---\n',
+		'---\ntitle: "{{title}}"\ndate: {{date}}\ntags: []\n---\n',
 	linkBasePath: "/blog/",
 	postsFolder: "posts",
 	automatePostCreation: true,
@@ -278,6 +278,7 @@ export default class AstroComposerPlugin extends Plugin {
 		const content = await this.app.vault.read(file);
 		const title = file.basename.replace(/^_/, "");
 		let propertiesEnd = 0;
+		let propertiesText = "";
 		const existingProperties: Record<string, string[]> = {};
 
 		// Parse existing properties with fallback for missing second ---
@@ -288,7 +289,7 @@ export default class AstroComposerPlugin extends Plugin {
 			} else {
 				propertiesEnd += 4; // Move past the second ---
 			}
-			const propertiesText = content.slice(4, propertiesEnd - 4).trim();
+			propertiesText = content.slice(4, propertiesEnd - 4).trim();
 			try {
 				let currentKey: string | null = null;
 				propertiesText.split("\n").forEach((line) => {
@@ -306,6 +307,10 @@ export default class AstroComposerPlugin extends Plugin {
 						if (tag) existingProperties["tags"].push(tag);
 					}
 				});
+				// Preserve tags key if it exists without values
+				if (propertiesText.includes("tags:") && !existingProperties["tags"].length) {
+					existingProperties["tags"] = [];
+				}
 			} catch (error) {
 				// Fallback to template if parsing fails
 				new Notice("Falling back to template due to parsing error.");
@@ -377,12 +382,14 @@ export default class AstroComposerPlugin extends Plugin {
 		// Build new property content
 		let newContent = "---\n";
 		for (const key in finalProps) {
-			if (finalProps[key].length > 0) {
+			if (finalProps[key].length > 0 || (key === "tags" && propertiesText.includes("tags:"))) {
 				if (key === "tags") {
 					newContent += "tags:\n";
-					finalProps[key].forEach(tag => {
-						newContent += `  - ${tag}\n`;
-					});
+					if (finalProps[key].length > 0) {
+						finalProps[key].forEach(tag => {
+							newContent += `  - ${tag}\n`;
+						});
+					}
 				} else {
 					newContent += `${key}: ${finalProps[key][0]}\n`;
 				}
@@ -720,7 +727,7 @@ class AstroComposerSettingTab extends PluginSettingTab {
 			const plugin = this.plugin;
 			text
 				.setPlaceholder(
-					'---\ntitle: "{{title}}"\ndate: {{date}}\n---\n',
+					'---\ntitle: "{{title}}"\ndate: {{date}}\ntags: []\n---\n',
 				)
 				.setValue(plugin.settings.defaultTemplate)
 				.onChange(async (value: string) => {
