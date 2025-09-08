@@ -23,6 +23,9 @@ interface AstroComposerSettings {
 	dateFormat: string;
 	excludedDirectories: string;
 	onlyAutomateInPostsFolder: boolean;
+	enablePages: boolean;
+	pagesFolder: string;
+	pageTemplate: string;
 }
 
 const DEFAULT_SETTINGS: AstroComposerSettings = {
@@ -38,6 +41,10 @@ const DEFAULT_SETTINGS: AstroComposerSettings = {
 	dateFormat: "YYYY-MM-DD",
 	excludedDirectories: "",
 	onlyAutomateInPostsFolder: false,
+	enablePages: false,
+	pagesFolder: "pages",
+	pageTemplate:
+		'---\ntitle: "{{title}}"\ndescription: ""\n---\n',
 };
 
 export default class AstroComposerPlugin extends Plugin {
@@ -84,7 +91,7 @@ export default class AstroComposerPlugin extends Plugin {
 			this.app.vault.off("create", this.createEvent);
 		}
 
-		if (this.settings.automatePostCreation) {
+		if (this.settings.automatePostCreation || this.settings.enablePages) {
 			// Debounce to prevent multiple modals from rapid file creations
 			let lastProcessedTime = 0;
 			const DEBOUNCE_MS = 500;
@@ -98,7 +105,6 @@ export default class AstroComposerPlugin extends Plugin {
 
 				if (file instanceof TFile && file.extension === "md") {
 					const filePath = file.path;
-					const postsFolder = this.settings.postsFolder || "";
 
 					// Check if file is newly created by user (recent creation time and empty content)
 					const stat = await this.app.vault.adapter.stat(file.path);
@@ -111,29 +117,43 @@ export default class AstroComposerPlugin extends Plugin {
 					}
 
 					// Check folder restrictions
-					if (this.settings.onlyAutomateInPostsFolder) {
-						if (
-							!postsFolder ||
-							(filePath.startsWith(postsFolder + "/") || filePath === postsFolder)
-						) {
-							const cache = this.app.metadataCache.getCache(file.path);
-							if (!cache || !cache.sections || cache.sections.length === 0) {
-								new PostTitleModal(this.app, file, this).open();
-							}
-						}
-					} else {
-						const excludedDirs = this.settings.excludedDirectories
-							.split("|")
-							.map((dir) => dir.trim())
-							.filter((dir) => dir.length > 0);
-						const isExcluded = excludedDirs.some((dir) =>
-							filePath.startsWith(dir + "/") || filePath === dir
-						);
+					const postsFolder = this.settings.postsFolder || "";
+					const pagesFolder = this.settings.enablePages ? (this.settings.pagesFolder || "") : "";
+					let isPage = false;
 
-						if (!isExcluded) {
-							const cache = this.app.metadataCache.getCache(file.path);
-							if (!cache || !cache.sections || cache.sections.length === 0) {
-								new PostTitleModal(this.app, file, this).open();
+					if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
+						isPage = true;
+					}
+
+					const cache = this.app.metadataCache.getCache(file.path);
+					if (!cache || !cache.sections || cache.sections.length === 0) {
+						if (isPage) {
+							if (this.settings.enablePages) {
+								new TitleModal(this.app, file, this, "page").open();
+							}
+						} else {
+							if (this.settings.onlyAutomateInPostsFolder) {
+								if (
+									!postsFolder ||
+									(filePath.startsWith(postsFolder + "/") || filePath === postsFolder)
+								) {
+									new TitleModal(this.app, file, this, "post").open();
+								}
+							} else {
+								let excludedDirs = this.settings.excludedDirectories
+									.split("|")
+									.map((dir) => dir.trim())
+									.filter((dir) => dir.length > 0);
+								if (pagesFolder) {
+									excludedDirs.push(pagesFolder);
+								}
+								const isExcluded = excludedDirs.some((dir) =>
+									filePath.startsWith(dir + "/") || filePath === dir
+								);
+
+								if (!isExcluded) {
+									new TitleModal(this.app, file, this, "post").open();
+								}
 							}
 						}
 					}
@@ -153,19 +173,19 @@ export default class AstroComposerPlugin extends Plugin {
 			.replace(/^-|-$/g, "");
 	}
 
-	async createPostFile(file: TFile, title: string): Promise<TFile | null> {
+	async createFile(file: TFile, title: string, type: "post" | "page"): Promise<TFile | null> {
 		if (!title) {
-			new Notice("Title is required to create a post.");
+			new Notice(`Title is required to create a ${type}.`);
 			return null;
 		}
 
 		const kebabTitle = this.toKebabCase(title);
 		const prefix = this.settings.enableUnderscorePrefix ? "_" : "";
 
-		let targetFolder = this.settings.postsFolder || "";
+		let targetFolder = type === "post" ? this.settings.postsFolder || "" : this.settings.pagesFolder || "";
 		if (targetFolder) {
-			const postsFolder = this.app.vault.getAbstractFileByPath(targetFolder);
-			if (!(postsFolder instanceof TFolder)) {
+			const folder = this.app.vault.getAbstractFileByPath(targetFolder);
+			if (!(folder instanceof TFolder)) {
 				await this.app.vault.createFolder(targetFolder);
 			}
 		}
@@ -213,7 +233,7 @@ export default class AstroComposerPlugin extends Plugin {
 				await leaf.openFile(newFile);
 
 				if (this.settings.autoInsertProperties) {
-					await this.addPropertiesToFile(newFile, title);
+					await this.addPropertiesToFile(newFile, title, type);
 				}
 
 				return newFile;
@@ -242,7 +262,7 @@ export default class AstroComposerPlugin extends Plugin {
 				await leaf.openFile(newFile);
 
 				if (this.settings.autoInsertProperties) {
-					await this.addPropertiesToFile(newFile, title);
+					await this.addPropertiesToFile(newFile, title, type);
 				}
 
 				return newFile;
@@ -253,11 +273,11 @@ export default class AstroComposerPlugin extends Plugin {
 		}
 	}
 
-	async addPropertiesToFile(file: TFile, title: string, slug?: string) {
+	async addPropertiesToFile(file: TFile, title: string, type: "post" | "page" = "post") {
 		const now = new Date();
 		const dateString = window.moment(now).format(this.settings.dateFormat);
 
-		let template = this.settings.defaultTemplate;
+		let template = type === "post" ? this.settings.defaultTemplate : this.settings.pageTemplate;
 		template = template.replace(/\{\{title\}\}/g, title);
 		template = template.replace(/\{\{date\}\}/g, dateString);
 
@@ -271,6 +291,12 @@ export default class AstroComposerPlugin extends Plugin {
 			return;
 		}
 
+		// Determine if it's a page or post
+		const filePath = file.path;
+		const pagesFolder = this.settings.pagesFolder || "";
+		const isPage = this.settings.enablePages && pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder);
+		const templateString = isPage ? this.settings.pageTemplate : this.settings.defaultTemplate;
+
 		// Wait briefly to allow editor state to stabilize
 		await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -280,6 +306,7 @@ export default class AstroComposerPlugin extends Plugin {
 		let propertiesEnd = 0;
 		let propertiesText = "";
 		const existingProperties: Record<string, string[]> = {};
+		const knownArrayKeys = ['tags', 'aliases', 'cssclasses'];
 
 		// Parse existing properties with fallback for missing second ---
 		if (content.startsWith("---")) {
@@ -297,20 +324,32 @@ export default class AstroComposerPlugin extends Plugin {
 					if (match) {
 						const [, key, value] = match;
 						currentKey = key;
-						if (key === "tags") {
+						if (knownArrayKeys.includes(key)) {
 							existingProperties[key] = [];
-						} else if (value) {
-							existingProperties[key] = [value.trim()];
+						} else {
+							existingProperties[key] = [value ? value.trim() : ""];
 						}
-					} else if (currentKey === "tags" && line.trim().startsWith("- ")) {
-						const tag = line.trim().replace(/^-\s*/, "");
-						if (tag) existingProperties["tags"].push(tag);
+					} else if (currentKey && knownArrayKeys.includes(currentKey) && line.trim().startsWith("- ")) {
+						const item = line.trim().replace(/^-\s*/, "");
+						if (item) existingProperties[currentKey].push(item);
+					} else if (line.trim() && !line.trim().startsWith("- ")) {
+						// Handle unrecognized properties
+						const keyMatch = line.match(/^(\w+):/);
+						if (keyMatch) {
+							const key = keyMatch[1];
+							const value = line.slice(line.indexOf(":") + 1).trim();
+							if (!existingProperties[key]) {
+								existingProperties[key] = [value || ""];
+							}
+						}
 					}
 				});
-				// Preserve tags key if it exists without values
-				if (propertiesText.includes("tags:") && !existingProperties["tags"].length) {
-					existingProperties["tags"] = [];
-				}
+				// Preserve array keys if they exist without values
+				knownArrayKeys.forEach(key => {
+					if (propertiesText.includes(key + ':') && !existingProperties[key]) {
+						existingProperties[key] = [];
+					}
+				});
 			} catch (error) {
 				// Fallback to template if parsing fails
 				new Notice("Falling back to template due to parsing error.");
@@ -318,7 +357,7 @@ export default class AstroComposerPlugin extends Plugin {
 		}
 
 		// Parse template to get required fields and defaults
-		const templateLines = this.settings.defaultTemplate.split("\n");
+		const templateLines = templateString.split("\n");
 		const templateProps: string[] = [];
 		const templateValues: Record<string, string[]> = {};
 		let inProperties = false;
@@ -337,64 +376,79 @@ export default class AstroComposerPlugin extends Plugin {
 				if (match) {
 					const [, key, value] = match;
 					templateProps.push(key);
-					if (key === "tags") {
-						// Handle template tags as YAML list or array
+					if (knownArrayKeys.includes(key)) {
+						// Handle template array keys
 						if (value && value.startsWith("[")) {
-							// Parse JSON-style array [tag1, tag2]
-							const tags = value
+							const items = value
 								.replace(/[\[\]]/g, "")
 								.split(",")
 								.map(t => t.trim())
 								.filter(t => t);
-							templateValues[key] = tags.length ? tags : [];
+							templateValues[key] = items;
 						} else {
 							templateValues[key] = [];
-							// Look ahead for tag list
+							// Look ahead for item list
 							for (let j = i + 1; j < templateLines.length; j++) {
 								const nextLine = templateLines[j].trim();
 								if (nextLine.startsWith("- ")) {
-									const tag = nextLine.replace(/^-\s*/, "").trim();
-									if (tag) templateValues[key].push(tag);
+									const item = nextLine.replace(/^-\s*/, "").trim();
+									if (item) templateValues[key].push(item);
 								} else if (nextLine === "---") {
 									break;
 								}
 							}
 						}
-					} else if (value) {
-						templateValues[key] = [value.replace(/\{\{title\}\}/g, title).replace(/\{\{date\}\}/g, window.moment(new Date()).format(this.settings.dateFormat))];
+					} else {
+						templateValues[key] = [ (value || "").replace(/\{\{title\}\}/g, title).replace(/\{\{date\}\}/g, window.moment(new Date()).format(this.settings.dateFormat)) ];
 					}
 				}
 			}
 		}
 
-		// Preserve all existing properties, merge missing or template tags
+		// Merge template properties with existing ones, preserving all existing
 		const finalProps: Record<string, string[]> = { ...existingProperties };
 		for (const key of templateProps) {
 			if (!(key in existingProperties)) {
-				finalProps[key] = templateValues[key] || [];
-			} else if (key === "tags" && templateValues[key] && templateValues[key].length > 0) {
-				// Preserve all existing tags and ensure all template tags are included
-				const allTags = [...existingProperties[key], ...templateValues[key].filter(tag => !existingProperties[key].includes(tag))];
-				finalProps[key] = allTags;
+				finalProps[key] = templateValues[key] || (knownArrayKeys.includes(key) ? [] : [""]);
+			} else if (knownArrayKeys.includes(key) && templateValues[key]?.length > 0) {
+				// Merge items, appending new ones without duplicates
+				const existingItems = existingProperties[key] || [];
+				const newItems = templateValues[key].filter(item => !existingItems.includes(item));
+				finalProps[key] = [...existingItems, ...newItems];
 			}
 		}
 
 		// Build new property content
 		let newContent = "---\n";
-		for (const key in finalProps) {
-			if (finalProps[key].length > 0 || (key === "tags" && propertiesText.includes("tags:"))) {
-				if (key === "tags") {
-					newContent += "tags:\n";
-					if (finalProps[key].length > 0) {
-						finalProps[key].forEach(tag => {
-							newContent += `  - ${tag}\n`;
-						});
-					}
+
+		// First, add template props in their order
+		templateProps.forEach(key => {
+			const value = finalProps[key];
+			if (knownArrayKeys.includes(key)) {
+				newContent += `${key}:\n`;
+				value.forEach(item => {
+					newContent += `  - ${item}\n`;
+				});
+			} else {
+				newContent += `${key}: ${value[0] || ""}\n`;
+			}
+		});
+
+		// Then, add extra props in their original order
+		Object.keys(existingProperties).forEach(key => {
+			if (!templateProps.includes(key)) {
+				const value = existingProperties[key];
+				if (knownArrayKeys.includes(key)) {
+					newContent += `${key}:\n`;
+					value.forEach(item => {
+						newContent += `  - ${item}\n`;
+					});
 				} else {
-					newContent += `${key}: ${finalProps[key][0]}\n`;
+					newContent += `${key}: ${value[0] || ""}\n`;
 				}
 			}
-		}
+		});
+
 		newContent += "---";
 
 		// Append the original body content, preserving exact trailing newlines
@@ -491,27 +545,29 @@ export default class AstroComposerPlugin extends Plugin {
 	}
 }
 
-class PostTitleModal extends Modal {
+class TitleModal extends Modal {
 	file: TFile;
 	plugin: AstroComposerPlugin;
+	type: "post" | "page";
 	titleInput: HTMLInputElement;
 
-	constructor(app: App, file: TFile, plugin: AstroComposerPlugin) {
+	constructor(app: App, file: TFile, plugin: AstroComposerPlugin, type: "post" | "page" = "post") {
 		super(app);
 		this.file = file;
 		this.plugin = plugin;
+		this.type = type;
 	}
 
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
 
-		contentEl.createEl("h2", { text: "New Blog Post" });
-		contentEl.createEl("p", { text: "Enter a title for your blog post:" });
+		contentEl.createEl("h2", { text: this.type === "post" ? "New Blog Post" : "New Page" });
+		contentEl.createEl("p", { text: `Enter a title for your ${this.type}:` });
 
 		this.titleInput = contentEl.createEl("input", {
 			type: "text",
-			placeholder: "My Awesome Blog Post",
+			placeholder: this.type === "post" ? "My Awesome Blog Post" : "My Awesome Page",
 			cls: "astro-composer-title-input"
 		});
 		this.titleInput.focus();
@@ -522,14 +578,14 @@ class PostTitleModal extends Modal {
 		cancelButton.onclick = () => this.close();
 
 		const createButton = buttonContainer.createEl("button", { text: "Create", cls: ["astro-composer-create-button", "mod-cta"] });
-		createButton.onclick = () => this.createPost();
+		createButton.onclick = () => this.createEntry();
 
 		this.titleInput.addEventListener("keypress", (e) => {
-			if (e.key === "Enter") this.createPost();
+			if (e.key === "Enter") this.createEntry();
 		});
 	}
 
-	async createPost() {
+	async createEntry() {
 		const title = this.titleInput.value.trim();
 		if (!title) {
 			new Notice("Please enter a title.");
@@ -537,12 +593,12 @@ class PostTitleModal extends Modal {
 		}
 
 		try {
-			const newFile = await this.plugin.createPostFile(this.file, title);
+			const newFile = await this.plugin.createFile(this.file, title, this.type);
 			if (newFile && this.plugin.settings.autoInsertProperties) {
-				await this.plugin.addPropertiesToFile(newFile, title);
+				await this.plugin.addPropertiesToFile(newFile, title, this.type);
 			}
 		} catch (error) {
-			new Notice(`Error creating post: ${error.message}.`);
+			new Notice(`Error creating ${this.type}: ${error.message}.`);
 		}
 
 		this.close();
@@ -564,6 +620,7 @@ class AstroComposerSettingTab extends PluginSettingTab {
 	excludedDirsContainer: HTMLElement | null = null;
 	underscorePrefixContainer: HTMLElement | null = null;
 	autoInsertContainer: HTMLElement | null = null;
+	pagesFieldsContainer: HTMLElement | null = null;
 
 	constructor(app: App, plugin: AstroComposerPlugin) {
 		super(app, plugin);
@@ -722,34 +779,91 @@ class AstroComposerSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-		.setName("Properties template")
-		.addTextArea((text) => {
-			const plugin = this.plugin;
-			text
-				.setPlaceholder(
-					'---\ntitle: "{{title}}"\ndate: {{date}}\ntags: []\n---\n',
-				)
-				.setValue(plugin.settings.defaultTemplate)
-				.onChange(async (value: string) => {
-					plugin.settings.defaultTemplate = value;
-					await plugin.saveSettings();
-				});
-			text.inputEl.classList.add("astro-composer-template-textarea");
-			return text;
-		})
-		.then((setting) => {
-			setting.descEl.empty();
-			const descDiv = setting.descEl.createEl("div");
-			descDiv.innerHTML = 
-				"Used for new posts and when standardizing properties.<br />" +
-				"Variables include {{title}} and {{date}}.<br />" +
-				"Do not wrap {{date}} in quotes as it represents a datetime value, not a string.<br />" +
-				"The 'standardize properties' command ignores anything below the second '---' line.";
-		});
+			.setName("Properties template")
+			.addTextArea((text) => {
+				const plugin = this.plugin;
+				text
+					.setPlaceholder(
+						'---\ntitle: "{{title}}"\ndate: {{date}}\ntags: []\n---\n',
+					)
+					.setValue(plugin.settings.defaultTemplate)
+					.onChange(async (value: string) => {
+						plugin.settings.defaultTemplate = value;
+						await plugin.saveSettings();
+					});
+				text.inputEl.classList.add("astro-composer-template-textarea");
+				return text;
+			})
+			.then((setting) => {
+				setting.descEl.empty();
+				const descDiv = setting.descEl.createEl("div");
+				descDiv.innerHTML = 
+					"Used for new posts and when standardizing properties.<br />" +
+					"Variables include {{title}} and {{date}}.<br />" +
+					"Do not wrap {{date}} in quotes as it represents a datetime value, not a string.<br />" +
+					"The 'standardize properties' command ignores anything below the second '---' line.";
+			});
+
+		new Setting(containerEl)
+			.setName("Automate page creation")
+			.setDesc("Enable automatic page creation in a specified folder.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.enablePages)
+					.onChange(async (value: boolean) => {
+						this.plugin.settings.enablePages = value;
+						await this.plugin.saveSettings();
+						this.plugin.registerCreateEvent();
+						this.updatePagesFields();
+					})
+			);
+
+		this.pagesFieldsContainer = containerEl.createDiv();
+		this.pagesFieldsContainer.style.display = this.plugin.settings.enablePages ? "block" : "none";
+
+		new Setting(this.pagesFieldsContainer)
+			.setName("Pages folder")
+			.setDesc("Folder for pages (leave blank to disable). Posts automation will exclude this folder.")
+			.addText((text) =>
+				text
+					.setPlaceholder("Enter folder path")
+					.setValue(this.plugin.settings.pagesFolder)
+					.onChange(async (value: string) => {
+						this.plugin.settings.pagesFolder = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.pagesFieldsContainer)
+			.setName("Page properties template")
+			.addTextArea((text) => {
+				const plugin = this.plugin;
+				text
+					.setPlaceholder(
+						'---\ntitle: "{{title}}"\ndescription: ""\n---\n',
+					)
+					.setValue(plugin.settings.pageTemplate)
+					.onChange(async (value: string) => {
+						plugin.settings.pageTemplate = value;
+						await plugin.saveSettings();
+					});
+				text.inputEl.classList.add("astro-composer-template-textarea");
+				return text;
+			})
+			.then((setting) => {
+				setting.descEl.empty();
+				const descDiv = setting.descEl.createEl("div");
+				descDiv.innerHTML = 
+					"Used for new pages and when standardizing properties.<br />" +
+					"Variables include {{title}} and {{date}}.<br />" +
+					"Do not wrap {{date}} in quotes as it represents a datetime value, not a string.<br />" +
+					"The 'standardize properties' command ignores anything below the second '---' line.";
+			});
 
 		this.updateConditionalFields();
 		this.updateIndexFileField();
 		this.updateExcludedDirsField();
+		this.updatePagesFields();
 	}
 
 	updateConditionalFields() {
@@ -767,6 +881,12 @@ class AstroComposerSettingTab extends PluginSettingTab {
 	updateExcludedDirsField() {
 		if (this.excludedDirsContainer) {
 			this.excludedDirsContainer.style.display = !this.plugin.settings.onlyAutomateInPostsFolder ? "block" : "none";
+		}
+	}
+
+	updatePagesFields() {
+		if (this.pagesFieldsContainer) {
+			this.pagesFieldsContainer.style.display = this.plugin.settings.enablePages ? "block" : "none";
 		}
 	}
 }
