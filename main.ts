@@ -411,44 +411,26 @@ export default class AstroComposerPlugin extends Plugin {
 			if (!(key in existingProperties)) {
 				finalProps[key] = templateValues[key] || (knownArrayKeys.includes(key) ? [] : [""]);
 			} else if (knownArrayKeys.includes(key) && templateValues[key]?.length > 0) {
-				// Merge items, appending new ones without duplicates
-				const existingItems = existingProperties[key] || [];
-				const newItems = templateValues[key].filter(item => !existingItems.includes(item));
-				finalProps[key] = [...existingItems, ...newItems];
+				// Merge items, ensuring no duplicates
+				const allItems = [...(existingProperties[key] || []), ...templateValues[key].filter(item => !(existingProperties[key] || []).includes(item))];
+				finalProps[key] = allItems;
 			}
 		}
 
 		// Build new property content
 		let newContent = "---\n";
-
-		// First, add template props in their order
-		templateProps.forEach(key => {
-			const value = finalProps[key];
+		for (const key in finalProps) {
 			if (knownArrayKeys.includes(key)) {
 				newContent += `${key}:\n`;
-				value.forEach(item => {
-					newContent += `  - ${item}\n`;
-				});
-			} else {
-				newContent += `${key}: ${value[0] || ""}\n`;
-			}
-		});
-
-		// Then, add extra props in their original order
-		Object.keys(existingProperties).forEach(key => {
-			if (!templateProps.includes(key)) {
-				const value = existingProperties[key];
-				if (knownArrayKeys.includes(key)) {
-					newContent += `${key}:\n`;
-					value.forEach(item => {
+				if (finalProps[key].length > 0) {
+					finalProps[key].forEach(item => {
 						newContent += `  - ${item}\n`;
 					});
-				} else {
-					newContent += `${key}: ${value[0] || ""}\n`;
 				}
+			} else {
+				newContent += `${key}: ${finalProps[key][0] || ""}\n`;
 			}
-		});
-
+		}
 		newContent += "---";
 
 		// Append the original body content, preserving exact trailing newlines
@@ -457,6 +439,40 @@ export default class AstroComposerPlugin extends Plugin {
 
 		await this.app.vault.modify(file, newContent);
 		new Notice("Properties standardized using template.");
+	}
+
+	getAstroUrlFromInternalLink(link: string): string {
+		const hashIndex = link.indexOf('#');
+		let path = hashIndex >= 0 ? link.slice(0, hashIndex) : link;
+		let anchor = hashIndex >= 0 ? link.slice(hashIndex) : '';
+
+		path = path.replace(/\.md$/, "");
+
+		// Strip root folder if present
+		if (path.startsWith(this.settings.postsFolder + '/')) {
+			path = path.slice(this.settings.postsFolder.length + 1);
+		} else if (this.settings.enablePages && path.startsWith(this.settings.pagesFolder + '/')) {
+			path = path.slice(this.settings.pagesFolder.length + 1);
+		}
+
+		let addTrailingSlash = false;
+		if (this.settings.creationMode === "folder") {
+			const parts = path.split('/');
+			if (parts[parts.length - 1] === this.settings.indexFileName) {
+				parts.pop();
+				path = parts.join('/');
+				addTrailingSlash = true;
+			}
+		}
+
+		const slugParts = path.split('/').map(part => this.toKebabCase(part));
+		const slug = slugParts.join('/');
+
+		let basePath = this.settings.linkBasePath;
+		if (!basePath.startsWith("/")) basePath = "/" + basePath;
+		if (!basePath.endsWith("/")) basePath += "/";
+
+		return `${basePath}${slug}${addTrailingSlash ? '/' : ''}${anchor}`;
 	}
 
 	async convertWikilinksForAstro(editor: Editor, file: TFile | null) {
@@ -481,32 +497,30 @@ export default class AstroComposerPlugin extends Plugin {
 				}
 
 				const display = displayText || linkText.replace(/\.md$/, "");
-				const slug = this.toKebabCase(linkText.replace(/\.md$/, ""));
 
-				let basePath = this.settings.linkBasePath;
-				if (!basePath.startsWith("/")) basePath = "/" + basePath;
-				if (!basePath.endsWith("/")) basePath = basePath + "/";
+				const url = this.getAstroUrlFromInternalLink(linkText);
 
-				return `[${display}](${basePath}${slug}/)`;
+				return `[${display}](${url})`;
 			}
 		);
 
 		// Handle standard Markdown links (non-image, non-external)
 		newContent = newContent.replace(
-			/\[([^\]]+)\]\(([^)]+\.md)\)/g,
-			(match, displayText, linkPath) => {
+			/\[([^\]]+)\]\(([^)]+)\)/g,
+			(match, displayText, link) => {
 				// Check if it's an image link or external link
-				if (imageExtensions.test(linkPath) || linkPath.match(/^https?:\/\//)) {
-					return match; // Ignore image or external links
+				if (link.match(/^https?:\/\//) || imageExtensions.test(link)) {
+					return match; // Ignore external or image links
 				}
 
-				const slug = this.toKebabCase(linkPath.replace(/\.md$/, ""));
+				// Check if it's internal .md link
+				if (!link.includes('.md')) {
+					return match; // Ignore if not .md
+				}
 
-				let basePath = this.settings.linkBasePath;
-				if (!basePath.startsWith("/")) basePath = "/" + basePath;
-				if (!basePath.endsWith("/")) basePath = basePath + "/";
+				const url = this.getAstroUrlFromInternalLink(link);
 
-				return `[${displayText}](${basePath}${slug}/)`;
+				return `[${displayText}](${url})`;
 			}
 		);
 
@@ -523,13 +537,10 @@ export default class AstroComposerPlugin extends Plugin {
 			if (imageExtensions.test(fileName)) {
 				return match; // Ignore embedded images
 			}
-			const slug = this.toKebabCase(fileName.replace(".md", ""));
 
-			let basePath = this.settings.linkBasePath;
-			if (!basePath.startsWith("/")) basePath = "/" + basePath;
-			if (!basePath.endsWith("/")) basePath = basePath + "/";
+			const url = this.getAstroUrlFromInternalLink(fileName);
 
-			return `[Embedded: ${fileName}](${basePath}${slug}/)`;
+			return `[Embedded: ${fileName}](${url})`;
 		});
 
 		editor.setValue(newContent);
