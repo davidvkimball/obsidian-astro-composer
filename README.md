@@ -16,6 +16,7 @@ This plugin streamlines blogging in Obsidian for Astro static sites with automat
 - **Internal Link Conversion**: Converts Obsidian wikilinks and markdown internal links (`[[My Post]] or [My Post](my-post)`) to Astro-friendly Markdown links (`[My Post](/blog/my-post/)`), supporting both file-based and folder-based post structures.
 - **Configurable Workflow**: Customize posts folder, link base path, creation mode (file-based or folder-based with `index.md`), date format, and excluded directories. Enable or disable automation for new notes and properties insertion independently.
 - **Robust Automation**: Only triggers the title dialog for user-initiated new notes (e.g., via "New note" command), avoiding unwanted prompts during vault loading or file imports (e.g., via git pull).
+- **Rename Post Command**: easily rename your notes by updating the title property with the desired post name, and get a kebab-case file or folder update afterward.
 
 ## Installation
 
@@ -40,10 +41,10 @@ This plugin streamlines blogging in Obsidian for Astro static sites with automat
 2. **Create a Post**: With "Automate post creation" enabled, use Obsidian's "New note" action to trigger the title dialog, which renames the file and optionally adds properties.
 3. **Standardize Properties**: Use the `Astro Composer: Standardize Properties` command to update a note's properties, preserving existing values, adding missing properties, and maintaining the template's order with unrecognized properties at the end.
 4. **Convert Internal Links**: Use the `Astro Composer: Convert internal links for Astro` command to transform Obsidian wikilinks and internal Markdown links into Astro-compatible Markdown links.
+5. **Rename a Post**: Using the `Astro Composer: Rename Current Note` command, set the title of your post and have the file or parent folder get automatically renamed with the kebab-case version.
 
 ## Roadmap
 - MDX Support
-- Better mobile support
 
 ## Contributing
 

@@ -82,8 +82,212 @@ export default class AstroComposerPlugin extends Plugin {
 			},
 		});
 
+		this.addCommand({
+			id: "rename-note",
+			name: "Rename Current Note",
+			icon: "pencil",
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				if (view.file instanceof TFile) {
+					const type = this.determineType(view.file);
+					const titleKey = this.getTitleKey(type);
+					const cache = this.app.metadataCache.getFileCache(view.file);
+					if (!cache?.frontmatter || !(titleKey in cache.frontmatter)) {
+						new Notice("Cannot rename: No title found in properties");
+						return;
+					}
+					new TitleModal(this.app, view.file, this, type, true).open();
+				}
+			},
+		});
+
 		// Add settings tab
 		this.addSettingTab(new AstroComposerSettingTab(this.app, this));
+	}
+
+	determineType(file: TFile): "post" | "page" {
+		const filePath = file.path;
+		const pagesFolder = this.settings.pagesFolder || "";
+		const isPage = this.settings.enablePages && pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder);
+		return isPage ? "page" : "post";
+	}
+
+	getTitleKey(type: "post" | "page"): string {
+		const template = type === "post" ? this.settings.defaultTemplate : this.settings.pageTemplate;
+		const lines = template.split("\n");
+		let inProperties = false;
+		for (const line of lines) {
+			const trimmed = line.trim();
+			if (trimmed === "---") {
+				inProperties = !inProperties;
+				continue;
+			}
+			if (inProperties) {
+				const match = trimmed.match(/^(\w+):\s*(.+)$/);
+				if (match) {
+					const key = match[1];
+					const value = match[2];
+					if (value.includes("{{title}}")) {
+						return key;
+					}
+				}
+			}
+		}
+		return "title";
+	}
+
+	async updateTitleInFrontmatter(file: TFile, newTitle: string, type: "post" | "page") {
+		const titleKey = this.getTitleKey(type);
+		const content = await this.app.vault.read(file);
+		let propertiesEnd = 0;
+		let propertiesText = "";
+		const knownArrayKeys = ['tags', 'aliases', 'cssclasses'];
+
+		if (content.startsWith("---")) {
+			propertiesEnd = content.indexOf("\n---", 3);
+			if (propertiesEnd === -1) {
+				propertiesEnd = content.length;
+			} else {
+				propertiesEnd += 4;
+			}
+			propertiesText = content.slice(4, propertiesEnd - 4).trim();
+		}
+
+		const propOrder: string[] = [];
+		const existing: Record<string, any> = {};
+		let currentKey: string | null = null;
+
+		propertiesText.split("\n").forEach((line) => {
+			const match = line.match(/^(\w+):\s*(.+)?$/);
+			if (match) {
+				const [, key, value] = match;
+				propOrder.push(key);
+				currentKey = key;
+				if (knownArrayKeys.includes(key)) {
+					existing[key] = [];
+				} else {
+					existing[key] = value ? value.trim() : "";
+				}
+			} else if (currentKey && knownArrayKeys.includes(currentKey) && line.trim().startsWith("- ")) {
+				const item = line.trim().replace(/^-\s*/, "");
+				if (item) (existing[currentKey] as string[]).push(item);
+			}
+		});
+
+		const escapedTitle = newTitle.replace(/"/g, '\\"');
+		const titleVal = newTitle.includes(" ") || newTitle.includes('"') ? `"${escapedTitle}"` : newTitle;
+		existing[titleKey] = titleVal;
+
+		if (!propOrder.includes(titleKey)) {
+			propOrder.push(titleKey);
+		}
+
+		let newContent = "---\n";
+		for (const key of propOrder) {
+			const val = existing[key];
+			if (Array.isArray(val)) {
+				newContent += `${key}:\n`;
+				if (val.length > 0) {
+					val.forEach((item: string) => {
+						newContent += `  - ${item}\n`;
+					});
+				}
+			} else {
+				newContent += `${key}: ${val || ""}\n`;
+			}
+		}
+		newContent += "---";
+
+		const bodyContent = content.slice(propertiesEnd);
+		newContent += bodyContent;
+
+		await this.app.vault.modify(file, newContent);
+	}
+
+	async renameFile(file: TFile, title: string, type: "post" | "page"): Promise<TFile | null> {
+		if (!title) {
+			new Notice(`Title is required to rename the note.`);
+			return null;
+		}
+
+		const kebabTitle = this.toKebabCase(title);
+		let prefix = "";
+
+		if (this.settings.creationMode === "folder") {
+			const isIndex = file.basename === this.settings.indexFileName;
+			if (isIndex) {
+				if (!file.parent) {
+					new Notice("Cannot rename: File has no parent folder.");
+					return null;
+				}
+				prefix = file.parent.name.startsWith("_") ? "_" : "";
+				const newFolderName = `${prefix}${kebabTitle}`;
+				const parentFolder = file.parent.parent;
+				if (!parentFolder) {
+					new Notice("Cannot rename: Parent folder has no parent.");
+					return null;
+				}
+				const newFolderPath = `${parentFolder.path}/${newFolderName}`;
+
+				const existingFolder = this.app.vault.getAbstractFileByPath(newFolderPath);
+				if (existingFolder instanceof TFolder) {
+					new Notice(`Folder already exists at ${newFolderPath}.`);
+					return null;
+				}
+
+				await this.app.vault.rename(file.parent, newFolderPath);
+				const newFilePath = `${newFolderPath}/${file.name}`;
+				const newFile = this.app.vault.getAbstractFileByPath(newFilePath);
+				if (!(newFile instanceof TFile)) {
+					new Notice("Failed to locate renamed file.");
+					return null;
+				}
+				return newFile;
+			} else {
+				if (!file.parent) {
+					new Notice("Cannot rename: File has no parent folder.");
+					return null;
+				}
+				prefix = file.basename.startsWith("_") ? "_" : "";
+				const newName = `${prefix}${kebabTitle}.md`;
+				const newPath = `${file.parent.path}/${newName}`;
+
+				const existingFile = this.app.vault.getAbstractFileByPath(newPath);
+				if (existingFile instanceof TFile && existingFile !== file) {
+					new Notice(`File already exists at ${newPath}.`);
+					return null;
+				}
+
+				await this.app.vault.rename(file, newPath);
+				const newFile = this.app.vault.getAbstractFileByPath(newPath);
+				if (!(newFile instanceof TFile)) {
+					new Notice("Failed to locate renamed file.");
+					return null;
+				}
+				return newFile;
+			}
+		} else {
+			if (!file.parent) {
+				new Notice("Cannot rename: File has no parent folder.");
+				return null;
+			}
+			prefix = file.basename.startsWith("_") ? "_" : "";
+			const newName = `${prefix}${kebabTitle}.md`;
+			const newPath = `${file.parent.path}/${newName}`;
+
+			const existingFile = this.app.vault.getAbstractFileByPath(newPath);
+			if (existingFile instanceof TFile && existingFile !== file) {
+				new Notice(`File already exists at ${newPath}.`);
+				return null;
+			}
+
+			await this.app.vault.rename(file, newPath);
+			const newFile = this.app.vault.getAbstractFileByPath(newPath);
+			if (!(newFile instanceof TFile)) {
+				new Notice("Failed to locate renamed file.");
+				return null;
+			}
+			return newFile;
+		}
 	}
 
 	public registerCreateEvent() {
@@ -125,7 +329,7 @@ export default class AstroComposerPlugin extends Plugin {
 						isPage = true;
 					}
 
-					const cache = this.app.metadataCache.getCache(file.path);
+					const cache = this.app.metadataCache.getFileCache(file);
 					if (!cache || !cache.sections || cache.sections.length === 0) {
 						if (isPage) {
 							if (this.settings.enablePages) {
@@ -560,27 +764,57 @@ class TitleModal extends Modal {
 	file: TFile;
 	plugin: AstroComposerPlugin;
 	type: "post" | "page";
+	isRename: boolean;
 	titleInput: HTMLInputElement;
 
-	constructor(app: App, file: TFile, plugin: AstroComposerPlugin, type: "post" | "page" = "post") {
+	constructor(app: App, file: TFile, plugin: AstroComposerPlugin, type: "post" | "page" = "post", isRename: boolean = false) {
 		super(app);
 		this.file = file;
 		this.plugin = plugin;
 		this.type = type;
+		this.isRename = isRename;
+	}
+
+	getCurrentTitle(): string {
+		const titleKey = this.plugin.getTitleKey(this.type);
+		const cache = this.app.metadataCache.getFileCache(this.file);
+		let basename = this.file.basename;
+		if (this.file.parent && basename === this.plugin.settings.indexFileName) {
+			basename = this.file.parent.name;
+		}
+		if (basename.startsWith("_")) {
+			basename = basename.slice(1);
+		}
+		const fallbackTitle = basename.replace(/-/g, " ").split(" ").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+
+		if (cache?.frontmatter && cache.frontmatter[titleKey]) {
+			return cache.frontmatter[titleKey];
+		}
+		return fallbackTitle;
 	}
 
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
 
-		contentEl.createEl("h2", { text: this.type === "post" ? "New Blog Post" : "New Page" });
-		contentEl.createEl("p", { text: `Enter a title for your ${this.type}:` });
-
-		this.titleInput = contentEl.createEl("input", {
-			type: "text",
-			placeholder: this.type === "post" ? "My Awesome Blog Post" : "My Awesome Page",
-			cls: "astro-composer-title-input"
-		});
+		if (this.isRename) {
+			contentEl.createEl("h2", { text: "Rename Note" });
+			contentEl.createEl("p", { text: "Enter new title for your note:" });
+			this.titleInput = contentEl.createEl("input", {
+				type: "text",
+				placeholder: "My Renamed Note",
+				cls: "astro-composer-title-input"
+			});
+			this.titleInput.value = this.getCurrentTitle();
+		} else {
+			contentEl.createEl("h2", { text: this.type === "post" ? "New Blog Post" : "New Page" });
+			contentEl.createEl("p", { text: `Enter a title for your ${this.type}:` });
+			this.titleInput = contentEl.createEl("input", {
+				type: "text",
+				placeholder: this.type === "post" ? "My Awesome Blog Post" : "My Awesome Page",
+				cls: "astro-composer-title-input"
+			});
+		}
 		this.titleInput.focus();
 
 		const buttonContainer = contentEl.createDiv({ cls: "astro-composer-button-container" });
@@ -588,15 +822,15 @@ class TitleModal extends Modal {
 		const cancelButton = buttonContainer.createEl("button", { text: "Cancel", cls: "astro-composer-cancel-button" });
 		cancelButton.onclick = () => this.close();
 
-		const createButton = buttonContainer.createEl("button", { text: "Create", cls: ["astro-composer-create-button", "mod-cta"] });
-		createButton.onclick = () => this.createEntry();
+		const submitButton = buttonContainer.createEl("button", { text: this.isRename ? "Rename" : "Create", cls: ["astro-composer-create-button", "mod-cta"] });
+		submitButton.onclick = () => this.submit();
 
 		this.titleInput.addEventListener("keypress", (e) => {
-			if (e.key === "Enter") this.createEntry();
+			if (e.key === "Enter") this.submit();
 		});
 	}
 
-	async createEntry() {
+	async submit() {
 		const title = this.titleInput.value.trim();
 		if (!title) {
 			new Notice("Please enter a title.");
@@ -604,12 +838,23 @@ class TitleModal extends Modal {
 		}
 
 		try {
-			const newFile = await this.plugin.createFile(this.file, title, this.type);
-			if (newFile && this.plugin.settings.autoInsertProperties) {
-				await this.plugin.addPropertiesToFile(newFile, title, this.type);
+			let newFile: TFile | null = null;
+			if (this.isRename) {
+				newFile = await this.plugin.renameFile(this.file, title, this.type);
+				if (newFile) {
+					await this.plugin.updateTitleInFrontmatter(newFile, title, this.type);
+				}
+			} else {
+				newFile = await this.plugin.createFile(this.file, title, this.type);
+				if (newFile && this.plugin.settings.autoInsertProperties) {
+					await this.plugin.addPropertiesToFile(newFile, title, this.type);
+				}
+			}
+			if (!newFile) {
+				throw new Error("Failed to process the note.");
 			}
 		} catch (error) {
-			new Notice(`Error creating ${this.type}: ${error.message}.`);
+			new Notice(`Error ${this.isRename ? "renaming" : "creating"} ${this.type}: ${error.message}.`);
 		}
 
 		this.close();
