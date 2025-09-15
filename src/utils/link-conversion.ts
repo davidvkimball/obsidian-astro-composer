@@ -19,6 +19,8 @@ export class LinkConverter {
 		let path = hashIndex >= 0 ? link.slice(0, hashIndex) : link;
 		let anchor = hashIndex >= 0 ? link.slice(hashIndex) : '';
 
+		// URL decode the path to handle encoded characters like %20
+		path = decodeURIComponent(path);
 		path = path.replace(/\.md$/, "");
 
 		// Strip root folder if present
