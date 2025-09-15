@@ -10,12 +10,14 @@ import { AstroComposerSettingTab } from "./ui/settings-tab";
 import { TitleModal } from "./ui/title-modal";
 import { FileOperations } from "./utils/file-operations";
 import { TemplateParser } from "./utils/template-parsing";
+import { HeadingLinkGenerator } from "./utils/heading-link-generator";
 
 export default class AstroComposerPlugin extends Plugin {
 	settings!: AstroComposerSettings;
 	private createEvent!: (file: TFile) => void;
 	private fileOps!: FileOperations;
 	private templateParser!: TemplateParser;
+	private headingLinkGenerator!: HeadingLinkGenerator;
 
 	async onload() {
 		await this.loadSettings();
@@ -23,6 +25,7 @@ export default class AstroComposerPlugin extends Plugin {
 		// Initialize utilities
 		this.fileOps = new FileOperations(this.app, this.settings);
 		this.templateParser = new TemplateParser(this.app, this.settings);
+		this.headingLinkGenerator = new HeadingLinkGenerator(this.settings);
 
 		// Wait for the vault to be fully loaded before registering the create event
 		this.app.workspace.onLayoutReady(() => {
@@ -34,6 +37,9 @@ export default class AstroComposerPlugin extends Plugin {
 
 		// Add settings tab
 		this.addSettingTab(new AstroComposerSettingTab(this.app, this));
+
+		// Register context menu for copy heading links
+		this.registerContextMenu();
 	}
 
 	public registerCreateEvent() {
@@ -118,5 +124,40 @@ export default class AstroComposerPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	private registerContextMenu() {
+		this.registerEvent(
+			this.app.workspace.on('editor-menu', (menu, editor, view) => {
+				// Only show menu if the feature is enabled
+				if (!this.settings.enableCopyHeadingLink) {
+					return;
+				}
+
+				const cursor = editor.getCursor();
+				const file = view.file;
+				
+				if (!(file instanceof TFile)) {
+					return;
+				}
+
+				// Find the heading at the current cursor position
+				const heading = this.headingLinkGenerator.findHeadingAtLine(this.app, file, cursor.line);
+				
+				if (heading) {
+					// Main copy button - uses the default format and respects Obsidian settings
+					menu.addItem((item) => {
+						item
+							.setTitle('Copy Heading Link')
+							.setIcon('link-2')
+							.onClick(async () => {
+								const link = this.headingLinkGenerator.generateLink(this.app, file, heading);
+								await navigator.clipboard.writeText(link);
+								new (this.app as any).Notice('Heading link copied to clipboard');
+							});
+					});
+				}
+			})
+		);
 	}
 }

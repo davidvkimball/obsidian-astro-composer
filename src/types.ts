@@ -15,6 +15,8 @@ export interface AstroComposerSettings {
 	enablePages: boolean;
 	pagesFolder: string;
 	pageTemplate: string;
+	enableCopyHeadingLink: boolean;
+	copyHeadingLinkFormat: "obsidian" | "astro";
 }
 
 export interface ParsedFrontmatter {

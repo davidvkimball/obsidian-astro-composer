@@ -20,4 +20,6 @@ export const DEFAULT_SETTINGS: AstroComposerSettings = {
 	pagesFolder: "pages",
 	pageTemplate:
 		'---\ntitle: "{{title}}"\ndescription: ""\n---\n',
+	enableCopyHeadingLink: true,
+	copyHeadingLinkFormat: "obsidian",
 };

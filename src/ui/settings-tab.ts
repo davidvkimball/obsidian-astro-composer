@@ -13,6 +13,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	underscorePrefixContainer: HTMLElement | null = null;
 	autoInsertContainer: HTMLElement | null = null;
 	pagesFieldsContainer: HTMLElement | null = null;
+	copyHeadingContainer: HTMLElement | null = null;
 
 	constructor(app: App, plugin: Plugin) {
 		super(app, plugin);
@@ -159,6 +160,37 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
+		// Copy Heading Link Settings
+		new Setting(containerEl)
+			.setName("Enable copy heading links")
+			.setDesc("Add right-click context menu option to copy heading links in various formats.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(settings.enableCopyHeadingLink)
+					.onChange(async (value: boolean) => {
+						settings.enableCopyHeadingLink = value;
+						await (this.plugin as any).saveSettings();
+						this.updateCopyHeadingFields();
+					})
+			);
+
+		this.copyHeadingContainer = containerEl.createDiv({ cls: "copy-heading-fields" });
+		this.copyHeadingContainer.style.display = settings.enableCopyHeadingLink ? "block" : "none";
+
+		new Setting(this.copyHeadingContainer)
+			.setName("Default heading link format")
+			.setDesc("Choose the default format for copied heading links. Obsidian format respects your Obsidian settings for wikilink vs markdown preference. Astro link uses your Link base path from above and converts the heading into kebab-case format as an anchor link.")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("obsidian", "Obsidian link")
+					.addOption("astro", "Astro link")
+					.setValue(settings.copyHeadingLinkFormat)
+					.onChange(async (value: string) => {
+						settings.copyHeadingLinkFormat = value as "obsidian" | "astro";
+						await (this.plugin as any).saveSettings();
+					})
+			);
+
 		new Setting(containerEl)
 			.setName("Date format")
 			.setDesc("Format for the date in properties (e.g., YYYY-MM-DD, MMMM D, YYYY, YYYY-MM-DD HH:mm).")
@@ -252,10 +284,12 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					"The 'standardize properties' command ignores anything below the second '---' line.";
 			});
 
+
 		this.updateConditionalFields();
 		this.updateIndexFileField();
 		this.updateExcludedDirsField();
 		this.updatePagesFields();
+		this.updateCopyHeadingFields();
 	}
 
 	updateConditionalFields() {
@@ -283,6 +317,13 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		if (this.pagesFieldsContainer) {
 			const settings = (this.plugin as any).settings as AstroComposerSettings;
 			this.pagesFieldsContainer.style.display = settings.enablePages ? "block" : "none";
+		}
+	}
+
+	updateCopyHeadingFields() {
+		if (this.copyHeadingContainer) {
+			const settings = (this.plugin as any).settings as AstroComposerSettings;
+			this.copyHeadingContainer.style.display = settings.enableCopyHeadingLink ? "block" : "none";
 		}
 	}
 }
