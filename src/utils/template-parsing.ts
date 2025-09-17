@@ -185,15 +185,22 @@ export class TemplateParser {
 		const propOrder: string[] = [];
 		const existing: Record<string, any> = {};
 		let currentKey: string | null = null;
+		let titleKeyPosition = -1; // Track the original position of the title key
 
 		const arrayKeys = new Set<string>(); // Track which keys are arrays
 		
-		propertiesText.split("\n").forEach((line) => {
+		propertiesText.split("\n").forEach((line, index) => {
 			const match = line.match(/^(\w+):\s*(.+)?$/);
 			if (match) {
 				const [, key, value] = match;
 				propOrder.push(key);
 				currentKey = key;
+				
+				// Track the original position of the title key
+				if (key === titleKey) {
+					titleKeyPosition = index;
+				}
+				
 				const isKnownArrayKey = KNOWN_ARRAY_KEYS.includes(key as any);
 				const isEmptyArray = !value || value.trim() === "" || value.trim() === "[]";
 				const isArrayProperty = isKnownArrayKey || isEmptyArray;
@@ -214,7 +221,9 @@ export class TemplateParser {
 		const titleVal = newTitle.includes(" ") || newTitle.includes('"') ? `"${escapedTitle}"` : newTitle;
 		existing[titleKey] = titleVal;
 
-		if (!propOrder.includes(titleKey)) {
+		// If title key was found in original frontmatter, preserve its position
+		// Otherwise, add it at the end
+		if (titleKeyPosition === -1 && !propOrder.includes(titleKey)) {
 			propOrder.push(titleKey);
 		}
 
