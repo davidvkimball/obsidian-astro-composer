@@ -1,6 +1,6 @@
 {
 	"name": "astro-composer",
-	"version": "0.5.6",
+	"version": "0.5.9",
 	"description": "Create and manage notes as Astro blog posts with automatic file renaming, frontmatter insertion, and internal link conversion.",
 	"main": "main.js",
 	"scripts": {

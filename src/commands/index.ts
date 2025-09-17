@@ -56,12 +56,53 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 
 async function standardizeProperties(app: any, settings: AstroComposerSettings, file: TFile): Promise<void> {
 	const templateParser = new TemplateParser(app, settings);
+	const fileOps = new FileOperations(app, settings);
 	
-	// Determine if it's a page or post
+	// Determine content type
+	const type = fileOps.determineType(file);
+	let templateString: string;
+	
+	// Check if this file matches any content type criteria
 	const filePath = file.path;
-	const pagesFolder = settings.pagesFolder || "";
-	const isPage = settings.enablePages && pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder);
-	const templateString = isPage ? settings.pageTemplate : settings.defaultTemplate;
+	const postsFolder = settings.postsFolder || "";
+	const pagesFolder = settings.enablePages ? (settings.pagesFolder || "") : "";
+	
+	let hasMatchingContentType = false;
+	
+	// Check if it's a post
+	if (settings.automatePostCreation && postsFolder && 
+		(filePath.startsWith(postsFolder + "/") || filePath === postsFolder)) {
+		hasMatchingContentType = true;
+	}
+	
+	// Check if it's a page
+	if (!hasMatchingContentType && settings.enablePages && pagesFolder && 
+		(filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
+		hasMatchingContentType = true;
+	}
+	
+	// Check if it's a custom content type
+	if (!hasMatchingContentType && fileOps.isCustomContentType(type)) {
+		const customType = fileOps.getCustomContentType(type);
+		if (customType && customType.enabled) {
+			hasMatchingContentType = true;
+		}
+	}
+	
+	// If no content type matches, show notification and return
+	if (!hasMatchingContentType) {
+		new Notice("No properties template specified for this note. This file doesn't match any configured content type folders.");
+		return;
+	}
+	
+	// Determine template based on content type
+	if (fileOps.isCustomContentType(type)) {
+		const customType = fileOps.getCustomContentType(type);
+		templateString = customType ? customType.template : settings.defaultTemplate;
+	} else {
+		const isPage = type === "page";
+		templateString = isPage ? settings.pageTemplate : settings.defaultTemplate;
+	}
 
 	// Wait briefly to allow editor state to stabilize
 	await new Promise(resolve => setTimeout(resolve, 100));
@@ -75,17 +116,42 @@ async function standardizeProperties(app: any, settings: AstroComposerSettings, 
 
 	// Merge template properties with existing ones, preserving all existing
 	const finalProps: Record<string, string[]> = { ...parsed.properties };
+	const arrayKeys = new Set<string>(); // Track which keys are arrays
+	
 	for (const key of templateProps) {
 		if (!(key in parsed.properties)) {
-			finalProps[key] = templateValues[key] || (['tags', 'aliases', 'cssclasses'].includes(key) ? [] : [""]);
-		} else if (['tags', 'aliases', 'cssclasses'].includes(key) && templateValues[key]?.length > 0) {
-			// Merge items, ensuring no duplicates
-			const allItems = [...(parsed.properties[key] || []), ...templateValues[key].filter(item => !(parsed.properties[key] || []).includes(item))];
-			finalProps[key] = allItems;
+			// Property doesn't exist, add it from template
+			const templateValue = templateValues[key];
+			if (Array.isArray(templateValue)) {
+				finalProps[key] = templateValue;
+				arrayKeys.add(key); // Mark as array
+			} else {
+				finalProps[key] = [templateValue || ""];
+			}
+		} else {
+			// Property exists, check if it's an array type
+			const templateValue = templateValues[key];
+			const isArrayValue = Array.isArray(templateValue);
+			
+			if (isArrayValue) {
+				// This is an array property - preserve existing values and merge with template
+				const existingItems = parsed.properties[key] || [];
+				const newItems = templateValue.filter(item => !existingItems.includes(item));
+				finalProps[key] = [...existingItems, ...newItems];
+				arrayKeys.add(key); // Mark as array
+			}
+			// For non-array values, keep existing value (don't overwrite)
 		}
 	}
 
-	const newContent = templateParser.buildFrontmatterContent(finalProps) + parsed.bodyContent;
+	// Also add any existing array keys that weren't in the template
+	for (const key in parsed.properties) {
+		if (parsed.properties[key].length > 1) {
+			arrayKeys.add(key);
+		}
+	}
+
+	const newContent = templateParser.buildFrontmatterContent(finalProps, arrayKeys) + parsed.bodyContent;
 
 	await app.vault.modify(file, newContent);
 	new Notice("Properties standardized using template.");

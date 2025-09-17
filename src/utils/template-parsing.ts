@@ -1,5 +1,5 @@
 import { App, TFile, Notice } from "obsidian";
-import { AstroComposerSettings, PostType, ParsedFrontmatter, TemplateValues, KNOWN_ARRAY_KEYS } from "../types";
+import { AstroComposerSettings, PostType, ParsedFrontmatter, TemplateValues, KNOWN_ARRAY_KEYS, CustomContentType } from "../types";
 
 export class TemplateParser {
 	constructor(private app: App, private settings: AstroComposerSettings) {}
@@ -21,19 +21,31 @@ export class TemplateParser {
 			
 			try {
 				let currentKey: string | null = null;
+				const arrayKeys = new Set<string>(); // Track which keys are arrays
+				
 				propertiesText.split("\n").forEach((line) => {
 					const match = line.match(/^(\w+):\s*(.+)?$/);
 					if (match) {
 						const [, key, value] = match;
 						currentKey = key;
-						if (KNOWN_ARRAY_KEYS.includes(key as any)) {
+						const isKnownArrayKey = KNOWN_ARRAY_KEYS.includes(key as any);
+						const isEmptyArray = !value || value.trim() === "" || value.trim() === "[]";
+						const isArrayProperty = isKnownArrayKey || isEmptyArray;
+						
+						if (isArrayProperty) {
 							existingProperties[key] = [];
+							arrayKeys.add(key); // Mark this key as an array
 						} else {
 							existingProperties[key] = [value ? value.trim() : ""];
 						}
-					} else if (currentKey && KNOWN_ARRAY_KEYS.includes(currentKey as any) && line.trim().startsWith("- ")) {
-						const item = line.trim().replace(/^-\s*/, "");
-						if (item) existingProperties[currentKey].push(item);
+					} else if (currentKey && line.trim().startsWith("- ")) {
+						// Check if current key is an array property
+						const isArrayProperty = arrayKeys.has(currentKey);
+						
+						if (isArrayProperty) {
+							const item = line.trim().replace(/^-\s*/, "");
+							if (item) existingProperties[currentKey].push(item);
+						}
 					} else if (line.trim() && !line.trim().startsWith("- ")) {
 						// Handle unrecognized properties
 						const keyMatch = line.match(/^(\w+):/);
@@ -83,13 +95,21 @@ export class TemplateParser {
 				continue;
 			}
 			if (inProperties) {
-				const match = line.match(/^(\w+):\s*(.+)?$/);
+				const match = line.match(/^(\w+):\s*(.*)$/);
 				if (match) {
 					const [, key, value] = match;
 					templateProps.push(key);
-					if (KNOWN_ARRAY_KEYS.includes(key as any)) {
-						// Handle template array keys
+					
+					// Check if this is an array property (known array keys or YAML list format)
+					const isKnownArrayKey = KNOWN_ARRAY_KEYS.includes(key as any);
+					// Check if it's a YAML list format (no value after colon, empty brackets, or empty value means it's an array)
+					const isEmptyArray = !value || value.trim() === "" || value.trim() === "[]";
+					const isArrayProperty = isKnownArrayKey || isEmptyArray;
+					
+					if (isArrayProperty) {
+						// Handle array properties
 						if (value && value.startsWith("[")) {
+							// Handle bracket format: ["item1", "item2"]
 							const items = value
 								.replace(/[\[\]]/g, "")
 								.split(",")
@@ -97,20 +117,25 @@ export class TemplateParser {
 								.filter(t => t);
 							templateValues[key] = items;
 						} else {
+							// Handle YAML list format: empty or with - items
 							templateValues[key] = [];
 							// Look ahead for item list
 							for (let j = i + 1; j < templateLines.length; j++) {
 								const nextLine = templateLines[j].trim();
 								if (nextLine.startsWith("- ")) {
 									const item = nextLine.replace(/^-\s*/, "").trim();
-									if (item) templateValues[key].push(item);
-								} else if (nextLine === "---") {
+									if (item) (templateValues[key] as string[]).push(item);
+								} else if (nextLine === "---" || (nextLine && !nextLine.startsWith("- ") && nextLine.includes(":"))) {
+									// Stop at next property or end of frontmatter
 									break;
 								}
 							}
 						}
 					} else {
-						templateValues[key] = [ (value || "").replace(/\{\{title\}\}/g, title).replace(/\{\{date\}\}/g, window.moment(new Date()).format(this.settings.dateFormat)) ];
+						// This is a string property, not an array
+						const stringValue = (value || "").replace(/\{\{title\}\}/g, title).replace(/\{\{date\}\}/g, window.moment(new Date()).format(this.settings.dateFormat));
+						// Store as a single string value, not in an array
+						templateValues[key] = stringValue;
 					}
 				}
 			}
@@ -119,10 +144,14 @@ export class TemplateParser {
 		return { templateProps, templateValues };
 	}
 
-	buildFrontmatterContent(finalProps: Record<string, string[]>): string {
+	buildFrontmatterContent(finalProps: Record<string, string[]>, arrayKeys?: Set<string>): string {
 		let newContent = "---\n";
 		for (const key in finalProps) {
-			if (KNOWN_ARRAY_KEYS.includes(key as any)) {
+			// Check if this is an array property
+			const isArrayProperty = KNOWN_ARRAY_KEYS.includes(key as any) || 
+				(arrayKeys && arrayKeys.has(key));
+			
+			if (isArrayProperty) {
 				newContent += `${key}:\n`;
 				if (finalProps[key].length > 0) {
 					finalProps[key].forEach(item => {
@@ -137,7 +166,7 @@ export class TemplateParser {
 		return newContent;
 	}
 
-	async updateTitleInFrontmatter(file: TFile, newTitle: string, type: PostType): Promise<void> {
+	async updateTitleInFrontmatter(file: TFile, newTitle: string, type: PostType | string): Promise<void> {
 		const titleKey = this.getTitleKey(type);
 		const content = await this.app.vault.read(file);
 		let propertiesEnd = 0;
@@ -157,18 +186,25 @@ export class TemplateParser {
 		const existing: Record<string, any> = {};
 		let currentKey: string | null = null;
 
+		const arrayKeys = new Set<string>(); // Track which keys are arrays
+		
 		propertiesText.split("\n").forEach((line) => {
 			const match = line.match(/^(\w+):\s*(.+)?$/);
 			if (match) {
 				const [, key, value] = match;
 				propOrder.push(key);
 				currentKey = key;
-				if (KNOWN_ARRAY_KEYS.includes(key as any)) {
+				const isKnownArrayKey = KNOWN_ARRAY_KEYS.includes(key as any);
+				const isEmptyArray = !value || value.trim() === "" || value.trim() === "[]";
+				const isArrayProperty = isKnownArrayKey || isEmptyArray;
+				
+				if (isArrayProperty) {
 					existing[key] = [];
+					arrayKeys.add(key); // Mark this key as an array
 				} else {
 					existing[key] = value ? value.trim() : "";
 				}
-			} else if (currentKey && KNOWN_ARRAY_KEYS.includes(currentKey as any) && line.trim().startsWith("- ")) {
+			} else if (currentKey && arrayKeys.has(currentKey) && line.trim().startsWith("- ")) {
 				const item = line.trim().replace(/^-\s*/, "");
 				if (item) (existing[currentKey] as string[]).push(item);
 			}
@@ -204,8 +240,17 @@ export class TemplateParser {
 		await this.app.vault.modify(file, newContent);
 	}
 
-	private getTitleKey(type: PostType): string {
-		const template = type === "post" ? this.settings.defaultTemplate : this.settings.pageTemplate;
+	private getTitleKey(type: PostType | string): string {
+		let template: string;
+		
+		if (this.isCustomContentType(type)) {
+			const customType = this.getCustomContentType(type);
+			if (!customType) return "title";
+			template = customType.template;
+		} else {
+			template = type === "post" ? this.settings.defaultTemplate : this.settings.pageTemplate;
+		}
+		
 		const lines = template.split("\n");
 		let inProperties = false;
 		for (const line of lines) {
@@ -226,5 +271,13 @@ export class TemplateParser {
 			}
 		}
 		return "title";
+	}
+
+	private isCustomContentType(type: PostType | string): boolean {
+		return type !== "post" && type !== "page";
+	}
+
+	private getCustomContentType(typeId: string): CustomContentType | null {
+		return this.settings.customContentTypes.find(ct => ct.id === typeId) || null;
 	}
 }

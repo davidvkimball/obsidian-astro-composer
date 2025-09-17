@@ -47,7 +47,8 @@ export default class AstroComposerPlugin extends Plugin {
 			this.app.vault.off("create", this.createEvent as any);
 		}
 
-		if (this.settings.automatePostCreation || this.settings.enablePages) {
+		const hasCustomContentTypes = this.settings.customContentTypes.some(ct => ct.enabled);
+		if (this.settings.automatePostCreation || this.settings.enablePages || hasCustomContentTypes) {
 			// Debounce to prevent multiple modals from rapid file creations
 			let lastProcessedTime = 0;
 
@@ -75,14 +76,26 @@ export default class AstroComposerPlugin extends Plugin {
 					const postsFolder = this.settings.postsFolder || "";
 					const pagesFolder = this.settings.enablePages ? (this.settings.pagesFolder || "") : "";
 					let isPage = false;
+					let customTypeId: string | null = null;
 
-					if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
+					// Check custom content types first
+					for (const customType of this.settings.customContentTypes) {
+						if (customType.enabled && customType.folder && 
+							(filePath.startsWith(customType.folder + "/") || filePath === customType.folder)) {
+							customTypeId = customType.id;
+							break;
+						}
+					}
+
+					if (!customTypeId && pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
 						isPage = true;
 					}
 
 					const cache = this.app.metadataCache.getFileCache(file);
 					if (!cache || !cache.sections || cache.sections.length === 0) {
-						if (isPage) {
+						if (customTypeId) {
+							new TitleModal(this.app, file, this, customTypeId).open();
+						} else if (isPage) {
 							if (this.settings.enablePages) {
 								new TitleModal(this.app, file, this, "page").open();
 							}
@@ -95,12 +108,18 @@ export default class AstroComposerPlugin extends Plugin {
 									new TitleModal(this.app, file, this, "post").open();
 								}
 							} else {
-				let excludedDirs = this.settings.excludedDirectories
+								let excludedDirs = this.settings.excludedDirectories
 					.split("|")
 					.map((dir: string) => dir.trim())
 					.filter((dir: string) => dir.length > 0);
 								if (pagesFolder) {
 									excludedDirs.push(pagesFolder);
+								}
+								// Add custom content type folders to excluded directories
+								for (const customType of this.settings.customContentTypes) {
+									if (customType.enabled && customType.folder) {
+										excludedDirs.push(customType.folder);
+									}
 								}
 								const isExcluded = excludedDirs.some((dir: string) =>
 									filePath.startsWith(dir + "/") || filePath === dir

@@ -1,19 +1,19 @@
 import { App, Modal, TFile, Notice } from "obsidian";
 import { Plugin } from "obsidian";
-import { PostType } from "../types";
+import { PostType, CustomContentType } from "../types";
 import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
 
 export class TitleModal extends Modal {
 	file: TFile;
 	plugin: Plugin;
-	type: PostType;
+	type: PostType | string;
 	isRename: boolean;
 	titleInput!: HTMLInputElement;
 	private fileOps: FileOperations;
 	private templateParser: TemplateParser;
 
-	constructor(app: App, file: TFile, plugin: Plugin, type: PostType = "post", isRename: boolean = false) {
+	constructor(app: App, file: TFile, plugin: Plugin, type: PostType | string = "post", isRename: boolean = false) {
 		super(app);
 		this.file = file;
 		this.plugin = plugin;
@@ -58,11 +58,12 @@ export class TitleModal extends Modal {
 			});
 			this.titleInput.value = this.getCurrentTitle();
 		} else {
-			contentEl.createEl("h2", { text: this.type === "post" ? "New Blog Post" : "New Page" });
-			contentEl.createEl("p", { text: `Enter a title for your ${this.type}:` });
+			const typeName = this.getTypeDisplayName();
+			contentEl.createEl("h2", { text: `New ${typeName}` });
+			contentEl.createEl("p", { text: `Enter a title for your ${typeName.toLowerCase()}:` });
 			this.titleInput = contentEl.createEl("input", {
 				type: "text",
-				placeholder: this.type === "post" ? "My Awesome Blog Post" : "My Awesome Page",
+				placeholder: `My Awesome ${typeName}`,
 				cls: "astro-composer-title-input"
 			});
 		}
@@ -111,11 +112,26 @@ export class TitleModal extends Modal {
 		this.close();
 	}
 
-	private async addPropertiesToFile(file: TFile, title: string, type: PostType = "post") {
+	private getTypeDisplayName(): string {
+		if (this.fileOps.isCustomContentType(this.type)) {
+			const customType = this.fileOps.getCustomContentType(this.type);
+			return customType ? customType.name : "Content";
+		}
+		return this.type === "post" ? "Blog Post" : "Page";
+	}
+
+	private async addPropertiesToFile(file: TFile, title: string, type: PostType | string = "post") {
 		const now = new Date();
 		const dateString = window.moment(now).format((this.plugin as any).settings.dateFormat);
 
-		let template = type === "post" ? (this.plugin as any).settings.defaultTemplate : (this.plugin as any).settings.pageTemplate;
+		let template: string;
+		if (this.fileOps.isCustomContentType(type)) {
+			const customType = this.fileOps.getCustomContentType(type);
+			template = customType ? customType.template : (this.plugin as any).settings.defaultTemplate;
+		} else {
+			template = type === "post" ? (this.plugin as any).settings.defaultTemplate : (this.plugin as any).settings.pageTemplate;
+		}
+		
 		template = template.replace(/\{\{title\}\}/g, title);
 		template = template.replace(/\{\{date\}\}/g, dateString);
 

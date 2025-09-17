@@ -22,4 +22,5 @@ export const DEFAULT_SETTINGS: AstroComposerSettings = {
 		'---\ntitle: "{{title}}"\ndescription: ""\n---\n',
 	enableCopyHeadingLink: true,
 	copyHeadingLinkFormat: "obsidian",
+	customContentTypes: [],
 };

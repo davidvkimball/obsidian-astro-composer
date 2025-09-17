@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import { Plugin } from "obsidian";
-import { AstroComposerSettings } from "../types";
+import { AstroComposerSettings, CustomContentType } from "../types";
 
 export class AstroComposerSettingTab extends PluginSettingTab {
 	plugin: Plugin;
@@ -14,6 +14,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	autoInsertContainer: HTMLElement | null = null;
 	pagesFieldsContainer: HTMLElement | null = null;
 	copyHeadingContainer: HTMLElement | null = null;
+	customContentTypesContainer: HTMLElement | null = null;
 
 	constructor(app: App, plugin: Plugin) {
 		super(app, plugin);
@@ -284,6 +285,21 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					"The 'standardize properties' command ignores anything below the second '---' line.";
 			});
 
+		// Custom Content Types Section
+		new Setting(containerEl)
+			.setName("Custom Content Types")
+			.setDesc("Create additional content types with their own templates and folder locations.")
+			.addButton((button) => {
+				button
+					.setButtonText("Add Custom Content Type")
+					.setCta()
+					.onClick(() => {
+						this.addCustomContentType();
+					});
+			});
+
+		this.customContentTypesContainer = containerEl.createDiv({ cls: "custom-content-types-container" });
+		this.renderCustomContentTypes();
 
 		this.updateConditionalFields();
 		this.updateIndexFileField();
@@ -325,5 +341,134 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			const settings = (this.plugin as any).settings as AstroComposerSettings;
 			this.copyHeadingContainer.style.display = settings.enableCopyHeadingLink ? "block" : "none";
 		}
+	}
+
+	private addCustomContentType() {
+		const settings = (this.plugin as any).settings as AstroComposerSettings;
+		const newType: CustomContentType = {
+			id: `custom-${Date.now()}`,
+			name: `Custom ${settings.customContentTypes.length + 1}`,
+			folder: "",
+			template: '---\ntitle: "{{title}}"\ndate: {{date}}\n---\n',
+			enabled: true
+		};
+		settings.customContentTypes.push(newType);
+		(this.plugin as any).saveSettings();
+		this.renderCustomContentTypes();
+		(this.plugin as any).registerCreateEvent();
+	}
+
+	private renderCustomContentTypes() {
+		if (!this.customContentTypesContainer) return;
+		
+		this.customContentTypesContainer.empty();
+		const settings = (this.plugin as any).settings as AstroComposerSettings;
+
+		settings.customContentTypes.forEach((customType, index) => {
+			const typeContainer = this.customContentTypesContainer!.createDiv({ 
+				cls: "custom-content-type-item",
+				attr: { "data-type-id": customType.id }
+			});
+
+			// Header with name and controls
+			const header = typeContainer.createDiv({ cls: "custom-content-type-header" });
+			
+			new Setting(header)
+				.setName(`Custom ${index + 1}`)
+				.addToggle((toggle) => {
+					toggle
+						.setValue(customType.enabled)
+						.onChange(async (value: boolean) => {
+							customType.enabled = value;
+							await (this.plugin as any).saveSettings();
+							(this.plugin as any).registerCreateEvent();
+							this.updateCustomContentTypeVisibility(customType.id, value);
+						});
+				})
+				.addButton((button) => {
+					button
+						.setButtonText("Remove")
+						.setWarning()
+						.onClick(() => {
+							this.removeCustomContentType(customType.id);
+						});
+				});
+
+			// Settings container that can be collapsed
+			const settingsContainer = typeContainer.createDiv({ 
+				cls: "custom-content-type-settings",
+				attr: { "data-type-id": customType.id }
+			});
+
+			// Content type name
+			new Setting(settingsContainer)
+				.setName("Content Type Name")
+				.setDesc("Display name for this content type (e.g., 'Projects', 'Notes', 'Tutorials')")
+				.addText((text) => {
+					text
+						.setPlaceholder("Enter content type name")
+						.setValue(customType.name)
+						.onChange(async (value: string) => {
+							customType.name = value;
+							await (this.plugin as any).saveSettings();
+						});
+				});
+
+			// Folder location
+			new Setting(settingsContainer)
+				.setName("Folder Location")
+				.setDesc("Folder path where this content type will be created (e.g., 'projects', 'notes/tutorials')")
+				.addText((text) => {
+					text
+						.setPlaceholder("Enter folder path")
+						.setValue(customType.folder)
+						.onChange(async (value: string) => {
+							customType.folder = value;
+							await (this.plugin as any).saveSettings();
+							(this.plugin as any).registerCreateEvent();
+						});
+				});
+
+			// Template
+			new Setting(settingsContainer)
+				.setName("Properties Template")
+				.addTextArea((text) => {
+					text
+						.setPlaceholder('---\ntitle: "{{title}}"\ndate: {{date}}\n---\n')
+						.setValue(customType.template)
+						.onChange(async (value: string) => {
+							customType.template = value;
+							await (this.plugin as any).saveSettings();
+						});
+					text.inputEl.classList.add("astro-composer-template-textarea");
+					return text;
+				})
+				.then((setting) => {
+					setting.descEl.empty();
+					const descDiv = setting.descEl.createEl("div");
+					descDiv.innerHTML = 
+						"Template for new files of this content type.<br />" +
+						"Variables include {{title}} and {{date}}.<br />" +
+						"Do not wrap {{date}} in quotes as it represents a datetime value, not a string.";
+				});
+
+			// Set initial visibility
+			this.updateCustomContentTypeVisibility(customType.id, customType.enabled);
+		});
+	}
+
+	private updateCustomContentTypeVisibility(typeId: string, enabled: boolean) {
+		const settingsContainer = this.customContentTypesContainer?.querySelector(`[data-type-id="${typeId}"].custom-content-type-settings`) as HTMLElement;
+		if (settingsContainer) {
+			settingsContainer.style.display = enabled ? "block" : "none";
+		}
+	}
+
+	private removeCustomContentType(typeId: string) {
+		const settings = (this.plugin as any).settings as AstroComposerSettings;
+		settings.customContentTypes = settings.customContentTypes.filter(ct => ct.id !== typeId);
+		(this.plugin as any).saveSettings();
+		this.renderCustomContentTypes();
+		(this.plugin as any).registerCreateEvent();
 	}
 }

@@ -1,5 +1,5 @@
 import { App, TFile, TFolder, Notice } from "obsidian";
-import { AstroComposerSettings, PostType, FileCreationOptions, RenameOptions } from "../types";
+import { AstroComposerSettings, PostType, FileCreationOptions, RenameOptions, CustomContentType } from "../types";
 
 export class FileOperations {
 	constructor(private app: App, private settings: AstroComposerSettings) {}
@@ -14,15 +14,42 @@ export class FileOperations {
 			.replace(/^-|-$/g, "");
 	}
 
-	determineType(file: TFile): PostType {
+	determineType(file: TFile): PostType | string {
 		const filePath = file.path;
+		
+		// Check custom content types first
+		for (const customType of this.settings.customContentTypes) {
+			if (customType.enabled && customType.folder && 
+				(filePath.startsWith(customType.folder + "/") || filePath === customType.folder)) {
+				return customType.id;
+			}
+		}
+		
+		// Check pages
 		const pagesFolder = this.settings.pagesFolder || "";
 		const isPage = this.settings.enablePages && pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder);
 		return isPage ? "page" : "post";
 	}
 
-	getTitleKey(type: PostType): string {
-		const template = type === "post" ? this.settings.defaultTemplate : this.settings.pageTemplate;
+	getCustomContentType(typeId: string): CustomContentType | null {
+		return this.settings.customContentTypes.find(ct => ct.id === typeId) || null;
+	}
+
+	isCustomContentType(type: PostType | string): boolean {
+		return type !== "post" && type !== "page";
+	}
+
+	getTitleKey(type: PostType | string): string {
+		let template: string;
+		
+		if (this.isCustomContentType(type)) {
+			const customType = this.getCustomContentType(type);
+			if (!customType) return "title";
+			template = customType.template;
+		} else {
+			template = type === "post" ? this.settings.defaultTemplate : this.settings.pageTemplate;
+		}
+		
 		const lines = template.split("\n");
 		let inProperties = false;
 		for (const line of lines) {
@@ -56,7 +83,14 @@ export class FileOperations {
 		const kebabTitle = this.toKebabCase(title);
 		const prefix = this.settings.enableUnderscorePrefix ? "_" : "";
 
-		let targetFolder = type === "post" ? this.settings.postsFolder || "" : this.settings.pagesFolder || "";
+		let targetFolder = "";
+		if (this.isCustomContentType(type)) {
+			const customType = this.getCustomContentType(type);
+			targetFolder = customType ? customType.folder : "";
+		} else {
+			targetFolder = type === "post" ? this.settings.postsFolder || "" : this.settings.pagesFolder || "";
+		}
+		
 		if (targetFolder) {
 			const folder = this.app.vault.getAbstractFileByPath(targetFolder);
 			if (!(folder instanceof TFolder)) {
@@ -71,7 +105,7 @@ export class FileOperations {
 		}
 	}
 
-	private async createFolderStructure(file: TFile, kebabTitle: string, prefix: string, targetFolder: string, type: PostType): Promise<TFile | null> {
+	private async createFolderStructure(file: TFile, kebabTitle: string, prefix: string, targetFolder: string, type: PostType | string): Promise<TFile | null> {
 		const folderName = `${prefix}${kebabTitle}`;
 		const folderPath = targetFolder ? `${targetFolder}/${folderName}` : folderName;
 
@@ -165,7 +199,7 @@ export class FileOperations {
 		}
 	}
 
-	private async renameFolderStructure(file: TFile, kebabTitle: string, prefix: string, type: PostType): Promise<TFile | null> {
+	private async renameFolderStructure(file: TFile, kebabTitle: string, prefix: string, type: PostType | string): Promise<TFile | null> {
 		const isIndex = file.basename === this.settings.indexFileName;
 		if (isIndex) {
 			if (!file.parent) {

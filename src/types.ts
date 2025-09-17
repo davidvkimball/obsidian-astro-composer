@@ -17,6 +17,7 @@ export interface AstroComposerSettings {
 	pageTemplate: string;
 	enableCopyHeadingLink: boolean;
 	copyHeadingLinkFormat: "obsidian" | "astro";
+	customContentTypes: CustomContentType[];
 }
 
 export interface ParsedFrontmatter {
@@ -27,21 +28,29 @@ export interface ParsedFrontmatter {
 }
 
 export interface TemplateValues {
-	[key: string]: string[];
+	[key: string]: string[] | string;
 }
 
 export type PostType = "post" | "page";
 
+export interface CustomContentType {
+	id: string;
+	name: string;
+	folder: string;
+	template: string;
+	enabled: boolean;
+}
+
 export interface FileCreationOptions {
 	file: TFile;
 	title: string;
-	type: PostType;
+	type: PostType | string; // string for custom content types
 }
 
 export interface RenameOptions {
 	file: TFile;
 	title: string;
-	type: PostType;
+	type: PostType | string; // string for custom content types
 }
 
 export const KNOWN_ARRAY_KEYS = ['tags', 'aliases', 'cssclasses'] as const;
