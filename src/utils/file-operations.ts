@@ -185,7 +185,7 @@ export class FileOperations {
 		const { file, title, type } = options;
 		
 		if (!title) {
-			new Notice(`Title is required to rename the note.`);
+			new Notice(`Title is required to rename the content.`);
 			return null;
 		}
 
@@ -259,6 +259,36 @@ export class FileOperations {
 			new Notice("Cannot rename: File has no parent folder.");
 			return null;
 		}
+		
+		// Check if this is an index file - if so, rename the parent folder instead
+		const isIndex = file.basename === this.settings.indexFileName;
+		if (isIndex) {
+			prefix = file.parent.name.startsWith("_") ? "_" : "";
+			const newFolderName = `${prefix}${kebabTitle}`;
+			const parentFolder = file.parent.parent;
+			if (!parentFolder) {
+				new Notice("Cannot rename: Parent folder has no parent.");
+				return null;
+			}
+			const newFolderPath = `${parentFolder.path}/${newFolderName}`;
+
+			const existingFolder = this.app.vault.getAbstractFileByPath(newFolderPath);
+			if (existingFolder instanceof TFolder) {
+				new Notice(`Folder already exists at ${newFolderPath}.`);
+				return null;
+			}
+
+			await this.app.vault.rename(file.parent, newFolderPath);
+			const newFilePath = `${newFolderPath}/${file.name}`;
+			const newFile = this.app.vault.getAbstractFileByPath(newFilePath);
+			if (!(newFile instanceof TFile)) {
+				new Notice("Failed to locate renamed file.");
+				return null;
+			}
+			return newFile;
+		}
+		
+		// For non-index files, rename the file itself
 		prefix = file.basename.startsWith("_") ? "_" : "";
 		const newName = `${prefix}${kebabTitle}.md`;
 		const newPath = `${file.parent.path}/${newName}`;

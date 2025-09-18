@@ -24,7 +24,10 @@ export class TemplateParser {
 				const arrayKeys = new Set<string>(); // Track which keys are arrays
 				
 				propertiesText.split("\n").forEach((line) => {
-					const match = line.match(/^(\w+):\s*(.+)?$/);
+					const trimmedLine = line.trim();
+					
+					// Match property lines - more flexible regex to handle various property names
+					const match = trimmedLine.match(/^([a-zA-Z_][a-zA-Z0-9_-]*):\s*(.*)$/);
 					if (match) {
 						const [, key, value] = match;
 						currentKey = key;
@@ -38,22 +41,22 @@ export class TemplateParser {
 						} else {
 							existingProperties[key] = [value ? value.trim() : ""];
 						}
-					} else if (currentKey && line.trim().startsWith("- ")) {
+					} else if (currentKey && trimmedLine.startsWith("- ")) {
 						// Check if current key is an array property
 						const isArrayProperty = arrayKeys.has(currentKey);
 						
 						if (isArrayProperty) {
-							const item = line.trim().replace(/^-\s*/, "");
+							const item = trimmedLine.replace(/^-\s*/, "");
 							if (item) existingProperties[currentKey].push(item);
 						}
-					} else if (line.trim() && !line.trim().startsWith("- ")) {
-						// Handle unrecognized properties
-						const keyMatch = line.match(/^(\w+):/);
+					} else if (trimmedLine && !trimmedLine.startsWith("- ") && !trimmedLine.startsWith("#")) {
+						// Handle unrecognized properties that don't match the standard format
+						// This is a fallback to preserve properties that might have special formatting
+						const keyMatch = trimmedLine.match(/^([^:]+):\s*(.*)$/);
 						if (keyMatch) {
-							const key = keyMatch[1];
-							const value = line.slice(line.indexOf(":") + 1).trim();
+							const [, key, value] = keyMatch;
 							if (!existingProperties[key]) {
-								existingProperties[key] = [value || ""];
+								existingProperties[key] = [value ? value.trim() : ""];
 							}
 						}
 					}
@@ -190,7 +193,10 @@ export class TemplateParser {
 		const arrayKeys = new Set<string>(); // Track which keys are arrays
 		
 		propertiesText.split("\n").forEach((line, index) => {
-			const match = line.match(/^(\w+):\s*(.+)?$/);
+			const trimmedLine = line.trim();
+			
+			// Match property lines - more flexible regex to handle various property names
+			const match = trimmedLine.match(/^([a-zA-Z_][a-zA-Z0-9_-]*):\s*(.*)$/);
 			if (match) {
 				const [, key, value] = match;
 				propOrder.push(key);
@@ -211,9 +217,21 @@ export class TemplateParser {
 				} else {
 					existing[key] = value ? value.trim() : "";
 				}
-			} else if (currentKey && arrayKeys.has(currentKey) && line.trim().startsWith("- ")) {
-				const item = line.trim().replace(/^-\s*/, "");
+			} else if (currentKey && arrayKeys.has(currentKey) && trimmedLine.startsWith("- ")) {
+				// Handle array items
+				const item = trimmedLine.replace(/^-\s*/, "");
 				if (item) (existing[currentKey] as string[]).push(item);
+			} else if (trimmedLine && !trimmedLine.startsWith("- ") && !trimmedLine.startsWith("#")) {
+				// Handle unrecognized properties that don't match the standard format
+				// This is a fallback to preserve properties that might have special formatting
+				const keyMatch = trimmedLine.match(/^([^:]+):\s*(.*)$/);
+				if (keyMatch) {
+					const [, key, value] = keyMatch;
+					if (!propOrder.includes(key)) {
+						propOrder.push(key);
+						existing[key] = value ? value.trim() : "";
+					}
+				}
 			}
 		});
 
@@ -223,9 +241,11 @@ export class TemplateParser {
 
 		// If title key was found in original frontmatter, preserve its position
 		// Otherwise, add it at the end
-		if (titleKeyPosition === -1 && !propOrder.includes(titleKey)) {
+		if (titleKeyPosition === -1) {
+			// Title key not found in original frontmatter, add it at the end
 			propOrder.push(titleKey);
 		}
+		// If titleKeyPosition >= 0, the title key is already in propOrder at the correct position
 
 		let newContent = "---\n";
 		for (const key of propOrder) {

@@ -10,6 +10,36 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 	const templateParser = new TemplateParser(plugin.app, settings);
 	const linkConverter = new LinkConverter(settings);
 
+	// Helper function to check if a file matches any configured content type
+	function hasMatchingContentType(file: TFile, settings: AstroComposerSettings): boolean {
+		const filePath = file.path;
+		const postsFolder = settings.postsFolder || "";
+		const pagesFolder = settings.enablePages ? (settings.pagesFolder || "") : "";
+		
+		// Check if it's a post
+		if (settings.automatePostCreation && postsFolder && 
+			(filePath.startsWith(postsFolder + "/") || filePath === postsFolder)) {
+			return true;
+		}
+		
+		// Check if it's a page
+		if (settings.enablePages && pagesFolder && 
+			(filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
+			return true;
+		}
+		
+		// Check if it's a custom content type
+		const type = fileOps.determineType(file);
+		if (fileOps.isCustomContentType(type)) {
+			const customType = fileOps.getCustomContentType(type);
+			if (customType && customType.enabled) {
+				return true;
+			}
+		}
+		
+		return false;
+	}
+
 	// Standardize Properties command
 	plugin.addCommand({
 		id: "standardize-properties",
@@ -34,13 +64,19 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		},
 	});
 
-	// Rename Note command
+	// Rename Content command
 	plugin.addCommand({
-		id: "rename-note",
-		name: "Rename Current Note",
+		id: "rename-content",
+		name: "Rename Current Content",
 		icon: "pencil",
 		editorCallback: (editor: Editor, ctx: MarkdownView | any) => {
 			if (ctx.file instanceof TFile) {
+				// Check if this file matches any configured content type
+				if (!hasMatchingContentType(ctx.file, settings)) {
+					new Notice("Cannot rename: This file doesn't match any configured content type folders.");
+					return;
+				}
+				
 				const type = fileOps.determineType(ctx.file);
 				const titleKey = fileOps.getTitleKey(type);
 				const cache = plugin.app.metadataCache.getFileCache(ctx.file);
@@ -91,7 +127,7 @@ async function standardizeProperties(app: any, settings: AstroComposerSettings, 
 	
 	// If no content type matches, show notification and return
 	if (!hasMatchingContentType) {
-		new Notice("No properties template specified for this note. This file doesn't match any configured content type folders.");
+		new Notice("No properties template specified for this content. This file doesn't match any configured content type folders.");
 		return;
 	}
 	

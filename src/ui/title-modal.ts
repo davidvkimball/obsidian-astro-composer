@@ -49,11 +49,20 @@ export class TitleModal extends Modal {
 		contentEl.empty();
 
 		if (this.isRename) {
-			contentEl.createEl("h2", { text: "Rename Note" });
-			contentEl.createEl("p", { text: "Enter new title for your note:" });
+			const typeName = this.getTypeDisplayName();
+			const isCustomType = this.fileOps.isCustomContentType(this.type);
+			
+			if (isCustomType) {
+				contentEl.createEl("h2", { text: `Rename Custom Type: ${typeName}` });
+				contentEl.createEl("p", { text: "Enter a new title for this content type:" });
+			} else {
+				contentEl.createEl("h2", { text: `Rename ${typeName}` });
+				contentEl.createEl("p", { text: `Enter new title for your ${typeName.toLowerCase()}:` });
+			}
+			
 			this.titleInput = contentEl.createEl("input", {
 				type: "text",
-				placeholder: "My Renamed Note",
+				placeholder: `My Renamed ${typeName}`,
 				cls: "astro-composer-title-input"
 			});
 			this.titleInput.value = this.getCurrentTitle();
@@ -103,7 +112,7 @@ export class TitleModal extends Modal {
 				}
 			}
 			if (!newFile) {
-				throw new Error("Failed to process the note.");
+				throw new Error("Failed to process the content.");
 			}
 		} catch (error) {
 			new Notice(`Error ${this.isRename ? "renaming" : "creating"} ${this.type}: ${(error as Error).message}.`);
