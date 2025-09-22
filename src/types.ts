@@ -61,3 +61,9 @@ export const CONSTANTS = {
 	EDITOR_STABILIZE_DELAY: 100,
 	FILE_EXPLORER_REVEAL_DELAY: 200,
 } as const;
+
+export interface AstroComposerPluginInterface {
+	settings: AstroComposerSettings;
+	saveSettings(): Promise<void>;
+	registerCreateEvent(): void;
+}

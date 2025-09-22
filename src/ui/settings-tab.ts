@@ -1,9 +1,9 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import { Plugin } from "obsidian";
-import { AstroComposerSettings, CustomContentType } from "../types";
+import { AstroComposerSettings, CustomContentType, AstroComposerPluginInterface } from "../types";
 
 export class AstroComposerSettingTab extends PluginSettingTab {
-	plugin: Plugin;
+	plugin: AstroComposerPluginInterface;
 	autoRenameContainer: HTMLElement | null = null;
 	postsFolderContainer: HTMLElement | null = null;
 	onlyAutomateContainer: HTMLElement | null = null;
@@ -18,14 +18,14 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 	constructor(app: App, plugin: Plugin) {
 		super(app, plugin);
-		this.plugin = plugin;
+		this.plugin = plugin as unknown as AstroComposerPluginInterface;
 	}
 
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		const settings = (this.plugin as any).settings as AstroComposerSettings;
+		const settings = this.plugin.settings;
 
 		new Setting(containerEl)
 			.setName("Automate post creation")
@@ -36,8 +36,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.onChange(async (value: boolean) => {
 						settings.automatePostCreation = value;
 						settings.autoInsertProperties = value;
-						await (this.plugin as any).saveSettings();
-						(this.plugin as any).registerCreateEvent();
+						await this.plugin.saveSettings();
+						this.plugin.registerCreateEvent();
 						this.updateConditionalFields();
 					})
 			);
@@ -55,7 +55,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.setDisabled(!settings.automatePostCreation)
 					.onChange(async (value: boolean) => {
 						settings.autoInsertProperties = value;
-						await (this.plugin as any).saveSettings();
+						await this.plugin.saveSettings();
 					})
 			);
 
@@ -69,7 +69,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(settings.postsFolder)
 					.onChange(async (value: string) => {
 						settings.postsFolder = value;
-						await (this.plugin as any).saveSettings();
+						await this.plugin.saveSettings();
 					})
 			);
 
@@ -82,7 +82,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(settings.onlyAutomateInPostsFolder)
 					.onChange(async (value: boolean) => {
 						settings.onlyAutomateInPostsFolder = value;
-						await (this.plugin as any).saveSettings();
+						await this.plugin.saveSettings();
 						this.updateExcludedDirsField();
 					})
 			);
@@ -99,7 +99,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(settings.excludedDirectories)
 					.onChange(async (value: string) => {
 						settings.excludedDirectories = value;
-						await (this.plugin as any).saveSettings();
+						await this.plugin.saveSettings();
 					})
 			);
 
@@ -114,7 +114,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(settings.creationMode)
 					.onChange(async (value: string) => {
 						settings.creationMode = value as "file" | "folder";
-						await (this.plugin as any).saveSettings();
+						await this.plugin.saveSettings();
 						this.updateIndexFileField();
 					})
 			);
@@ -131,7 +131,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(settings.indexFileName)
 					.onChange(async (value: string) => {
 						settings.indexFileName = value || "index";
-						await (this.plugin as any).saveSettings();
+						await this.plugin.saveSettings();
 					})
 			);
 
@@ -144,7 +144,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(settings.enableUnderscorePrefix)
 					.onChange(async (value: boolean) => {
 						settings.enableUnderscorePrefix = value;
-						await (this.plugin as any).saveSettings();
+						await this.plugin.saveSettings();
 					})
 			);
 
@@ -157,7 +157,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(settings.linkBasePath)
 					.onChange(async (value: string) => {
 						settings.linkBasePath = value;
-						await (this.plugin as any).saveSettings();
+						await this.plugin.saveSettings();
 					})
 			);
 
@@ -170,7 +170,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(settings.enableCopyHeadingLink)
 					.onChange(async (value: boolean) => {
 						settings.enableCopyHeadingLink = value;
-						await (this.plugin as any).saveSettings();
+						await this.plugin.saveSettings();
 						this.updateCopyHeadingFields();
 					})
 			);
@@ -188,7 +188,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(settings.copyHeadingLinkFormat)
 					.onChange(async (value: string) => {
 						settings.copyHeadingLinkFormat = value as "obsidian" | "astro";
-						await (this.plugin as any).saveSettings();
+						await this.plugin.saveSettings();
 					})
 			);
 
@@ -201,7 +201,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(settings.dateFormat)
 					.onChange(async (value: string) => {
 						settings.dateFormat = value || "YYYY-MM-DD";
-						await (this.plugin as any).saveSettings();
+						await this.plugin.saveSettings();
 					})
 			);
 
@@ -215,7 +215,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(settings.defaultTemplate)
 					.onChange(async (value: string) => {
 						settings.defaultTemplate = value;
-						await (this.plugin as any).saveSettings();
+						await this.plugin.saveSettings();
 					});
 				text.inputEl.classList.add("astro-composer-template-textarea");
 				return text;
@@ -238,8 +238,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(settings.enablePages)
 					.onChange(async (value: boolean) => {
 						settings.enablePages = value;
-						await (this.plugin as any).saveSettings();
-						(this.plugin as any).registerCreateEvent();
+						await this.plugin.saveSettings();
+						this.plugin.registerCreateEvent();
 						this.updatePagesFields();
 					})
 			);
@@ -256,7 +256,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(settings.pagesFolder)
 					.onChange(async (value: string) => {
 						settings.pagesFolder = value;
-						await (this.plugin as any).saveSettings();
+						await this.plugin.saveSettings();
 					})
 			);
 
@@ -270,7 +270,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(settings.pageTemplate)
 					.onChange(async (value: string) => {
 						settings.pageTemplate = value;
-						await (this.plugin as any).saveSettings();
+						await this.plugin.saveSettings();
 					});
 				text.inputEl.classList.add("astro-composer-template-textarea");
 				return text;
@@ -310,41 +310,41 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 	updateConditionalFields() {
 		if (this.autoRenameContainer) {
-			const settings = (this.plugin as any).settings as AstroComposerSettings;
+			const settings = this.plugin.settings;
 			this.autoRenameContainer.style.display = settings.automatePostCreation ? "block" : "none";
 		}
 	}
 
 	updateIndexFileField() {
 		if (this.indexFileContainer) {
-			const settings = (this.plugin as any).settings as AstroComposerSettings;
+			const settings = this.plugin.settings;
 			this.indexFileContainer.style.display = settings.creationMode === "folder" ? "block" : "none";
 		}
 	}
 
 	updateExcludedDirsField() {
 		if (this.excludedDirsContainer) {
-			const settings = (this.plugin as any).settings as AstroComposerSettings;
+			const settings = this.plugin.settings;
 			this.excludedDirsContainer.style.display = !settings.onlyAutomateInPostsFolder ? "block" : "none";
 		}
 	}
 
 	updatePagesFields() {
 		if (this.pagesFieldsContainer) {
-			const settings = (this.plugin as any).settings as AstroComposerSettings;
+			const settings = this.plugin.settings;
 			this.pagesFieldsContainer.style.display = settings.enablePages ? "block" : "none";
 		}
 	}
 
 	updateCopyHeadingFields() {
 		if (this.copyHeadingContainer) {
-			const settings = (this.plugin as any).settings as AstroComposerSettings;
+			const settings = this.plugin.settings;
 			this.copyHeadingContainer.style.display = settings.enableCopyHeadingLink ? "block" : "none";
 		}
 	}
 
 	private addCustomContentType() {
-		const settings = (this.plugin as any).settings as AstroComposerSettings;
+		const settings = this.plugin.settings;
 		const newType: CustomContentType = {
 			id: `custom-${Date.now()}`,
 			name: `Custom ${settings.customContentTypes.length + 1}`,
@@ -353,18 +353,18 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			enabled: true
 		};
 		settings.customContentTypes.push(newType);
-		(this.plugin as any).saveSettings();
+		this.plugin.saveSettings();
 		this.renderCustomContentTypes();
-		(this.plugin as any).registerCreateEvent();
+		this.plugin.registerCreateEvent();
 	}
 
 	private renderCustomContentTypes() {
 		if (!this.customContentTypesContainer) return;
 		
 		this.customContentTypesContainer.empty();
-		const settings = (this.plugin as any).settings as AstroComposerSettings;
+		const settings = this.plugin.settings;
 
-		settings.customContentTypes.forEach((customType, index) => {
+		settings.customContentTypes.forEach((customType: CustomContentType, index: number) => {
 			const typeContainer = this.customContentTypesContainer!.createDiv({ 
 				cls: "custom-content-type-item",
 				attr: { "data-type-id": customType.id }
@@ -380,8 +380,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						.setValue(customType.enabled)
 						.onChange(async (value: boolean) => {
 							customType.enabled = value;
-							await (this.plugin as any).saveSettings();
-							(this.plugin as any).registerCreateEvent();
+							await this.plugin.saveSettings();
+							this.plugin.registerCreateEvent();
 							this.updateCustomContentTypeVisibility(customType.id, value);
 						});
 				})
@@ -410,7 +410,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						.setValue(customType.name)
 						.onChange(async (value: string) => {
 							customType.name = value;
-							await (this.plugin as any).saveSettings();
+							await this.plugin.saveSettings();
 						});
 				});
 
@@ -424,8 +424,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						.setValue(customType.folder)
 						.onChange(async (value: string) => {
 							customType.folder = value;
-							await (this.plugin as any).saveSettings();
-							(this.plugin as any).registerCreateEvent();
+							await this.plugin.saveSettings();
+							this.plugin.registerCreateEvent();
 						});
 				});
 
@@ -438,7 +438,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						.setValue(customType.template)
 						.onChange(async (value: string) => {
 							customType.template = value;
-							await (this.plugin as any).saveSettings();
+							await this.plugin.saveSettings();
 						});
 					text.inputEl.classList.add("astro-composer-template-textarea");
 					return text;
@@ -465,10 +465,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	}
 
 	private removeCustomContentType(typeId: string) {
-		const settings = (this.plugin as any).settings as AstroComposerSettings;
-		settings.customContentTypes = settings.customContentTypes.filter(ct => ct.id !== typeId);
-		(this.plugin as any).saveSettings();
+		const settings = this.plugin.settings;
+		settings.customContentTypes = settings.customContentTypes.filter((ct: CustomContentType) => ct.id !== typeId);
+		this.plugin.saveSettings();
 		this.renderCustomContentTypes();
-		(this.plugin as any).registerCreateEvent();
+		this.plugin.registerCreateEvent();
 	}
 }

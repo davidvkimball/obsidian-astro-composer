@@ -1,10 +1,11 @@
 import {
-	App,
 	Plugin,
 	TFile,
+	Notice,
 } from "obsidian";
 
 import { AstroComposerSettings, DEFAULT_SETTINGS, CONSTANTS } from "./settings";
+import { AstroComposerPluginInterface } from "./types";
 import { registerCommands } from "./commands";
 import { AstroComposerSettingTab } from "./ui/settings-tab";
 import { TitleModal } from "./ui/title-modal";
@@ -12,7 +13,7 @@ import { FileOperations } from "./utils/file-operations";
 import { TemplateParser } from "./utils/template-parsing";
 import { HeadingLinkGenerator } from "./utils/heading-link-generator";
 
-export default class AstroComposerPlugin extends Plugin {
+export default class AstroComposerPlugin extends Plugin implements AstroComposerPluginInterface {
 	settings!: AstroComposerSettings;
 	private createEvent!: (file: TFile) => void;
 	private fileOps!: FileOperations;
@@ -108,7 +109,7 @@ export default class AstroComposerPlugin extends Plugin {
 									new TitleModal(this.app, file, this, "post").open();
 								}
 							} else {
-								let excludedDirs = this.settings.excludedDirectories
+								const excludedDirs = this.settings.excludedDirectories
 					.split("|")
 					.map((dir: string) => dir.trim())
 					.filter((dir: string) => dir.length > 0);
@@ -172,7 +173,7 @@ export default class AstroComposerPlugin extends Plugin {
 							.onClick(async () => {
 								const link = this.headingLinkGenerator.generateLink(this.app, file, heading);
 								await navigator.clipboard.writeText(link);
-								new (this.app as any).Notice('Heading link copied to clipboard');
+								new Notice('Heading link copied to clipboard');
 							});
 					});
 				}

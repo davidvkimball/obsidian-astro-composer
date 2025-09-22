@@ -31,7 +31,7 @@ export class TemplateParser {
 					if (match) {
 						const [, key, value] = match;
 						currentKey = key;
-						const isKnownArrayKey = KNOWN_ARRAY_KEYS.includes(key as any);
+						const isKnownArrayKey = KNOWN_ARRAY_KEYS.includes(key as typeof KNOWN_ARRAY_KEYS[number]);
 						const isEmptyArray = !value || value.trim() === "" || value.trim() === "[]";
 						const isArrayProperty = isKnownArrayKey || isEmptyArray;
 						
@@ -114,7 +114,7 @@ export class TemplateParser {
 						if (value && value.startsWith("[")) {
 							// Handle bracket format: ["item1", "item2"]
 							const items = value
-								.replace(/[\[\]]/g, "")
+								.replace(/[[\]]/g, "")
 								.split(",")
 								.map(t => t.trim())
 								.filter(t => t);
@@ -151,7 +151,7 @@ export class TemplateParser {
 		let newContent = "---\n";
 		for (const key in finalProps) {
 			// Check if this is an array property
-			const isArrayProperty = KNOWN_ARRAY_KEYS.includes(key as any) || 
+			const isArrayProperty = KNOWN_ARRAY_KEYS.includes(key as typeof KNOWN_ARRAY_KEYS[number]) || 
 				(arrayKeys && arrayKeys.has(key));
 			
 			if (isArrayProperty) {

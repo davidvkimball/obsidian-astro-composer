@@ -1,4 +1,4 @@
-import { Plugin, Editor, MarkdownView, TFile, Notice } from "obsidian";
+import { Plugin, Editor, MarkdownView, TFile, Notice, App } from "obsidian";
 import { AstroComposerSettings } from "../types";
 import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
@@ -7,7 +7,6 @@ import { TitleModal } from "../ui/title-modal";
 
 export function registerCommands(plugin: Plugin, settings: AstroComposerSettings): void {
 	const fileOps = new FileOperations(plugin.app, settings);
-	const templateParser = new TemplateParser(plugin.app, settings);
 	const linkConverter = new LinkConverter(settings);
 
 	// Helper function to check if a file matches any configured content type
@@ -84,13 +83,13 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 					new Notice("Cannot rename: No title found in properties");
 					return;
 				}
-				new TitleModal(plugin.app, ctx.file, plugin, type, true).open();
+				new TitleModal(plugin.app, ctx.file, plugin as any, type, true).open();
 			}
 		},
 	});
 }
 
-async function standardizeProperties(app: any, settings: AstroComposerSettings, file: TFile): Promise<void> {
+async function standardizeProperties(app: App, settings: AstroComposerSettings, file: TFile): Promise<void> {
 	const templateParser = new TemplateParser(app, settings);
 	const fileOps = new FileOperations(app, settings);
 	

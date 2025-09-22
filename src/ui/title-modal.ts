@@ -1,19 +1,19 @@
 import { App, Modal, TFile, Notice } from "obsidian";
 import { Plugin } from "obsidian";
-import { PostType, CustomContentType } from "../types";
+import { PostType, AstroComposerPluginInterface } from "../types";
 import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
 
 export class TitleModal extends Modal {
 	file: TFile;
-	plugin: Plugin;
+	plugin: AstroComposerPluginInterface;
 	type: PostType | string;
 	isRename: boolean;
 	titleInput!: HTMLInputElement;
 	private fileOps: FileOperations;
 	private templateParser: TemplateParser;
 
-	constructor(app: App, file: TFile, plugin: Plugin, type: PostType | string = "post", isRename: boolean = false) {
+	constructor(app: App, file: TFile, plugin: AstroComposerPluginInterface, type: PostType | string = "post", isRename = false) {
 		super(app);
 		this.file = file;
 		this.plugin = plugin;
@@ -21,7 +21,7 @@ export class TitleModal extends Modal {
 		this.isRename = isRename;
 		
 		// Initialize utilities with current settings
-		const settings = (plugin as any).settings;
+		const settings = plugin.settings;
 		this.fileOps = new FileOperations(app, settings);
 		this.templateParser = new TemplateParser(app, settings);
 	}
@@ -30,7 +30,7 @@ export class TitleModal extends Modal {
 		const titleKey = this.fileOps.getTitleKey(this.type);
 		const cache = this.app.metadataCache.getFileCache(this.file);
 		let basename = this.file.basename;
-		if (this.file.parent && basename === (this.plugin as any).settings.indexFileName) {
+		if (this.file.parent && basename === this.plugin.settings.indexFileName) {
 			basename = this.file.parent.name;
 		}
 		if (basename.startsWith("_")) {
@@ -107,7 +107,7 @@ export class TitleModal extends Modal {
 				}
 			} else {
 				newFile = await this.fileOps.createFile({ file: this.file, title, type: this.type });
-				if (newFile && (this.plugin as any).settings.autoInsertProperties) {
+				if (newFile && this.plugin.settings.autoInsertProperties) {
 					await this.addPropertiesToFile(newFile, title, this.type);
 				}
 			}
@@ -131,14 +131,14 @@ export class TitleModal extends Modal {
 
 	private async addPropertiesToFile(file: TFile, title: string, type: PostType | string = "post") {
 		const now = new Date();
-		const dateString = window.moment(now).format((this.plugin as any).settings.dateFormat);
+		const dateString = window.moment(now).format(this.plugin.settings.dateFormat);
 
 		let template: string;
 		if (this.fileOps.isCustomContentType(type)) {
 			const customType = this.fileOps.getCustomContentType(type);
-			template = customType ? customType.template : (this.plugin as any).settings.defaultTemplate;
+			template = customType ? customType.template : this.plugin.settings.defaultTemplate;
 		} else {
-			template = type === "post" ? (this.plugin as any).settings.defaultTemplate : (this.plugin as any).settings.pageTemplate;
+			template = type === "post" ? this.plugin.settings.defaultTemplate : this.plugin.settings.pageTemplate;
 		}
 		
 		template = template.replace(/\{\{title\}\}/g, title);

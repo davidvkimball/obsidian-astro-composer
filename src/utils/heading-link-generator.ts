@@ -23,7 +23,7 @@ export class HeadingLinkGenerator {
 	private getAstroUrlFromInternalLink(link: string): string {
 		const hashIndex = link.indexOf('#');
 		let path = hashIndex >= 0 ? link.slice(0, hashIndex) : link;
-		let anchor = hashIndex >= 0 ? link.slice(hashIndex) : '';
+		const anchor = hashIndex >= 0 ? link.slice(hashIndex) : '';
 
 		path = path.replace(/\.md$/, "");
 

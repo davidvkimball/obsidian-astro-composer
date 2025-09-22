@@ -1,4 +1,4 @@
-import { AstroComposerSettings, CONSTANTS } from "./types";
+import { AstroComposerSettings } from "./types";
 
 export type { AstroComposerSettings } from "./types";
 export { CONSTANTS } from "./types";

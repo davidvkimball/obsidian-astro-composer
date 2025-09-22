@@ -1,5 +1,5 @@
 import { Editor, TFile, Notice } from "obsidian";
-import { AstroComposerSettings, PostType } from "../types";
+import { AstroComposerSettings } from "../types";
 
 export class LinkConverter {
 	constructor(private settings: AstroComposerSettings) {}
@@ -17,7 +17,7 @@ export class LinkConverter {
 	getAstroUrlFromInternalLink(link: string): string {
 		const hashIndex = link.indexOf('#');
 		let path = hashIndex >= 0 ? link.slice(0, hashIndex) : link;
-		let anchor = hashIndex >= 0 ? link.slice(hashIndex) : '';
+		const anchor = hashIndex >= 0 ? link.slice(hashIndex) : '';
 
 		// URL decode the path to handle encoded characters like %20
 		path = decodeURIComponent(path);
