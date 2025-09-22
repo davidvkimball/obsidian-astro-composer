@@ -190,7 +190,7 @@ export class FileOperations {
 		}
 
 		const kebabTitle = this.toKebabCase(title);
-		let prefix = "";
+		const prefix = "";
 
 		if (this.settings.creationMode === "folder") {
 			return this.renameFolderStructure(file, kebabTitle, prefix, type);

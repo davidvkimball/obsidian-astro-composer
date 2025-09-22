@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import { Plugin } from "obsidian";
-import { AstroComposerSettings, CustomContentType, AstroComposerPluginInterface } from "../types";
+import { CustomContentType, AstroComposerPluginInterface } from "../types";
 
 export class AstroComposerSettingTab extends PluginSettingTab {
 	plugin: AstroComposerPluginInterface;
@@ -365,7 +365,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		const settings = this.plugin.settings;
 
 		settings.customContentTypes.forEach((customType: CustomContentType, index: number) => {
-			const typeContainer = this.customContentTypesContainer!.createDiv({ 
+			if (!this.customContentTypesContainer) return;
+			const typeContainer = this.customContentTypesContainer.createDiv({ 
 				cls: "custom-content-type-item",
 				attr: { "data-type-id": customType.id }
 			});

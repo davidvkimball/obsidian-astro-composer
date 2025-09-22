@@ -1,5 +1,4 @@
 import { App, Modal, TFile, Notice } from "obsidian";
-import { Plugin } from "obsidian";
 import { PostType, AstroComposerPluginInterface } from "../types";
 import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
