@@ -29,7 +29,10 @@ export class TitleModal extends Modal {
 		const titleKey = this.fileOps.getTitleKey(this.type);
 		const cache = this.app.metadataCache.getFileCache(this.file);
 		let basename = this.file.basename;
-		if (this.file.parent && basename === this.plugin.settings.indexFileName) {
+		if (this.file.parent && 
+			this.plugin.settings.indexFileName && 
+			this.plugin.settings.indexFileName.trim() !== "" && 
+			basename === this.plugin.settings.indexFileName) {
 			basename = this.file.parent.name;
 		}
 		if (basename.startsWith("_")) {

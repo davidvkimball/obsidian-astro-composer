@@ -12,7 +12,7 @@ export const DEFAULT_SETTINGS: AstroComposerSettings = {
 	automatePostCreation: true,
 	autoInsertProperties: true,
 	creationMode: "file",
-	indexFileName: "index",
+	indexFileName: "",
 	dateFormat: "YYYY-MM-DD",
 	excludedDirectories: "",
 	onlyAutomateInPostsFolder: false,

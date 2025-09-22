@@ -124,13 +124,13 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		new Setting(this.indexFileContainer)
 			.setName("Index file name")
-			.setDesc("Name for the main file in folder-based mode (without .md extension).")
+			.setDesc("Name for index files that should be treated as folder-based (without .md extension). Leave empty to disable smart detection.")
 			.addText((text) =>
 				text
 					.setPlaceholder("index")
 					.setValue(settings.indexFileName)
 					.onChange(async (value: string) => {
-						settings.indexFileName = value || "index";
+						settings.indexFileName = value;
 						await this.plugin.saveSettings();
 					})
 			);

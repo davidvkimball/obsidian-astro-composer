@@ -200,7 +200,10 @@ export class FileOperations {
 	}
 
 	private async renameFolderStructure(file: TFile, kebabTitle: string, prefix: string, type: PostType | string): Promise<TFile | null> {
-		const isIndex = file.basename === this.settings.indexFileName;
+		// Smart detection: only treat as index if indexFileName is specified and matches
+		const isIndex = this.settings.indexFileName && 
+			this.settings.indexFileName.trim() !== "" && 
+			file.basename === this.settings.indexFileName;
 		if (isIndex) {
 			if (!file.parent) {
 				new Notice("Cannot rename: File has no parent folder.");
@@ -261,7 +264,10 @@ export class FileOperations {
 		}
 		
 		// Check if this is an index file - if so, rename the parent folder instead
-		const isIndex = file.basename === this.settings.indexFileName;
+		// Smart detection: only treat as index if indexFileName is specified and matches
+		const isIndex = this.settings.indexFileName && 
+			this.settings.indexFileName.trim() !== "" && 
+			file.basename === this.settings.indexFileName;
 		if (isIndex) {
 			prefix = file.parent.name.startsWith("_") ? "_" : "";
 			const newFolderName = `${prefix}${kebabTitle}`;

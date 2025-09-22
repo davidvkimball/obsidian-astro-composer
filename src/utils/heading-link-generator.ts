@@ -35,7 +35,18 @@ export class HeadingLinkGenerator {
 		}
 
 		let addTrailingSlash = false;
-		if (this.settings.creationMode === "folder") {
+		
+		// Smart detection: if the filename matches the index file name (regardless of creation mode),
+		// treat it as folder-based logic
+		if (this.settings.indexFileName && this.settings.indexFileName.trim() !== "") {
+			const parts = path.split('/');
+			if (parts[parts.length - 1] === this.settings.indexFileName) {
+				parts.pop();
+				path = parts.join('/');
+				addTrailingSlash = true;
+			}
+		} else if (this.settings.creationMode === "folder") {
+			// Fallback to original logic if no index file name is specified
 			const parts = path.split('/');
 			if (parts[parts.length - 1] === this.settings.indexFileName) {
 				parts.pop();
