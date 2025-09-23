@@ -49,6 +49,11 @@ export class TitleModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
+		
+		// Add mobile-friendly positioning class
+		if (window.innerWidth <= 768) {
+			this.modalEl.addClass('astro-composer-mobile-modal');
+		}
 
 		if (this.isRename) {
 			const typeName = this.getTypeDisplayName();

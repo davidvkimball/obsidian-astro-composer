@@ -92,3 +92,39 @@
 	opacity: 0;
 	transform: translateY(-10px);
 }
+
+/* Mobile-specific improvements for Astro Composer modal */
+@media (max-width: 768px) {
+	/* Only target our specific modal content, not all modals */
+	.modal .astro-composer-title-input {
+		font-size: 16px; /* Prevents zoom on iOS */
+		padding: 12px;
+		border: 1px solid var(--background-modifier-border);
+		border-radius: 4px;
+	}
+	
+	/* Ensure our modal content is properly sized on mobile */
+	.modal .astro-composer-button-container {
+		flex-direction: column;
+		gap: 12px;
+	}
+	
+	.modal .astro-composer-cancel-button,
+	.modal .astro-composer-create-button {
+		width: 100%;
+		padding: 12px;
+		font-size: 16px;
+	}
+}
+
+/* Specific mobile positioning for Astro Composer modal only */
+.astro-composer-mobile-modal {
+	position: fixed !important;
+	top: 20% !important;
+	left: 50% !important;
+	transform: translateX(-50%) !important;
+	max-height: 60vh !important;
+	overflow-y: auto !important;
+	width: 90vw !important;
+	max-width: 500px !important;
+}
