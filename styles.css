@@ -95,6 +95,18 @@
 
 /* Mobile-specific improvements for Astro Composer modal */
 @media (max-width: 768px) {
+	/* Force mobile positioning for all modals containing our content */
+	.modal:has(.astro-composer-title-input) {
+		position: fixed !important;
+		top: 10% !important;
+		left: 50% !important;
+		transform: translateX(-50%) !important;
+		max-height: 50vh !important;
+		overflow-y: auto !important;
+		width: 90vw !important;
+		max-width: 500px !important;
+	}
+	
 	/* Only target our specific modal content, not all modals */
 	.modal .astro-composer-title-input {
 		font-size: 16px; /* Prevents zoom on iOS */
@@ -117,13 +129,13 @@
 	}
 }
 
-/* Specific mobile positioning for Astro Composer modal only */
+/* Fallback for browsers that don't support :has() */
 .astro-composer-mobile-modal {
 	position: fixed !important;
-	top: 20% !important;
+	top: 10% !important;
 	left: 50% !important;
 	transform: translateX(-50%) !important;
-	max-height: 60vh !important;
+	max-height: 50vh !important;
 	overflow-y: auto !important;
 	width: 90vw !important;
 	max-width: 500px !important;

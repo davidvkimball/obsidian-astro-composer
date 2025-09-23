@@ -36,6 +36,12 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 			}
 		}
 		
+		// Smart fallback: check if file has frontmatter with title
+		const cache = plugin.app.metadataCache.getFileCache(file);
+		if (cache?.frontmatter && cache.frontmatter.title) {
+			return true; // Allow rename if it has a title in frontmatter
+		}
+		
 		return false;
 	}
 
@@ -72,13 +78,25 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 			if (ctx.file instanceof TFile) {
 				// Check if this file matches any configured content type
 				if (!hasMatchingContentType(ctx.file, settings)) {
-					new Notice("Cannot rename: This file doesn't match any configured content type folders.");
+					new Notice("Cannot rename: This file doesn't have a title in its frontmatter or match any configured content type folders.");
 					return;
 				}
 				
-				const type = fileOps.determineType(ctx.file);
-				const titleKey = fileOps.getTitleKey(type);
+				// Smart type detection with fallback
+				let type = fileOps.determineType(ctx.file);
 				const cache = plugin.app.metadataCache.getFileCache(ctx.file);
+				
+				// If type couldn't be determined from folder structure, try to detect from frontmatter
+				if (!fileOps.isCustomContentType(type) && type !== "post" && type !== "page") {
+					// Check if it has a title in frontmatter - if so, treat as generic "note"
+					if (cache?.frontmatter && cache.frontmatter.title) {
+						type = "note";
+					}
+				}
+				
+				// For generic notes, use "title" as the key
+				const titleKey = type === "note" ? "title" : fileOps.getTitleKey(type);
+				
 				if (!cache?.frontmatter || !(titleKey in cache.frontmatter)) {
 					new Notice("Cannot rename: No title found in properties");
 					return;

@@ -28,7 +28,15 @@ export class FileOperations {
 		// Check pages
 		const pagesFolder = this.settings.pagesFolder || "";
 		const isPage = this.settings.enablePages && pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder);
-		return isPage ? "page" : "post";
+		if (isPage) return "page";
+		
+		// Check posts
+		const postsFolder = this.settings.postsFolder || "";
+		const isPost = this.settings.automatePostCreation && postsFolder && (filePath.startsWith(postsFolder + "/") || filePath === postsFolder);
+		if (isPost) return "post";
+		
+		// If no folder structure matches, return "note" as fallback
+		return "note";
 	}
 
 	getCustomContentType(typeId: string): CustomContentType | null {
@@ -40,6 +48,9 @@ export class FileOperations {
 	}
 
 	getTitleKey(type: PostType | string): string {
+		// For generic notes, always use "title"
+		if (type === "note") return "title";
+		
 		let template: string;
 		
 		if (this.isCustomContentType(type)) {
@@ -84,7 +95,10 @@ export class FileOperations {
 		const prefix = this.settings.enableUnderscorePrefix ? "_" : "";
 
 		let targetFolder = "";
-		if (this.isCustomContentType(type)) {
+		if (type === "note") {
+			// For generic notes, keep them in their current location
+			targetFolder = "";
+		} else if (this.isCustomContentType(type)) {
 			const customType = this.getCustomContentType(type);
 			targetFolder = customType ? customType.folder : "";
 		} else {

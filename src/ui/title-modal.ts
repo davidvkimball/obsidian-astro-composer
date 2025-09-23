@@ -50,8 +50,9 @@ export class TitleModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 		
-		// Add mobile-friendly positioning class
-		if (window.innerWidth <= 768) {
+		// Add mobile-friendly positioning class - check both width and user agent
+		const isMobile = window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+		if (isMobile) {
 			this.modalEl.addClass('astro-composer-mobile-modal');
 		}
 
@@ -141,7 +142,10 @@ export class TitleModal extends Modal {
 		const dateString = window.moment(now).format(this.plugin.settings.dateFormat);
 
 		let template: string;
-		if (this.fileOps.isCustomContentType(type)) {
+		if (type === "note") {
+			// For generic notes, use a simple template
+			template = `---\ntitle: "${title}"\ndate: ${dateString}\n---\n`;
+		} else if (this.fileOps.isCustomContentType(type)) {
 			const customType = this.fileOps.getCustomContentType(type);
 			template = customType ? customType.template : this.plugin.settings.defaultTemplate;
 		} else {
