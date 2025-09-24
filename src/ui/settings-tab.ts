@@ -148,6 +148,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
+
 		new Setting(containerEl)
 			.setName("Link base path")
 			.setDesc("Base path for converted links (e.g., /blog/, leave blank for root domain).")
@@ -160,6 +161,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
 
 		// Copy Heading Link Settings
 		new Setting(containerEl)

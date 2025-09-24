@@ -48,8 +48,11 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			this.app.vault.off("create", this.createEvent as any);
 		}
 
+		// Register create event for automation
 		const hasCustomContentTypes = this.settings.customContentTypes.some(ct => ct.enabled);
-		if (this.settings.automatePostCreation || this.settings.enablePages || hasCustomContentTypes) {
+		const shouldUseCreateEvent = this.settings.automatePostCreation || this.settings.enablePages || hasCustomContentTypes;
+		
+		if (shouldUseCreateEvent) {
 			// Debounce to prevent multiple modals from rapid file creations
 			let lastProcessedTime = 0;
 
@@ -69,9 +72,13 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 					const content = await this.app.vault.read(file);
 					const isEmpty = content.trim() === "";
 
+					// Skip if not a user-initiated new note
+					// Also skip if file has content (likely from AI/agent)
 					if (!isNewNote || !isEmpty) {
-						return; // Skip if not a user-initiated new note
+						return;
 					}
+
+
 
 					// Check folder restrictions
 					const postsFolder = this.settings.postsFolder || "";

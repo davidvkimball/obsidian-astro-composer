@@ -14,6 +14,12 @@ export class FileOperations {
 			.replace(/^-|-$/g, "");
 	}
 
+	generateFilename(title: string): string {
+		const kebabTitle = this.toKebabCase(title);
+		const prefix = this.settings.enableUnderscorePrefix ? "_" : "";
+		return `${prefix}${kebabTitle}`;
+	}
+
 	determineType(file: TFile): PostType | string {
 		const filePath = file.path;
 		

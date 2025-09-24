@@ -9,6 +9,7 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 	const fileOps = new FileOperations(plugin.app, settings);
 	const linkConverter = new LinkConverter(settings);
 
+
 	// Helper function to check if a file matches any configured content type
 	function hasMatchingContentType(file: TFile, settings: AstroComposerSettings): boolean {
 		const filePath = file.path;

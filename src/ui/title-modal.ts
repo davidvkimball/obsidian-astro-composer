@@ -4,20 +4,22 @@ import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
 
 export class TitleModal extends Modal {
-	file: TFile;
+	file: TFile | null;
 	plugin: AstroComposerPluginInterface;
 	type: PostType | string;
 	isRename: boolean;
+	isNewNote: boolean;
 	titleInput!: HTMLInputElement;
 	private fileOps: FileOperations;
 	private templateParser: TemplateParser;
 
-	constructor(app: App, file: TFile, plugin: AstroComposerPluginInterface, type: PostType | string = "post", isRename = false) {
+	constructor(app: App, file: TFile | null, plugin: AstroComposerPluginInterface, type: PostType | string = "post", isRename = false, isNewNote = false) {
 		super(app);
 		this.file = file;
 		this.plugin = plugin;
 		this.type = type;
 		this.isRename = isRename;
+		this.isNewNote = isNewNote;
 		
 		// Initialize utilities with current settings
 		const settings = plugin.settings;
@@ -26,6 +28,10 @@ export class TitleModal extends Modal {
 	}
 
 	getCurrentTitle(): string {
+		if (!this.file) {
+			return "";
+		}
+		
 		const titleKey = this.fileOps.getTitleKey(this.type);
 		const cache = this.app.metadataCache.getFileCache(this.file);
 		let basename = this.file.basename;
@@ -74,6 +80,15 @@ export class TitleModal extends Modal {
 				cls: "astro-composer-title-input"
 			});
 			this.titleInput.value = this.getCurrentTitle();
+		} else if (this.isNewNote) {
+			const typeName = this.getTypeDisplayName();
+			contentEl.createEl("h2", { text: `Create New ${typeName}` });
+			contentEl.createEl("p", { text: `Enter a title for your new ${typeName.toLowerCase()}:` });
+			this.titleInput = contentEl.createEl("input", {
+				type: "text",
+				placeholder: `My Awesome ${typeName}`,
+				cls: "astro-composer-title-input"
+			});
 		} else {
 			const typeName = this.getTypeDisplayName();
 			contentEl.createEl("h2", { text: `New ${typeName}` });
@@ -109,15 +124,22 @@ export class TitleModal extends Modal {
 		try {
 			let newFile: TFile | null = null;
 			if (this.isRename) {
-				newFile = await this.fileOps.renameFile({ file: this.file, title, type: this.type });
+				newFile = await this.fileOps.renameFile({ file: this.file!, title, type: this.type });
 				if (newFile) {
 					await this.templateParser.updateTitleInFrontmatter(newFile, title, this.type);
 				}
-			} else {
+			} else if (this.isNewNote) {
+				// Create a new file from scratch
+				newFile = await this.createNewFile(title);
+			} else if (this.file) {
+				// We have an existing file, process it
 				newFile = await this.fileOps.createFile({ file: this.file, title, type: this.type });
 				if (newFile && this.plugin.settings.autoInsertProperties) {
 					await this.addPropertiesToFile(newFile, title, this.type);
 				}
+			} else {
+				// Fallback - create new file
+				newFile = await this.createNewFile(title);
 			}
 			if (!newFile) {
 				throw new Error("Failed to process the content.");
@@ -135,6 +157,62 @@ export class TitleModal extends Modal {
 			return customType ? customType.name : "Content";
 		}
 		return this.type === "post" ? "Blog Post" : "Page";
+	}
+
+	private async createNewFile(title: string): Promise<TFile | null> {
+		// Determine the appropriate folder based on content type
+		let targetFolder: string;
+		
+		if (this.fileOps.isCustomContentType(this.type)) {
+			const customType = this.fileOps.getCustomContentType(this.type);
+			targetFolder = customType?.folder || this.plugin.settings.postsFolder || "";
+		} else if (this.type === "page") {
+			targetFolder = this.plugin.settings.pagesFolder || "";
+		} else {
+			targetFolder = this.plugin.settings.postsFolder || "";
+		}
+
+		// Create the filename from the title
+		const filename = this.fileOps.generateFilename(title);
+		const filePath = targetFolder ? `${targetFolder}/${filename}.md` : `${filename}.md`;
+
+		// Create the file with initial content
+		let initialContent = "";
+		if (this.plugin.settings.autoInsertProperties) {
+			initialContent = await this.generateInitialContent(title);
+		}
+
+		try {
+			const newFile = await this.app.vault.create(filePath, initialContent);
+			
+			// Open the new file
+			await this.app.workspace.getLeaf().openFile(newFile);
+			
+			return newFile;
+		} catch (error) {
+			throw new Error(`Failed to create file: ${(error as Error).message}`);
+		}
+	}
+
+	private async generateInitialContent(title: string): Promise<string> {
+		const now = new Date();
+		const dateString = window.moment(now).format(this.plugin.settings.dateFormat);
+
+		let template: string;
+		if (this.type === "note") {
+			// For generic notes, use a simple template
+			template = `---\ntitle: "${title}"\ndate: ${dateString}\n---\n`;
+		} else if (this.fileOps.isCustomContentType(this.type)) {
+			const customType = this.fileOps.getCustomContentType(this.type);
+			template = customType ? customType.template : this.plugin.settings.defaultTemplate;
+		} else {
+			template = this.type === "post" ? this.plugin.settings.defaultTemplate : this.plugin.settings.pageTemplate;
+		}
+		
+		template = template.replace(/\{\{title\}\}/g, title);
+		template = template.replace(/\{\{date\}\}/g, dateString);
+
+		return template;
 	}
 
 	private async addPropertiesToFile(file: TFile, title: string, type: PostType | string = "post") {
