@@ -69,6 +69,10 @@ export class TitleModal extends Modal {
 			if (isCustomType) {
 				contentEl.createEl("h2", { text: `Rename Custom Type: ${typeName}` });
 				contentEl.createEl("p", { text: "Enter a new title for this content type:" });
+			} else if (this.type === "note") {
+				// For generic notes outside of any known content type
+				contentEl.createEl("h2", { text: "Rename Custom Content Type" });
+				contentEl.createEl("p", { text: "Enter a title for this content type:" });
 			} else {
 				contentEl.createEl("h2", { text: `Rename ${typeName}` });
 				contentEl.createEl("p", { text: `Enter new title for your ${typeName.toLowerCase()}:` });
@@ -82,8 +86,16 @@ export class TitleModal extends Modal {
 			this.titleInput.value = this.getCurrentTitle();
 		} else if (this.isNewNote) {
 			const typeName = this.getTypeDisplayName();
-			contentEl.createEl("h2", { text: `Create New ${typeName}` });
-			contentEl.createEl("p", { text: `Enter a title for your new ${typeName.toLowerCase()}:` });
+			const isCustomType = this.fileOps.isCustomContentType(this.type);
+			
+			if (isCustomType) {
+				contentEl.createEl("h2", { text: `New Custom Type: ${typeName}` });
+				contentEl.createEl("p", { text: "Enter a title for this content type:" });
+			} else {
+				contentEl.createEl("h2", { text: `Create New ${typeName}` });
+				contentEl.createEl("p", { text: `Enter a title for your new ${typeName.toLowerCase()}:` });
+			}
+			
 			this.titleInput = contentEl.createEl("input", {
 				type: "text",
 				placeholder: `My Awesome ${typeName}`,
@@ -91,8 +103,16 @@ export class TitleModal extends Modal {
 			});
 		} else {
 			const typeName = this.getTypeDisplayName();
-			contentEl.createEl("h2", { text: `New ${typeName}` });
-			contentEl.createEl("p", { text: `Enter a title for your ${typeName.toLowerCase()}:` });
+			const isCustomType = this.fileOps.isCustomContentType(this.type);
+			
+			if (isCustomType) {
+				contentEl.createEl("h2", { text: `New Custom Type: ${typeName}` });
+				contentEl.createEl("p", { text: "Enter a title for this content type:" });
+			} else {
+				contentEl.createEl("h2", { text: `New ${typeName}` });
+				contentEl.createEl("p", { text: `Enter a title for your ${typeName.toLowerCase()}:` });
+			}
+			
 			this.titleInput = contentEl.createEl("input", {
 				type: "text",
 				placeholder: `My Awesome ${typeName}`,
@@ -184,6 +204,11 @@ export class TitleModal extends Modal {
 
 		try {
 			const newFile = await this.app.vault.create(filePath, initialContent);
+			
+			// Track that this file was created by the plugin to avoid triggering the create event
+			if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
+				(this.plugin as any).pluginCreatedFiles.add(filePath);
+			}
 			
 			// Open the new file
 			await this.app.workspace.getLeaf().openFile(newFile);

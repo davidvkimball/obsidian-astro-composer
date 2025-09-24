@@ -19,12 +19,13 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	private fileOps!: FileOperations;
 	private templateParser!: TemplateParser;
 	private headingLinkGenerator!: HeadingLinkGenerator;
+	private pluginCreatedFiles: Set<string> = new Set();
 
 	async onload() {
 		await this.loadSettings();
 
 		// Initialize utilities
-		this.fileOps = new FileOperations(this.app, this.settings);
+		this.fileOps = new FileOperations(this.app, this.settings, this);
 		this.templateParser = new TemplateParser(this.app, this.settings);
 		this.headingLinkGenerator = new HeadingLinkGenerator(this.settings);
 
@@ -66,78 +67,74 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				if (file instanceof TFile && file.extension === "md") {
 					const filePath = file.path;
 
-					// Check if file is newly created by user (recent creation time and empty content)
-					const stat = await this.app.vault.adapter.stat(file.path);
-					const isNewNote = stat?.mtime && (now - stat.mtime < CONSTANTS.STAT_MTIME_THRESHOLD);
-					const content = await this.app.vault.read(file);
-					const isEmpty = content.trim() === "";
-
-					// Skip if not a user-initiated new note
-					// Also skip if file has content (likely from AI/agent)
-					if (!isNewNote || !isEmpty) {
+					// Skip if this file was created by the plugin itself
+					if (this.pluginCreatedFiles.has(filePath)) {
+						this.pluginCreatedFiles.delete(filePath); // Clean up
 						return;
 					}
 
-
-
-					// Check folder restrictions
+					// Check folder restrictions FIRST - only proceed if file is in a relevant folder
 					const postsFolder = this.settings.postsFolder || "";
 					const pagesFolder = this.settings.enablePages ? (this.settings.pagesFolder || "") : "";
 					let isPage = false;
 					let customTypeId: string | null = null;
+					let shouldProcess = false;
 
 					// Check custom content types first
 					for (const customType of this.settings.customContentTypes) {
 						if (customType.enabled && customType.folder && 
 							(filePath.startsWith(customType.folder + "/") || filePath === customType.folder)) {
 							customTypeId = customType.id;
+							shouldProcess = true;
 							break;
 						}
 					}
 
 					if (!customTypeId && pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
 						isPage = true;
+						shouldProcess = true;
 					}
 
-					const cache = this.app.metadataCache.getFileCache(file);
-					if (!cache || !cache.sections || cache.sections.length === 0) {
-						if (customTypeId) {
-							new TitleModal(this.app, file, this, customTypeId).open();
-						} else if (isPage) {
-							if (this.settings.enablePages) {
-								new TitleModal(this.app, file, this, "page").open();
-							}
-						} else {
-							if (this.settings.onlyAutomateInPostsFolder) {
-								if (
-									!postsFolder ||
-									(filePath.startsWith(postsFolder + "/") || filePath === postsFolder)
-								) {
-									new TitleModal(this.app, file, this, "post").open();
-								}
-							} else {
-								const excludedDirs = this.settings.excludedDirectories
-					.split("|")
-					.map((dir: string) => dir.trim())
-					.filter((dir: string) => dir.length > 0);
-								if (pagesFolder) {
-									excludedDirs.push(pagesFolder);
-								}
-								// Add custom content type folders to excluded directories
-								for (const customType of this.settings.customContentTypes) {
-									if (customType.enabled && customType.folder) {
-										excludedDirs.push(customType.folder);
-									}
-								}
-								const isExcluded = excludedDirs.some((dir: string) =>
-									filePath.startsWith(dir + "/") || filePath === dir
-								);
+					// Check posts folder
+					if (!shouldProcess && this.settings.automatePostCreation && postsFolder && 
+						(filePath.startsWith(postsFolder + "/") || filePath === postsFolder)) {
+						shouldProcess = true;
+					}
 
-								if (!isExcluded) {
-									new TitleModal(this.app, file, this, "post").open();
-								}
-							}
+					// If not in any relevant folder, skip entirely
+					if (!shouldProcess) {
+						return;
+					}
+
+					// Check if file is newly created by user (recent creation time)
+					const stat = await this.app.vault.adapter.stat(file.path);
+					const isNewNote = stat?.mtime && (now - stat.mtime < CONSTANTS.STAT_MTIME_THRESHOLD);
+
+					// Skip if not a user-initiated new note
+					if (!isNewNote) {
+						return;
+					}
+
+					// Check if file already has frontmatter that looks like it was created by another plugin
+					const cache = this.app.metadataCache.getFileCache(file);
+					if (cache?.frontmatter) {
+						// If it already has frontmatter, it might have been created by another plugin
+						// Only proceed if it's a very basic frontmatter (like just a title)
+						const frontmatterKeys = Object.keys(cache.frontmatter);
+						if (frontmatterKeys.length > 1 || !frontmatterKeys.includes('title')) {
+							// This looks like it was created by another plugin with a full template
+							return;
 						}
+					}
+
+					// Show the appropriate modal
+					if (customTypeId) {
+						new TitleModal(this.app, file, this, customTypeId).open();
+					} else if (isPage) {
+						new TitleModal(this.app, file, this, "page").open();
+					} else {
+						// This is a post
+						new TitleModal(this.app, file, this, "post").open();
 					}
 				}
 			};

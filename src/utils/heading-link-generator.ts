@@ -27,28 +27,59 @@ export class HeadingLinkGenerator {
 
 		path = path.replace(/\.md$/, "");
 
-		// Strip root folder if present
-		if (path.startsWith(this.settings.postsFolder + '/')) {
-			path = path.slice(this.settings.postsFolder.length + 1);
-		} else if (this.settings.enablePages && path.startsWith(this.settings.pagesFolder + '/')) {
-			path = path.slice(this.settings.pagesFolder.length + 1);
+		// Determine content type and appropriate base path
+		let basePath = "";
+		let contentFolder = "";
+		let creationMode: "file" | "folder" = "file";
+		let indexFileName = "";
+
+		// Check posts folder
+		if (this.settings.postsFolder && path.startsWith(this.settings.postsFolder + '/')) {
+			contentFolder = this.settings.postsFolder;
+			basePath = this.settings.postsLinkBasePath;
+			creationMode = this.settings.creationMode;
+			indexFileName = this.settings.indexFileName;
+		}
+		// Check pages folder
+		else if (this.settings.enablePages && this.settings.pagesFolder && path.startsWith(this.settings.pagesFolder + '/')) {
+			contentFolder = this.settings.pagesFolder;
+			basePath = this.settings.pagesLinkBasePath;
+			creationMode = this.settings.pagesCreationMode || "file";
+			indexFileName = this.settings.pagesIndexFileName || "";
+		}
+		// Check custom content types
+		else {
+			for (const customType of this.settings.customContentTypes) {
+				if (customType.enabled && customType.folder && path.startsWith(customType.folder + '/')) {
+					contentFolder = customType.folder;
+					basePath = customType.linkBasePath || "";
+					creationMode = customType.creationMode;
+					indexFileName = customType.indexFileName;
+					break;
+				}
+			}
+		}
+
+		// Strip content folder if present
+		if (contentFolder) {
+			path = path.slice(contentFolder.length + 1);
 		}
 
 		let addTrailingSlash = false;
 		
 		// Smart detection: if the filename matches the index file name (regardless of creation mode),
 		// treat it as folder-based logic
-		if (this.settings.indexFileName && this.settings.indexFileName.trim() !== "") {
+		if (indexFileName && indexFileName.trim() !== "") {
 			const parts = path.split('/');
-			if (parts[parts.length - 1] === this.settings.indexFileName) {
+			if (parts[parts.length - 1] === indexFileName) {
 				parts.pop();
 				path = parts.join('/');
 				addTrailingSlash = true;
 			}
-		} else if (this.settings.creationMode === "folder") {
+		} else if (creationMode === "folder") {
 			// Fallback to original logic if no index file name is specified
 			const parts = path.split('/');
-			if (parts[parts.length - 1] === this.settings.indexFileName) {
+			if (parts[parts.length - 1] === indexFileName) {
 				parts.pop();
 				path = parts.join('/');
 				addTrailingSlash = true;
@@ -58,11 +89,16 @@ export class HeadingLinkGenerator {
 		const slugParts = path.split('/').map(part => this.toKebabCase(part));
 		const slug = slugParts.join('/');
 
-		let basePath = this.settings.linkBasePath;
-		if (!basePath.startsWith("/")) basePath = "/" + basePath;
-		if (!basePath.endsWith("/")) basePath += "/";
+		// Format base path
+		if (basePath) {
+			if (!basePath.startsWith("/")) basePath = "/" + basePath;
+			if (!basePath.endsWith("/")) basePath += "/";
+		}
 
-		return `${basePath}${slug}${addTrailingSlash ? '/' : ''}${anchor}`;
+		// Determine if we should add trailing slash
+		const shouldAddTrailingSlash = this.settings.addTrailingSlashToLinks || addTrailingSlash;
+
+		return `${basePath}${slug}${shouldAddTrailingSlash ? '/' : ''}${anchor}`;
 	}
 
 	/**

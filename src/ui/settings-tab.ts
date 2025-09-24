@@ -13,6 +13,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	underscorePrefixContainer: HTMLElement | null = null;
 	autoInsertContainer: HTMLElement | null = null;
 	pagesFieldsContainer: HTMLElement | null = null;
+	pagesIndexFileContainer: HTMLElement | null = null;
 	copyHeadingContainer: HTMLElement | null = null;
 	customContentTypesContainer: HTMLElement | null = null;
 
@@ -26,6 +27,68 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		const settings = this.plugin.settings;
+
+		// Global settings
+		new Setting(containerEl)
+			.setName("Date format")
+			.setDesc("Format for the date in properties (e.g., YYYY-MM-DD, MMMM D, YYYY, YYYY-MM-DD HH:mm).")
+			.addText((text) =>
+				text
+					.setPlaceholder("YYYY-MM-DD")
+					.setValue(settings.dateFormat)
+					.onChange(async (value: string) => {
+						settings.dateFormat = value || "YYYY-MM-DD";
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Enable copy heading links")
+			.setDesc("Add right-click context menu option to copy heading links in various formats.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(settings.enableCopyHeadingLink)
+					.onChange(async (value: boolean) => {
+						settings.enableCopyHeadingLink = value;
+						await this.plugin.saveSettings();
+						this.updateCopyHeadingFields();
+					})
+			);
+
+		this.copyHeadingContainer = containerEl.createDiv({ cls: "copy-heading-fields" });
+		this.copyHeadingContainer.style.display = settings.enableCopyHeadingLink ? "block" : "none";
+
+		new Setting(this.copyHeadingContainer)
+			.setName("Default heading link format")
+			.setDesc("Choose the default format for copied heading links. Obsidian format respects your Obsidian settings for wikilink vs markdown preference. Astro link uses your Link base path from above and converts the heading into kebab-case format as an anchor link.")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("obsidian", "Obsidian link")
+					.addOption("astro", "Astro link")
+					.setValue(settings.copyHeadingLinkFormat)
+					.onChange(async (value: string) => {
+						settings.copyHeadingLinkFormat = value as "obsidian" | "astro";
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Add trailing slash to links")
+			.setDesc("Add trailing slashes to all converted internal links (e.g., /about/ instead of /about).")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(settings.addTrailingSlashToLinks)
+					.onChange(async (value: boolean) => {
+						settings.addTrailingSlashToLinks = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Post settings
+		new Setting(containerEl)
+			.setName("Post settings")
+			.setDesc("")
+			.setHeading();
 
 		new Setting(containerEl)
 			.setName("Automate post creation")
@@ -73,6 +136,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
+
 		this.onlyAutomateContainer = this.autoRenameContainer.createDiv();
 		new Setting(this.onlyAutomateContainer)
 			.setName("Only automate in this folder")
@@ -99,6 +163,19 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.setValue(settings.excludedDirectories)
 					.onChange(async (value: string) => {
 						settings.excludedDirectories = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.autoRenameContainer)
+			.setName("Posts link base path")
+			.setDesc("Base path for converted links in posts (e.g., /blog/, leave blank for root domain).")
+			.addText((text) =>
+				text
+					.setPlaceholder("/blog/")
+					.setValue(settings.postsLinkBasePath)
+					.onChange(async (value: string) => {
+						settings.postsLinkBasePath = value;
 						await this.plugin.saveSettings();
 					})
 			);
@@ -149,66 +226,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			);
 
 
-		new Setting(containerEl)
-			.setName("Link base path")
-			.setDesc("Base path for converted links (e.g., /blog/, leave blank for root domain).")
-			.addText((text) =>
-				text
-					.setPlaceholder("/blog/")
-					.setValue(settings.linkBasePath)
-					.onChange(async (value: string) => {
-						settings.linkBasePath = value;
-						await this.plugin.saveSettings();
-					})
-			);
 
 
-		// Copy Heading Link Settings
-		new Setting(containerEl)
-			.setName("Enable copy heading links")
-			.setDesc("Add right-click context menu option to copy heading links in various formats.")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(settings.enableCopyHeadingLink)
-					.onChange(async (value: boolean) => {
-						settings.enableCopyHeadingLink = value;
-						await this.plugin.saveSettings();
-						this.updateCopyHeadingFields();
-					})
-			);
-
-		this.copyHeadingContainer = containerEl.createDiv({ cls: "copy-heading-fields" });
-		this.copyHeadingContainer.style.display = settings.enableCopyHeadingLink ? "block" : "none";
-
-		new Setting(this.copyHeadingContainer)
-			.setName("Default heading link format")
-			.setDesc("Choose the default format for copied heading links. Obsidian format respects your Obsidian settings for wikilink vs markdown preference. Astro link uses your Link base path from above and converts the heading into kebab-case format as an anchor link.")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("obsidian", "Obsidian link")
-					.addOption("astro", "Astro link")
-					.setValue(settings.copyHeadingLinkFormat)
-					.onChange(async (value: string) => {
-						settings.copyHeadingLinkFormat = value as "obsidian" | "astro";
-						await this.plugin.saveSettings();
-					})
-			);
 
 		new Setting(containerEl)
-			.setName("Date format")
-			.setDesc("Format for the date in properties (e.g., YYYY-MM-DD, MMMM D, YYYY, YYYY-MM-DD HH:mm).")
-			.addText((text) =>
-				text
-					.setPlaceholder("YYYY-MM-DD")
-					.setValue(settings.dateFormat)
-					.onChange(async (value: string) => {
-						settings.dateFormat = value || "YYYY-MM-DD";
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName("Properties template")
+			.setName("Post properties template")
 			.addTextArea((text) => {
 				text
 					.setPlaceholder(
@@ -232,9 +254,15 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					"The 'standardize properties' command ignores anything below the second '---' line.";
 			});
 
+		// Pages settings
 		new Setting(containerEl)
-			.setName("Automate page creation")
-			.setDesc("Enable automatic page creation in a specified folder.")
+			.setName("Page settings")
+			.setDesc("")
+			.setHeading();
+
+		new Setting(containerEl)
+			.setName("Enable pages")
+			.setDesc("Enable page content type for static pages.")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(settings.enablePages)
@@ -246,12 +274,12 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
-		this.pagesFieldsContainer = containerEl.createDiv();
+		this.pagesFieldsContainer = containerEl.createDiv({ cls: "pages-fields" });
 		this.pagesFieldsContainer.style.display = settings.enablePages ? "block" : "none";
 
 		new Setting(this.pagesFieldsContainer)
 			.setName("Pages folder")
-			.setDesc("Folder for pages (leave blank to disable). Posts automation will exclude this folder.")
+			.setDesc("Folder name for pages (leave blank to use the vault folder).")
 			.addText((text) =>
 				text
 					.setPlaceholder("Enter folder path")
@@ -263,12 +291,55 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(this.pagesFieldsContainer)
+			.setName("Pages link base path")
+			.setDesc("Base path for converted links in pages (e.g., leave blank for root domain).")
+			.addText((text) =>
+				text
+					.setPlaceholder("")
+					.setValue(settings.pagesLinkBasePath)
+					.onChange(async (value: string) => {
+						settings.pagesLinkBasePath = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.pagesFieldsContainer)
+			.setName("Creation mode")
+			.setDesc("How to create new pages: file-based or folder-based with index.md.")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("file", "File-based (page-title.md)")
+					.addOption("folder", "Folder-based (page-title/index.md)")
+					.setValue(settings.pagesCreationMode || "file")
+					.onChange(async (value: string) => {
+						settings.pagesCreationMode = value as "file" | "folder";
+						await this.plugin.saveSettings();
+						this.updatePagesIndexFileField();
+					})
+			);
+
+		this.pagesIndexFileContainer = this.pagesFieldsContainer.createDiv({ cls: "pages-index-file-field" });
+		this.pagesIndexFileContainer.style.display = (settings.pagesCreationMode || "file") === "folder" ? "block" : "none";
+
+		new Setting(this.pagesIndexFileContainer)
+			.setName("Index file name")
+			.setDesc("Name for index files that should be treated as folder-based (without .md extension). Leave empty to disable smart detection.")
+			.addText((text) =>
+				text
+					.setPlaceholder("index")
+					.setValue(settings.pagesIndexFileName || "")
+					.onChange(async (value: string) => {
+						settings.pagesIndexFileName = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.pagesFieldsContainer)
 			.setName("Page properties template")
+			.setDesc("Template for new page files. Variables include {{title}} and {{date}}.")
 			.addTextArea((text) => {
 				text
-					.setPlaceholder(
-						'---\ntitle: "{{title}}"\ndescription: ""\n---\n',
-					)
+					.setPlaceholder('---\ntitle: "{{title}}"\ndescription: ""\n---\n')
 					.setValue(settings.pageTemplate)
 					.onChange(async (value: string) => {
 						settings.pageTemplate = value;
@@ -276,29 +347,13 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					});
 				text.inputEl.classList.add("astro-composer-template-textarea");
 				return text;
-			})
-			.then((setting) => {
-				setting.descEl.empty();
-				const descDiv = setting.descEl.createEl("div");
-				descDiv.innerHTML = 
-					"Used for new pages and when standardizing properties.<br />" +
-					"Variables include {{title}} and {{date}}.<br />" +
-					"Do not wrap {{date}} in quotes as it represents a datetime value, not a string.<br />" +
-					"The 'standardize properties' command ignores anything below the second '---' line.";
 			});
 
-		// Custom Content Types Section
+		// Custom content types
 		new Setting(containerEl)
-			.setName("Custom Content Types")
-			.setDesc("Create additional content types with their own templates and folder locations.")
-			.addButton((button) => {
-				button
-					.setButtonText("Add Custom Content Type")
-					.setCta()
-					.onClick(() => {
-						this.addCustomContentType();
-					});
-			});
+			.setName("Custom content types")
+			.setDesc("")
+			.setHeading();
 
 		this.customContentTypesContainer = containerEl.createDiv({ cls: "custom-content-types-container" });
 		this.renderCustomContentTypes();
@@ -351,8 +406,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			id: `custom-${Date.now()}`,
 			name: `Custom ${settings.customContentTypes.length + 1}`,
 			folder: "",
+			linkBasePath: "",
 			template: '---\ntitle: "{{title}}"\ndate: {{date}}\n---\n',
-			enabled: true
+			enabled: true,
+			creationMode: "file",
+			indexFileName: "",
 		};
 		settings.customContentTypes.push(newType);
 		this.plugin.saveSettings();
@@ -373,29 +431,64 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				attr: { "data-type-id": customType.id }
 			});
 
-			// Header with name and controls
+			// Header with name and toggle on the far right
 			const header = typeContainer.createDiv({ cls: "custom-content-type-header" });
+			header.style.display = "flex";
+			header.style.justifyContent = "space-between";
+			header.style.alignItems = "center";
+			header.style.padding = "8px 0";
 			
-			new Setting(header)
-				.setName(`Custom ${index + 1}`)
-				.addToggle((toggle) => {
-					toggle
-						.setValue(customType.enabled)
-						.onChange(async (value: boolean) => {
-							customType.enabled = value;
-							await this.plugin.saveSettings();
-							this.plugin.registerCreateEvent();
-							this.updateCustomContentTypeVisibility(customType.id, value);
-						});
-				})
-				.addButton((button) => {
-					button
-						.setButtonText("Remove")
-						.setWarning()
-						.onClick(() => {
-							this.removeCustomContentType(customType.id);
-						});
-				});
+			// Left side - just the name
+			const headerName = header.createDiv();
+			headerName.createEl("div", { text: `Custom ${index + 1}`, cls: "setting-item-name" });
+			
+			// Right side - toggle
+			const toggleContainer = header.createDiv({ cls: "checkbox-container" });
+			if (customType.enabled) {
+				toggleContainer.classList.add("is-enabled");
+			}
+			
+			const toggle = toggleContainer.createEl("input", { type: "checkbox", cls: "checkbox-input" });
+			toggle.checked = customType.enabled;
+			
+			// Add click event to the container as well
+			toggleContainer.addEventListener("click", async (e) => {
+				e.preventDefault();
+				const newValue = !customType.enabled;
+				customType.enabled = newValue;
+				toggle.checked = newValue;
+				
+				await this.plugin.saveSettings();
+				this.plugin.registerCreateEvent();
+				
+				// Update the container class for visual feedback
+				if (newValue) {
+					toggleContainer.classList.add("is-enabled");
+				} else {
+					toggleContainer.classList.remove("is-enabled");
+				}
+				
+				// Update visibility
+				this.updateCustomContentTypeVisibility(customType.id, newValue);
+			});
+			
+			// Also add change event as backup
+			toggle.addEventListener("change", async (e) => {
+				const value = (e.target as HTMLInputElement).checked;
+				customType.enabled = value;
+				await this.plugin.saveSettings();
+				this.plugin.registerCreateEvent();
+				
+				// Update the container class for visual feedback
+				if (value) {
+					toggleContainer.classList.add("is-enabled");
+				} else {
+					toggleContainer.classList.remove("is-enabled");
+				}
+				
+				// Update visibility
+				this.updateCustomContentTypeVisibility(customType.id, value);
+			});
 
 			// Settings container that can be collapsed
 			const settingsContainer = typeContainer.createDiv({ 
@@ -404,8 +497,9 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			});
 
 			// Content type name
-			new Setting(settingsContainer)
-				.setName("Content Type Name")
+			const nameContainer = settingsContainer.createDiv();
+			new Setting(nameContainer)
+				.setName("Content type name")
 				.setDesc("Display name for this content type (e.g., 'Projects', 'Notes', 'Tutorials')")
 				.addText((text) => {
 					text
@@ -418,8 +512,9 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				});
 
 			// Folder location
-			new Setting(settingsContainer)
-				.setName("Folder Location")
+			const folderContainer = settingsContainer.createDiv();
+			new Setting(folderContainer)
+				.setName("Folder location")
 				.setDesc("Folder path where this content type will be created (e.g., 'projects', 'notes/tutorials')")
 				.addText((text) => {
 					text
@@ -432,9 +527,58 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						});
 				});
 
+			// Link base path
+			const linkContainer = settingsContainer.createDiv();
+			new Setting(linkContainer)
+				.setName("Link base path")
+				.setDesc("Base path for converted links (e.g., '/projects/', '/notes/tutorials/', leave blank for root domain).")
+				.addText((text) => {
+					text
+						.setPlaceholder("Enter link base path")
+						.setValue(customType.linkBasePath || "")
+						.onChange(async (value: string) => {
+							customType.linkBasePath = value;
+							await this.plugin.saveSettings();
+						});
+				});
+
+			// Creation mode
+			const creationModeContainer = settingsContainer.createDiv();
+			new Setting(creationModeContainer)
+				.setName("Creation mode")
+				.setDesc("How to create new files: file-based or folder-based with index.md.")
+				.addDropdown((dropdown) =>
+					dropdown
+						.addOption("file", "File-based (content-title.md)")
+						.addOption("folder", "Folder-based (content-title/index.md)")
+						.setValue(customType.creationMode)
+						.onChange(async (value: string) => {
+							customType.creationMode = value as "file" | "folder";
+							await this.plugin.saveSettings();
+							this.updateCustomContentTypeIndexFileField(customType.id);
+						})
+				);
+
+			// Index file name (only show for folder-based)
+			const indexFileContainer = settingsContainer.createDiv({ cls: "custom-index-file-field" });
+			indexFileContainer.style.display = customType.creationMode === "folder" ? "block" : "none";
+			new Setting(indexFileContainer)
+				.setName("Index file name")
+				.setDesc("Name for index files that should be treated as folder-based (without .md extension). Leave empty to disable smart detection.")
+				.addText((text) =>
+					text
+						.setPlaceholder("index")
+						.setValue(customType.indexFileName)
+						.onChange(async (value: string) => {
+							customType.indexFileName = value;
+							await this.plugin.saveSettings();
+						})
+				);
+
 			// Template
-			new Setting(settingsContainer)
-				.setName("Properties Template")
+			const templateContainer = settingsContainer.createDiv();
+			new Setting(templateContainer)
+				.setName("Properties template")
 				.addTextArea((text) => {
 					text
 						.setPlaceholder('---\ntitle: "{{title}}"\ndate: {{date}}\n---\n')
@@ -455,6 +599,22 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						"Do not wrap {{date}} in quotes as it represents a datetime value, not a string.";
 				});
 
+			// Remove button at the bottom (no divider)
+			const removeContainer = settingsContainer.createDiv();
+			const removeSetting = new Setting(removeContainer)
+				.setName("")
+				.addButton((button) => {
+					button
+						.setButtonText("Remove")
+						.setWarning()
+						.onClick(() => {
+							this.removeCustomContentType(customType.id);
+						});
+				});
+			
+			// Hide the divider line for the remove button
+			removeSetting.settingEl.style.borderTop = "none";
+
 			// Set initial visibility
 			this.updateCustomContentTypeVisibility(customType.id, customType.enabled);
 		});
@@ -464,6 +624,22 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		const settingsContainer = this.customContentTypesContainer?.querySelector(`[data-type-id="${typeId}"].custom-content-type-settings`) as HTMLElement;
 		if (settingsContainer) {
 			settingsContainer.style.display = enabled ? "block" : "none";
+		}
+	}
+
+	private updateCustomContentTypeIndexFileField(typeId: string) {
+		const customType = this.plugin.settings.customContentTypes.find(type => type.id === typeId);
+		if (!customType) return;
+
+		const indexFileContainer = this.customContentTypesContainer?.querySelector(`[data-type-id="${typeId}"] .custom-index-file-field`) as HTMLElement;
+		if (indexFileContainer) {
+			indexFileContainer.style.display = customType.creationMode === "folder" ? "block" : "none";
+		}
+	}
+
+	private updatePagesIndexFileField() {
+		if (this.pagesIndexFileContainer) {
+			this.pagesIndexFileContainer.style.display = this.plugin.settings.pagesCreationMode === "folder" ? "block" : "none";
 		}
 	}
 

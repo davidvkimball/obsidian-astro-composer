@@ -7,8 +7,8 @@ export const DEFAULT_SETTINGS: AstroComposerSettings = {
 	enableUnderscorePrefix: false,
 	defaultTemplate:
 		'---\ntitle: "{{title}}"\ndate: {{date}}\ntags: []\n---\n',
-	linkBasePath: "/blog/",
 	postsFolder: "posts",
+	postsLinkBasePath: "/blog/",
 	automatePostCreation: true,
 	autoInsertProperties: true,
 	creationMode: "file",
@@ -18,9 +18,13 @@ export const DEFAULT_SETTINGS: AstroComposerSettings = {
 	onlyAutomateInPostsFolder: false,
 	enablePages: false,
 	pagesFolder: "pages",
+	pagesLinkBasePath: "",
+	pagesCreationMode: "file",
+	pagesIndexFileName: "",
 	pageTemplate:
 		'---\ntitle: "{{title}}"\ndescription: ""\n---\n',
 	enableCopyHeadingLink: true,
 	copyHeadingLinkFormat: "obsidian",
+	addTrailingSlashToLinks: false,
 	customContentTypes: [],
 };

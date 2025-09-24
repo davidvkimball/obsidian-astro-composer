@@ -84,6 +84,15 @@
 	margin-bottom: 0;
 }
 
+/* Add spacing between settings in custom content types since we removed dividers */
+.custom-content-type-settings > div {
+	margin-bottom: 16px;
+}
+
+.custom-content-type-settings > div:last-child {
+	margin-bottom: 0;
+}
+
 .custom-content-type-settings {
 	transition: all 0.2s ease-in-out;
 }

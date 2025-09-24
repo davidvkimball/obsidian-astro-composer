@@ -2,7 +2,7 @@ import { App, TFile, TFolder, Notice } from "obsidian";
 import { AstroComposerSettings, PostType, FileCreationOptions, RenameOptions, CustomContentType } from "../types";
 
 export class FileOperations {
-	constructor(private app: App, private settings: AstroComposerSettings) {}
+	constructor(private app: App, private settings: AstroComposerSettings, private plugin?: any) {}
 
 	toKebabCase(str: string): string {
 		return str
@@ -189,6 +189,11 @@ export class FileOperations {
 			const newFile = this.app.vault.getAbstractFileByPath(newPath);
 			if (!(newFile instanceof TFile)) {
 				return null;
+			}
+
+			// Track that this file was created by the plugin to avoid triggering the create event
+			if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
+				(this.plugin as any).pluginCreatedFiles.add(newPath);
 			}
 
 			const leaf = this.app.workspace.getLeaf(false);

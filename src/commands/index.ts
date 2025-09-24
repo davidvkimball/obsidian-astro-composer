@@ -6,7 +6,7 @@ import { LinkConverter } from "../utils/link-conversion";
 import { TitleModal } from "../ui/title-modal";
 
 export function registerCommands(plugin: Plugin, settings: AstroComposerSettings): void {
-	const fileOps = new FileOperations(plugin.app, settings);
+	const fileOps = new FileOperations(plugin.app, settings, plugin);
 	const linkConverter = new LinkConverter(settings);
 
 
@@ -37,12 +37,6 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 			}
 		}
 		
-		// Smart fallback: check if file has frontmatter with title
-		const cache = plugin.app.metadataCache.getFileCache(file);
-		if (cache?.frontmatter && cache.frontmatter.title) {
-			return true; // Allow rename if it has a title in frontmatter
-		}
-		
 		return false;
 	}
 
@@ -53,7 +47,7 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		icon: "file-check",
 		editorCallback: (editor: Editor, ctx: MarkdownView | any) => {
 			if (ctx.file instanceof TFile) {
-				standardizeProperties(plugin.app, settings, ctx.file);
+				standardizeProperties(plugin.app, settings, ctx.file, plugin);
 			}
 		},
 	});
@@ -79,38 +73,32 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 			if (ctx.file instanceof TFile) {
 				// Check if this file matches any configured content type
 				if (!hasMatchingContentType(ctx.file, settings)) {
-					new Notice("Cannot rename: This file doesn't have a title in its frontmatter or match any configured content type folders.");
+					new Notice("Cannot rename: This file is not part of a configured content type folder.");
 					return;
 				}
 				
-				// Smart type detection with fallback
-				let type = fileOps.determineType(ctx.file);
+				// Determine content type from folder structure
+				const type = fileOps.determineType(ctx.file);
 				const cache = plugin.app.metadataCache.getFileCache(ctx.file);
 				
-				// If type couldn't be determined from folder structure, try to detect from frontmatter
-				if (!fileOps.isCustomContentType(type) && type !== "post" && type !== "page") {
-					// Check if it has a title in frontmatter - if so, treat as generic "note"
-					if (cache?.frontmatter && cache.frontmatter.title) {
-						type = "note";
-					}
-				}
+				// Get the appropriate title key for this content type
+				const titleKey = fileOps.getTitleKey(type);
 				
-				// For generic notes, use "title" as the key
-				const titleKey = type === "note" ? "title" : fileOps.getTitleKey(type);
-				
+				// Check if the file has the required title property
 				if (!cache?.frontmatter || !(titleKey in cache.frontmatter)) {
-					new Notice("Cannot rename: No title found in properties");
+					new Notice(`Cannot rename: No ${titleKey} found in properties`);
 					return;
 				}
+				
 				new TitleModal(plugin.app, ctx.file, plugin as any, type, true).open();
 			}
 		},
 	});
 }
 
-async function standardizeProperties(app: App, settings: AstroComposerSettings, file: TFile): Promise<void> {
+async function standardizeProperties(app: App, settings: AstroComposerSettings, file: TFile, plugin?: any): Promise<void> {
 	const templateParser = new TemplateParser(app, settings);
-	const fileOps = new FileOperations(app, settings);
+	const fileOps = new FileOperations(app, settings, plugin);
 	
 	// Determine content type
 	const type = fileOps.determineType(file);

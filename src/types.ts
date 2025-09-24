@@ -3,8 +3,8 @@ import { TFile } from "obsidian";
 export interface AstroComposerSettings {
 	enableUnderscorePrefix: boolean;
 	defaultTemplate: string;
-	linkBasePath: string;
 	postsFolder: string;
+	postsLinkBasePath: string;
 	automatePostCreation: boolean;
 	autoInsertProperties: boolean;
 	creationMode: "file" | "folder";
@@ -14,9 +14,13 @@ export interface AstroComposerSettings {
 	onlyAutomateInPostsFolder: boolean;
 	enablePages: boolean;
 	pagesFolder: string;
+	pagesLinkBasePath: string;
+	pagesCreationMode: "file" | "folder";
+	pagesIndexFileName: string;
 	pageTemplate: string;
 	enableCopyHeadingLink: boolean;
 	copyHeadingLinkFormat: "obsidian" | "astro";
+	addTrailingSlashToLinks: boolean;
 	customContentTypes: CustomContentType[];
 }
 
@@ -37,8 +41,11 @@ export interface CustomContentType {
 	id: string;
 	name: string;
 	folder: string;
+	linkBasePath: string;
 	template: string;
 	enabled: boolean;
+	creationMode: "file" | "folder";
+	indexFileName: string;
 }
 
 export interface FileCreationOptions {
