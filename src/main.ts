@@ -80,73 +80,120 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 					let customTypeId: string | null = null;
 					let shouldProcess = false;
 
-					// Check custom content types first
-					for (const customType of this.settings.customContentTypes) {
-						if (customType.enabled && customType.folder && 
-							(filePath.startsWith(customType.folder + "/") || filePath === customType.folder)) {
-							customTypeId = customType.id;
-							shouldProcess = true;
-							break;
+					// Check exclusions FIRST - before any content type matching
+					// Only check exclusions when Posts folder is specified (when exclusions make sense)
+					let isExcluded = false;
+					if (postsFolder && this.settings.excludedDirectories) {
+						const excludedDirs = this.settings.excludedDirectories.split("|").map(dir => dir.trim()).filter(dir => dir);
+						for (const excludedDir of excludedDirs) {
+							// Check if the file is in the excluded directory (exact path match only)
+							if (filePath === excludedDir || filePath.startsWith(excludedDir + "/")) {
+								isExcluded = true;
+								break;
+							}
 						}
 					}
 
-					if (!customTypeId && pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
-						isPage = true;
-						shouldProcess = true;
+					// If file is excluded, skip entirely
+					if (isExcluded) {
+						return;
+					}
+
+					// Check for folder conflicts only if the file is in a conflicting location
+					const fileDir = file.parent?.path || "";
+					const isInVaultRoot = fileDir === "" || fileDir === "/";
+					
+					// Find which content types would process this file
+					const applicableContentTypes: string[] = [];
+					
+					// Check if file would be processed as post
+					if (this.settings.automatePostCreation) {
+						if (!postsFolder && isInVaultRoot) {
+							applicableContentTypes.push("Posts");
+						} else if (postsFolder && (filePath.startsWith(postsFolder + "/") || filePath === postsFolder)) {
+							applicableContentTypes.push("Posts");
+						}
+					}
+					
+					// Check if file would be processed as page
+					if (this.settings.enablePages) {
+						if (!pagesFolder && isInVaultRoot) {
+							applicableContentTypes.push("Pages");
+						} else if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
+							applicableContentTypes.push("Pages");
+						}
+					}
+					
+					// Check if file would be processed as custom content type
+					for (const customType of this.settings.customContentTypes) {
+						if (customType.enabled) {
+							if (!customType.folder && isInVaultRoot) {
+								applicableContentTypes.push(customType.name || "Custom Content");
+							} else if (customType.folder && (filePath.startsWith(customType.folder + "/") || filePath === customType.folder)) {
+								applicableContentTypes.push(customType.name || "Custom Content");
+							}
+						}
+					}
+					
+					// Only show conflict if multiple content types would process this specific file
+					if (applicableContentTypes.length > 1) {
+						new Notice(`⚠️ Folder conflict detected! Multiple content types (${applicableContentTypes.join(", ")}) would process this file. Please specify different folders in settings.`);
+						return;
+					}
+
+					// Check custom content types first
+					for (const customType of this.settings.customContentTypes) {
+						if (customType.enabled) {
+							if (customType.folder && 
+								(filePath.startsWith(customType.folder + "/") || filePath === customType.folder)) {
+								customTypeId = customType.id;
+								shouldProcess = true;
+								break;
+							} else if (!customType.folder) {
+								// Custom content type folder is blank - treat all files as this type
+								customTypeId = customType.id;
+								shouldProcess = true;
+								break;
+							}
+						}
+					}
+
+					if (!customTypeId) {
+						if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
+							isPage = true;
+							shouldProcess = true;
+						} else if (!pagesFolder && this.settings.enablePages) {
+							// Pages folder is blank - treat all files as pages (like posts)
+							isPage = true;
+							shouldProcess = true;
+						}
 					}
 
 					// Check posts folder - but only if not already matched as page or custom content type
 					if (!shouldProcess && this.settings.automatePostCreation) {
-						// First check if we should exclude this file from post automation
-						let shouldExcludeFromPosts = false;
-						
-						// Exclude if in pages folder
-						if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
-							shouldExcludeFromPosts = true;
-						}
-						
-						// Exclude if in custom content type folders
-						for (const customType of this.settings.customContentTypes) {
-							if (customType.enabled && customType.folder && 
-								(filePath.startsWith(customType.folder + "/") || filePath === customType.folder)) {
-								shouldExcludeFromPosts = true;
-								break;
-							}
-						}
-						
-						// Exclude if in excluded directories
-						if (this.settings.excludedDirectories) {
-							const excludedDirs = this.settings.excludedDirectories.split("|").map(dir => dir.trim()).filter(dir => dir);
-							for (const excludedDir of excludedDirs) {
-								if (filePath.startsWith(excludedDir + "/") || filePath === excludedDir) {
-									shouldExcludeFromPosts = true;
-									break;
-								}
-							}
-						}
-						
-						// Only process as post if not excluded and meets posts folder criteria
-						if (!shouldExcludeFromPosts) {
+						// Only process as post if meets posts folder criteria
+						if (postsFolder) {
+							// Posts folder is specified
 							if (this.settings.onlyAutomateInPostsFolder) {
-								// Only automate in posts folder when this setting is enabled
-								if (postsFolder && (filePath.startsWith(postsFolder + "/") || filePath === postsFolder)) {
-									shouldProcess = true;
+								// Only automate in posts folder and one level down
+								const pathDepth = filePath.split("/").length;
+								const postsDepth = postsFolder.split("/").length;
+								
+								if (filePath.startsWith(postsFolder + "/") || filePath === postsFolder) {
+									// Allow files in posts folder and exactly one level down
+									if (pathDepth <= postsDepth + 1) {
+										shouldProcess = true;
+									}
 								}
 							} else {
-								// Normal post automation logic
-								if (postsFolder) {
-									// If postsFolder is specified, check if file is in that folder
-									if (filePath.startsWith(postsFolder + "/") || filePath === postsFolder) {
-										shouldProcess = true;
-									}
-								} else {
-									// If postsFolder is blank, only treat files in vault root as posts
-									// (but exclusions are already handled above)
-									if (!filePath.includes("/")) {
-										shouldProcess = true;
-									}
+								// Normal automation - check if file is in posts folder
+								if (filePath.startsWith(postsFolder + "/") || filePath === postsFolder) {
+									shouldProcess = true;
 								}
 							}
+						} else {
+							// Posts folder is blank - treat all files as posts (like pages)
+							shouldProcess = true;
 						}
 					}
 

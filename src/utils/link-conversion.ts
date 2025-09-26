@@ -120,13 +120,17 @@ export class LinkConverter {
 
 		// Format base path
 		if (basePath) {
-			// Only add leading slash if the base path starts with "/" (absolute URL)
-			// For relative URLs, don't add leading slash
-			if (basePath.startsWith("/") && !basePath.endsWith("/")) {
-				basePath += "/";
-			} else if (!basePath.startsWith("/") && !basePath.endsWith("/")) {
+			// Add leading slash if not present to make it absolute from root
+			if (!basePath.startsWith("/")) {
+				basePath = "/" + basePath;
+			}
+			// Add trailing slash if not present
+			if (!basePath.endsWith("/")) {
 				basePath += "/";
 			}
+		} else {
+			// When no base path is specified, add leading slash to make it absolute from root
+			basePath = "/";
 		}
 
 		// Determine if we should add trailing slash
@@ -154,9 +158,17 @@ export class LinkConverter {
 
 		// Use the same logic as getContentTypeForPath but for the target link
 		const targetContentType = this.getContentTypeForPath(path + '.md');
-		basePath = targetContentType.basePath;
-		creationMode = targetContentType.creationMode;
-		indexFileName = targetContentType.indexFileName;
+		
+		// If target link doesn't have a clear content type (no folder path), use current file's content type
+		if (!targetContentType.basePath && currentFileContentType.basePath) {
+			basePath = currentFileContentType.basePath;
+			creationMode = currentFileContentType.creationMode;
+			indexFileName = currentFileContentType.indexFileName;
+		} else {
+			basePath = targetContentType.basePath;
+			creationMode = targetContentType.creationMode;
+			indexFileName = targetContentType.indexFileName;
+		}
 		
 		// Determine content folder from the target path
 		const targetPath = path + '.md';
@@ -172,7 +184,6 @@ export class LinkConverter {
 		if (!contentFolder && this.settings.postsFolder && targetPath.startsWith(this.settings.postsFolder + '/')) {
 			contentFolder = this.settings.postsFolder;
 		}
-
 
 		// Strip content folder if present
 		if (contentFolder) {
@@ -204,13 +215,17 @@ export class LinkConverter {
 
 		// Format base path
 		if (basePath) {
-			// Only add leading slash if the base path starts with "/" (absolute URL)
-			// For relative URLs, don't add leading slash
-			if (basePath.startsWith("/") && !basePath.endsWith("/")) {
-				basePath += "/";
-			} else if (!basePath.startsWith("/") && !basePath.endsWith("/")) {
+			// Add leading slash if not present to make it absolute from root
+			if (!basePath.startsWith("/")) {
+				basePath = "/" + basePath;
+			}
+			// Add trailing slash if not present
+			if (!basePath.endsWith("/")) {
 				basePath += "/";
 			}
+		} else {
+			// When no base path is specified, add leading slash to make it absolute from root
+			basePath = "/";
 		}
 
 		// Determine if we should add trailing slash
@@ -251,7 +266,7 @@ export class LinkConverter {
 		}
 		
 		// Check if posts folder is blank - treat ALL files as posts
-		if (!this.settings.postsFolder && this.settings.automatePostCreation && !this.settings.onlyAutomateInPostsFolder) {
+		if (!this.settings.postsFolder && this.settings.automatePostCreation) {
 			return {
 				basePath: this.settings.postsLinkBasePath,
 				creationMode: this.settings.creationMode,

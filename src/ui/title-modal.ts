@@ -180,16 +180,27 @@ export class TitleModal extends Modal {
 	}
 
 	private async createNewFile(title: string): Promise<TFile | null> {
-		// Determine the appropriate folder based on content type
+		// Determine the appropriate folder based on where the user created the file
 		let targetFolder: string;
+		
+		// Get the directory where the user created the file
+		const originalDir = this.file?.parent?.path || "";
 		
 		if (this.fileOps.isCustomContentType(this.type)) {
 			const customType = this.fileOps.getCustomContentType(this.type);
-			targetFolder = customType?.folder || this.plugin.settings.postsFolder || "";
+			// For custom content types, respect the user's chosen location (subfolder)
+			// Only use the configured folder if the user created the file in the vault root
+			if (originalDir === "" || originalDir === "/") {
+				targetFolder = customType?.folder || "";
+			} else {
+				targetFolder = originalDir;
+			}
 		} else if (this.type === "page") {
-			targetFolder = this.plugin.settings.pagesFolder || "";
+			// For pages, use the configured pages folder if it exists, otherwise respect user's choice
+			targetFolder = this.plugin.settings.pagesFolder || originalDir;
 		} else {
-			targetFolder = this.plugin.settings.postsFolder || "";
+			// For posts, use the configured posts folder if it exists, otherwise respect user's choice
+			targetFolder = this.plugin.settings.postsFolder || originalDir;
 		}
 
 		// Create the filename from the title

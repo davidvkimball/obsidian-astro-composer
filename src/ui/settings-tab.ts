@@ -133,6 +133,9 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.onChange(async (value: string) => {
 						settings.postsFolder = value;
 						await this.plugin.saveSettings();
+						this.updateOnlyAutomateField();
+						this.updateExcludedDirsField();
+						this.checkForFolderConflicts();
 					})
 			);
 
@@ -140,7 +143,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		this.onlyAutomateContainer = this.autoRenameContainer.createDiv();
 		new Setting(this.onlyAutomateContainer)
 			.setName("Only automate in this folder")
-			.setDesc("When enabled, automation will only trigger for new .md files within the specified Posts folder and subfolders.")
+			.setDesc("When enabled, automation will only trigger for new .md files within the Posts folder and one level down (for folder-based posts). Files in deeper subfolders will be ignored.")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(settings.onlyAutomateInPostsFolder)
@@ -169,10 +172,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		new Setting(this.autoRenameContainer)
 			.setName("Posts link base path")
-			.setDesc("Base path for converted links in posts (e.g., blog/, leave blank for root domain).")
+			.setDesc("Base path for converted links in posts (e.g., /blog/, leave blank for root /).")
 			.addText((text) =>
 				text
-					.setPlaceholder("blog/")
+					.setPlaceholder("/blog/")
 					.setValue(settings.postsLinkBasePath)
 					.onChange(async (value: string) => {
 						settings.postsLinkBasePath = value;
@@ -287,15 +290,16 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.onChange(async (value: string) => {
 						settings.pagesFolder = value;
 						await this.plugin.saveSettings();
+						this.checkForFolderConflicts();
 					})
 			);
 
 		new Setting(this.pagesFieldsContainer)
 			.setName("Pages link base path")
-			.setDesc("Base path for converted links in pages (leave blank for root domain).")
+			.setDesc("Base path for converted links in pages (e.g., /about/, leave blank for root /).")
 			.addText((text) =>
 				text
-					.setPlaceholder("Enter link base path")
+					.setPlaceholder("/")
 					.setValue(settings.pagesLinkBasePath)
 					.onChange(async (value: string) => {
 						settings.pagesLinkBasePath = value;
@@ -361,8 +365,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		this.updateConditionalFields();
 		this.updateIndexFileField();
 		this.updateExcludedDirsField();
+		this.updateOnlyAutomateField();
 		this.updatePagesFields();
 		this.updateCopyHeadingFields();
+		this.checkForFolderConflicts();
 	}
 
 	updateConditionalFields() {
@@ -379,10 +385,19 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		}
 	}
 
+	updateOnlyAutomateField() {
+		if (this.onlyAutomateContainer) {
+			const settings = this.plugin.settings;
+			// Hide "Only automate in this folder" when Posts folder is blank
+			this.onlyAutomateContainer.style.display = settings.postsFolder ? "block" : "none";
+		}
+	}
+
 	updateExcludedDirsField() {
 		if (this.excludedDirsContainer) {
 			const settings = this.plugin.settings;
-			this.excludedDirsContainer.style.display = !settings.onlyAutomateInPostsFolder ? "block" : "none";
+			// Hide "Excluded directories" when Posts folder is blank OR when "Only automate in this folder" is enabled
+			this.excludedDirsContainer.style.display = settings.postsFolder && !settings.onlyAutomateInPostsFolder ? "block" : "none";
 		}
 	}
 
@@ -397,6 +412,80 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		if (this.copyHeadingContainer) {
 			const settings = this.plugin.settings;
 			this.copyHeadingContainer.style.display = settings.enableCopyHeadingLink ? "block" : "none";
+		}
+	}
+
+	checkForFolderConflicts() {
+		const settings = this.plugin.settings;
+		const blankFolders: string[] = [];
+		const folderConflicts: { [folder: string]: string[] } = {};
+		
+		// Check posts folder
+		if (!settings.postsFolder && settings.automatePostCreation) {
+			blankFolders.push("Posts");
+		} else if (settings.postsFolder && settings.automatePostCreation) {
+			if (!folderConflicts[settings.postsFolder]) {
+				folderConflicts[settings.postsFolder] = [];
+			}
+			folderConflicts[settings.postsFolder].push("Posts");
+		}
+		
+		// Check pages folder
+		if (!settings.pagesFolder && settings.enablePages) {
+			blankFolders.push("Pages");
+		} else if (settings.pagesFolder && settings.enablePages) {
+			if (!folderConflicts[settings.pagesFolder]) {
+				folderConflicts[settings.pagesFolder] = [];
+			}
+			folderConflicts[settings.pagesFolder].push("Pages");
+		}
+		
+		// Check custom content types
+		for (const customType of settings.customContentTypes) {
+			if (customType.enabled) {
+				if (!customType.folder) {
+					blankFolders.push(customType.name || "Custom Content");
+				} else {
+					if (!folderConflicts[customType.folder]) {
+						folderConflicts[customType.folder] = [];
+					}
+					folderConflicts[customType.folder].push(customType.name || "Custom Content");
+				}
+			}
+		}
+		
+		// Check for conflicts
+		let hasConflicts = false;
+		let conflictMessage = "";
+		
+		// Check blank folder conflicts
+		if (blankFolders.length > 1) {
+			hasConflicts = true;
+			conflictMessage += `Multiple content types are set to use the vault root: <strong>${blankFolders.join(", ")}</strong><br><br>`;
+		}
+		
+		// Check same folder conflicts
+		for (const [folder, contentTypes] of Object.entries(folderConflicts)) {
+			if (contentTypes.length > 1) {
+				hasConflicts = true;
+				conflictMessage += `Multiple content types are set to use the same folder "${folder}": <strong>${contentTypes.join(", ")}</strong><br><br>`;
+			}
+		}
+		
+		// Show warning if conflicts exist
+		if (hasConflicts) {
+			const warningEl = this.containerEl.querySelector('.folder-conflict-warning');
+			if (warningEl) {
+				warningEl.remove();
+			}
+			
+			const warning = this.containerEl.createDiv({ cls: 'folder-conflict-warning' });
+			warning.style.cssText = 'background: #ff6b6b; color: white; padding: 15px; border-radius: 5px; margin: 15px 0; border: 2px solid #ff0000; font-weight: bold;';
+			warning.innerHTML = `
+				<strong>⚠️ FOLDER CONFLICT DETECTED ⚠️</strong><br><br>
+				${conflictMessage}
+				This will cause automation conflicts! Consider specifying different folders for each content type.
+			`;
 		}
 	}
 
@@ -415,6 +504,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		settings.customContentTypes.push(newType);
 		this.plugin.saveSettings();
 		this.renderCustomContentTypes();
+		this.checkForFolderConflicts();
 		this.plugin.registerCreateEvent();
 	}
 
@@ -470,6 +560,9 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				
 				// Update visibility
 				this.updateCustomContentTypeVisibility(customType.id, newValue);
+				
+				// Check for conflicts
+				this.checkForFolderConflicts();
 			});
 			
 			// Also add change event as backup
@@ -531,10 +624,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			const linkContainer = settingsContainer.createDiv();
 			new Setting(linkContainer)
 				.setName("Link base path")
-				.setDesc("Base path for converted links (e.g., 'projects/', 'notes/tutorials/', leave blank for root domain).")
+				.setDesc("Base path for converted links (e.g., '/projects/', '/notes/tutorials/', leave blank for root /).")
 				.addText((text) => {
 					text
-						.setPlaceholder("Enter link base path")
+						.setPlaceholder("/projects/")
 						.setValue(customType.linkBasePath || "")
 						.onChange(async (value: string) => {
 							customType.linkBasePath = value;
@@ -618,6 +711,22 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			// Set initial visibility
 			this.updateCustomContentTypeVisibility(customType.id, customType.enabled);
 		});
+
+		// Add button for creating new custom content types
+		const addButtonContainer = this.customContentTypesContainer.createDiv();
+		const addButtonSetting = new Setting(addButtonContainer)
+			.setName("")
+			.addButton((button) => {
+				button
+					.setButtonText("Add custom content type")
+					.setCta()
+					.onClick(() => {
+						this.addCustomContentType();
+					});
+			});
+		
+		// Hide the divider line for the add button
+		addButtonSetting.settingEl.style.borderTop = "none";
 	}
 
 	private updateCustomContentTypeVisibility(typeId: string, enabled: boolean) {
@@ -649,5 +758,6 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		this.plugin.saveSettings();
 		this.renderCustomContentTypes();
 		this.plugin.registerCreateEvent();
+		this.checkForFolderConflicts();
 	}
 }

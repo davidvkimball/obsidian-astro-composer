@@ -115,15 +115,29 @@ export class FileOperations {
 			targetFolder = "";
 		} else if (this.isCustomContentType(type)) {
 			const customType = this.getCustomContentType(type);
-			targetFolder = customType ? customType.folder : "";
+			// Get the directory where the user created the file
+			const originalDir = file.parent?.path || "";
+			
+			// For custom content types, respect the user's chosen location (subfolder)
+			// Only use the configured folder if the user created the file in the vault root
+			if (originalDir === "" || originalDir === "/") {
+				targetFolder = customType ? customType.folder : "";
+			} else {
+				targetFolder = originalDir;
+			}
 		} else {
-			// For posts and pages, only move if target folder is specified
+			// For posts and pages, respect where the user created the file
 			const postsFolder = this.settings.postsFolder || "";
 			const pagesFolder = this.settings.pagesFolder || "";
-			if (type === "post") {
-				targetFolder = postsFolder; // Will be empty string if blank
+			
+			// Get the directory where the user created the file
+			const originalDir = file.parent?.path || "";
+			
+			// If the file is in vault root, don't set a target folder (keep it in root)
+			if (originalDir === "" || originalDir === "/") {
+				targetFolder = "";
 			} else {
-				targetFolder = pagesFolder; // Will be empty string if blank
+				targetFolder = originalDir;
 			}
 		}
 		
