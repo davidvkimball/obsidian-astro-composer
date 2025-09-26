@@ -92,9 +92,7 @@ export class LinkConverter {
 
 		// Strip content folder if present
 		if (contentFolder) {
-			console.log("Stripping content folder:", contentFolder, "from path:", path);
 			path = path.slice(contentFolder.length + 1);
-			console.log("Path after stripping:", path);
 		}
 
 		let addTrailingSlash = false;
@@ -138,7 +136,6 @@ export class LinkConverter {
 	}
 
 	private getAstroUrlFromInternalLinkWithContext(link: string, currentFilePath: string, currentFileContentType: { basePath: string; creationMode: "file" | "folder"; indexFileName: string }): string {
-		console.log("getAstroUrlFromInternalLinkWithContext called with:", link, "currentFilePath:", currentFilePath);
 		
 		const hashIndex = link.indexOf('#');
 		let path = hashIndex >= 0 ? link.slice(0, hashIndex) : link;
@@ -148,7 +145,6 @@ export class LinkConverter {
 		path = decodeURIComponent(path);
 		path = path.replace(/\.md$/, "");
 		
-		console.log("Processed path:", path);
 
 		// Determine content type and appropriate base path
 		let basePath = "";
@@ -180,9 +176,7 @@ export class LinkConverter {
 
 		// Strip content folder if present
 		if (contentFolder) {
-			console.log("Stripping content folder:", contentFolder, "from path:", path);
 			path = path.slice(contentFolder.length + 1);
-			console.log("Path after stripping:", path);
 		}
 
 		let addTrailingSlash = false;
@@ -226,13 +220,10 @@ export class LinkConverter {
 	}
 
 	private getContentTypeForPath(filePath: string): { basePath: string; creationMode: "file" | "folder"; indexFileName: string } {
-		console.log("getContentTypeForPath called with:", filePath);
-		console.log("postsFolder setting:", this.settings.postsFolder);
 		
 		// Check custom content types FIRST (highest priority)
 		for (const customType of this.settings.customContentTypes) {
 			if (customType.enabled && customType.folder && filePath.startsWith(customType.folder + '/')) {
-				console.log("Matched custom content type:", customType.folder);
 				return {
 					basePath: customType.linkBasePath || "",
 					creationMode: customType.creationMode,
@@ -243,7 +234,6 @@ export class LinkConverter {
 		
 		// Check pages folder
 		if (this.settings.enablePages && this.settings.pagesFolder && filePath.startsWith(this.settings.pagesFolder + '/')) {
-			console.log("Matched pages folder");
 			return {
 				basePath: this.settings.pagesLinkBasePath,
 				creationMode: this.settings.pagesCreationMode || "file",
@@ -253,7 +243,6 @@ export class LinkConverter {
 		
 		// Check posts folder
 		if (this.settings.postsFolder && filePath.startsWith(this.settings.postsFolder + '/')) {
-			console.log("Matched posts folder");
 			return {
 				basePath: this.settings.postsLinkBasePath,
 				creationMode: this.settings.creationMode,
@@ -263,10 +252,6 @@ export class LinkConverter {
 		
 		// Check if posts folder is blank - treat ALL files as posts
 		if (!this.settings.postsFolder && this.settings.automatePostCreation && !this.settings.onlyAutomateInPostsFolder) {
-			console.log("Checking blank posts folder logic for:", filePath);
-			
-			// When posts folder is blank, treat ALL files as posts
-			console.log("Posts folder is blank, treating as post");
 			return {
 				basePath: this.settings.postsLinkBasePath,
 				creationMode: this.settings.creationMode,
@@ -275,7 +260,6 @@ export class LinkConverter {
 		}
 		
 		// Default fallback
-		console.log("Using default fallback - no content type matched for:", filePath);
 		return {
 			basePath: "",
 			creationMode: "file",

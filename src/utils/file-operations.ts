@@ -294,17 +294,13 @@ export class FileOperations {
 				return null;
 			}
 
-			console.log("Renaming folder from", file.parent.path, "to", newFolderPath);
 			await this.app.vault.rename(file.parent, newFolderPath);
 			const newFilePath = `${newFolderPath}/${file.name}`;
-			console.log("Looking for new file at:", newFilePath);
 			const newFile = this.app.vault.getAbstractFileByPath(newFilePath);
 			if (!(newFile instanceof TFile)) {
-				console.log("Failed to locate renamed file at:", newFilePath);
 				new Notice("Failed to locate renamed file.");
 				return null;
 			}
-			console.log("Successfully found renamed file:", newFile.path);
 			return newFile;
 		} else {
 			if (!file.parent) {
