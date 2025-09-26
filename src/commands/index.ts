@@ -17,9 +17,19 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		const pagesFolder = settings.enablePages ? (settings.pagesFolder || "") : "";
 		
 		// Check if it's a post
-		if (settings.automatePostCreation && postsFolder && 
-			(filePath.startsWith(postsFolder + "/") || filePath === postsFolder)) {
-			return true;
+		if (settings.automatePostCreation) {
+			if (postsFolder) {
+				// If postsFolder is specified, check if file is in that folder
+				if (filePath.startsWith(postsFolder + "/") || filePath === postsFolder) {
+					return true;
+				}
+		} else {
+			// If postsFolder is blank, only treat files in vault root as posts
+			// This includes both direct files and folder-based posts in vault root
+			if (!filePath.includes("/") || (filePath.includes("/") && !filePath.startsWith("/") && filePath.split("/").length === 2)) {
+				return true;
+			}
+		}
 		}
 		
 		// Check if it's a page
@@ -112,9 +122,19 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 	let hasMatchingContentType = false;
 	
 	// Check if it's a post
-	if (settings.automatePostCreation && postsFolder && 
-		(filePath.startsWith(postsFolder + "/") || filePath === postsFolder)) {
-		hasMatchingContentType = true;
+	if (settings.automatePostCreation) {
+		if (postsFolder) {
+			// If postsFolder is specified, check if file is in that folder
+			if (filePath.startsWith(postsFolder + "/") || filePath === postsFolder) {
+				hasMatchingContentType = true;
+			}
+		} else {
+			// If postsFolder is blank, only treat files in vault root as posts
+			// This includes both direct files and folder-based posts in vault root
+			if (!filePath.includes("/") || (filePath.includes("/") && !filePath.startsWith("/") && filePath.split("/").length === 2)) {
+				hasMatchingContentType = true;
+			}
+		}
 	}
 	
 	// Check if it's a page

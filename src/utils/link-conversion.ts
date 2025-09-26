@@ -29,29 +29,62 @@ export class LinkConverter {
 		let creationMode: "file" | "folder" = "file";
 		let indexFileName = "";
 
-		// Check posts folder
-		if (this.settings.postsFolder && path.startsWith(this.settings.postsFolder + '/')) {
-			contentFolder = this.settings.postsFolder;
-			basePath = this.settings.postsLinkBasePath;
-			creationMode = this.settings.creationMode;
-			indexFileName = this.settings.indexFileName;
+		// Check custom content types first (highest priority)
+		let foundCustomType = false;
+		for (const customType of this.settings.customContentTypes) {
+			if (customType.enabled && customType.folder && path.startsWith(customType.folder + '/')) {
+				contentFolder = customType.folder;
+				basePath = customType.linkBasePath || "";
+				creationMode = customType.creationMode;
+				indexFileName = customType.indexFileName;
+				foundCustomType = true;
+				break;
+			}
 		}
-		// Check pages folder
-		else if (this.settings.enablePages && this.settings.pagesFolder && path.startsWith(this.settings.pagesFolder + '/')) {
+		
+		// Check pages folder (second priority)
+		if (!foundCustomType && this.settings.enablePages && this.settings.pagesFolder && path.startsWith(this.settings.pagesFolder + '/')) {
 			contentFolder = this.settings.pagesFolder;
 			basePath = this.settings.pagesLinkBasePath;
 			creationMode = this.settings.pagesCreationMode || "file";
 			indexFileName = this.settings.pagesIndexFileName || "";
 		}
-		// Check custom content types
-		else {
-			for (const customType of this.settings.customContentTypes) {
-				if (customType.enabled && customType.folder && path.startsWith(customType.folder + '/')) {
-					contentFolder = customType.folder;
-					basePath = customType.linkBasePath || "";
-					creationMode = customType.creationMode;
-					indexFileName = customType.indexFileName;
-					break;
+		// Check posts folder (third priority)
+		else if (!foundCustomType && this.settings.postsFolder && path.startsWith(this.settings.postsFolder + '/')) {
+			contentFolder = this.settings.postsFolder;
+			basePath = this.settings.postsLinkBasePath;
+			creationMode = this.settings.creationMode;
+			indexFileName = this.settings.indexFileName || "index";
+		}
+		// If posts folder is blank and "Only automate in this folder" is NOT checked, treat as post unless excluded
+		else if (!foundCustomType && !this.settings.postsFolder && !this.settings.onlyAutomateInPostsFolder) {
+			// Only treat files in vault root as posts when posts folder is blank
+			// This includes both direct files and folder-based posts in vault root
+			if (!path.includes('/') || (path.includes('/') && !path.startsWith('/') && path.split('/').length === 2)) {
+				// Check if file should be excluded from post processing
+				let shouldExcludeFromPosts = false;
+				
+				// Exclude if in pages folder
+				if (this.settings.enablePages && this.settings.pagesFolder && path.startsWith(this.settings.pagesFolder + '/')) {
+					shouldExcludeFromPosts = true;
+				}
+				
+				// Exclude if in excluded directories
+				if (this.settings.excludedDirectories) {
+					const excludedDirs = this.settings.excludedDirectories.split("|").map(dir => dir.trim()).filter(dir => dir);
+					for (const excludedDir of excludedDirs) {
+						if (path.startsWith(excludedDir + '/') || path === excludedDir) {
+							shouldExcludeFromPosts = true;
+							break;
+						}
+					}
+				}
+				
+				// If not excluded, treat as post
+				if (!shouldExcludeFromPosts) {
+					basePath = this.settings.postsLinkBasePath;
+					creationMode = this.settings.creationMode;
+					indexFileName = this.settings.indexFileName || "index";
 				}
 			}
 		}
@@ -59,28 +92,29 @@ export class LinkConverter {
 
 		// Strip content folder if present
 		if (contentFolder) {
+			console.log("Stripping content folder:", contentFolder, "from path:", path);
 			path = path.slice(contentFolder.length + 1);
+			console.log("Path after stripping:", path);
 		}
 
 		let addTrailingSlash = false;
 		
 		// Smart detection: if the filename matches the index file name (regardless of creation mode),
 		// treat it as folder-based logic
-		if (indexFileName && indexFileName.trim() !== "") {
-			const parts = path.split('/');
-			if (parts[parts.length - 1] === indexFileName) {
-				parts.pop();
-				path = parts.join('/');
-				addTrailingSlash = true;
-			}
-		} else if (creationMode === "folder") {
-			// Fallback to original logic if no index file name is specified
-			const parts = path.split('/');
-			if (parts[parts.length - 1] === indexFileName) {
-				parts.pop();
-				path = parts.join('/');
-				addTrailingSlash = true;
-			}
+		const parts = path.split('/');
+		const lastPart = parts[parts.length - 1];
+		
+		// Check if the last part matches the specified index file name
+		if (indexFileName && indexFileName.trim() !== "" && lastPart === indexFileName) {
+			parts.pop();
+			path = parts.join('/');
+			addTrailingSlash = true;
+		}
+		// Check if the last part matches the default "index" (when no indexFileName is specified)
+		else if ((!indexFileName || indexFileName.trim() === "") && lastPart === "index") {
+			parts.pop();
+			path = parts.join('/');
+			addTrailingSlash = true;
 		}
 
 		const slugParts = path.split('/').map(part => this.toKebabCase(part));
@@ -88,8 +122,13 @@ export class LinkConverter {
 
 		// Format base path
 		if (basePath) {
-			if (!basePath.startsWith("/")) basePath = "/" + basePath;
-			if (!basePath.endsWith("/")) basePath += "/";
+			// Only add leading slash if the base path starts with "/" (absolute URL)
+			// For relative URLs, don't add leading slash
+			if (basePath.startsWith("/") && !basePath.endsWith("/")) {
+				basePath += "/";
+			} else if (!basePath.startsWith("/") && !basePath.endsWith("/")) {
+				basePath += "/";
+			}
 		}
 
 		// Determine if we should add trailing slash
@@ -99,6 +138,8 @@ export class LinkConverter {
 	}
 
 	private getAstroUrlFromInternalLinkWithContext(link: string, currentFilePath: string, currentFileContentType: { basePath: string; creationMode: "file" | "folder"; indexFileName: string }): string {
+		console.log("getAstroUrlFromInternalLinkWithContext called with:", link, "currentFilePath:", currentFilePath);
+		
 		const hashIndex = link.indexOf('#');
 		let path = hashIndex >= 0 ? link.slice(0, hashIndex) : link;
 		const anchor = hashIndex >= 0 ? link.slice(hashIndex) : '';
@@ -106,6 +147,8 @@ export class LinkConverter {
 		// URL decode the path to handle encoded characters like %20
 		path = decodeURIComponent(path);
 		path = path.replace(/\.md$/, "");
+		
+		console.log("Processed path:", path);
 
 		// Determine content type and appropriate base path
 		let basePath = "";
@@ -113,67 +156,53 @@ export class LinkConverter {
 		let creationMode: "file" | "folder" = "file";
 		let indexFileName = "";
 
-		// Check if the link has a folder path (absolute link)
-		if (path.includes('/')) {
-			// Use the original logic for absolute paths
-			// Check posts folder
-			if (this.settings.postsFolder && path.startsWith(this.settings.postsFolder + '/')) {
-				contentFolder = this.settings.postsFolder;
-				basePath = this.settings.postsLinkBasePath;
-				creationMode = this.settings.creationMode;
-				indexFileName = this.settings.indexFileName;
+		// Use the same logic as getContentTypeForPath but for the target link
+		const targetContentType = this.getContentTypeForPath(path + '.md');
+		basePath = targetContentType.basePath;
+		creationMode = targetContentType.creationMode;
+		indexFileName = targetContentType.indexFileName;
+		
+		// Determine content folder from the target path
+		const targetPath = path + '.md';
+		for (const customType of this.settings.customContentTypes) {
+			if (customType.enabled && customType.folder && targetPath.startsWith(customType.folder + '/')) {
+				contentFolder = customType.folder;
+				break;
 			}
-			// Check pages folder
-			else if (this.settings.enablePages && this.settings.pagesFolder && path.startsWith(this.settings.pagesFolder + '/')) {
-				contentFolder = this.settings.pagesFolder;
-				basePath = this.settings.pagesLinkBasePath;
-				creationMode = this.settings.pagesCreationMode || "file";
-				indexFileName = this.settings.pagesIndexFileName || "";
-			}
-			// Check custom content types
-			else {
-				for (const customType of this.settings.customContentTypes) {
-					if (customType.enabled && customType.folder && path.startsWith(customType.folder + '/')) {
-						contentFolder = customType.folder;
-						basePath = customType.linkBasePath || "";
-						creationMode = customType.creationMode;
-						indexFileName = customType.indexFileName;
-						break;
-					}
-				}
-			}
-		} else {
-			// Relative link - use current file's content type
-			basePath = currentFileContentType.basePath;
-			creationMode = currentFileContentType.creationMode;
-			indexFileName = currentFileContentType.indexFileName;
+		}
+		if (!contentFolder && this.settings.enablePages && this.settings.pagesFolder && targetPath.startsWith(this.settings.pagesFolder + '/')) {
+			contentFolder = this.settings.pagesFolder;
+		}
+		if (!contentFolder && this.settings.postsFolder && targetPath.startsWith(this.settings.postsFolder + '/')) {
+			contentFolder = this.settings.postsFolder;
 		}
 
 
 		// Strip content folder if present
 		if (contentFolder) {
+			console.log("Stripping content folder:", contentFolder, "from path:", path);
 			path = path.slice(contentFolder.length + 1);
+			console.log("Path after stripping:", path);
 		}
 
 		let addTrailingSlash = false;
 		
 		// Smart detection: if the filename matches the index file name (regardless of creation mode),
 		// treat it as folder-based logic
-		if (indexFileName && indexFileName.trim() !== "") {
-			const parts = path.split('/');
-			if (parts[parts.length - 1] === indexFileName) {
-				parts.pop();
-				path = parts.join('/');
-				addTrailingSlash = true;
-			}
-		} else if (creationMode === "folder") {
-			// Fallback to original logic if no index file name is specified
-			const parts = path.split('/');
-			if (parts[parts.length - 1] === indexFileName) {
-				parts.pop();
-				path = parts.join('/');
-				addTrailingSlash = true;
-			}
+		const parts = path.split('/');
+		const lastPart = parts[parts.length - 1];
+		
+		// Check if the last part matches the specified index file name
+		if (indexFileName && indexFileName.trim() !== "" && lastPart === indexFileName) {
+			parts.pop();
+			path = parts.join('/');
+			addTrailingSlash = true;
+		}
+		// Check if the last part matches the default "index" (when no indexFileName is specified)
+		else if ((!indexFileName || indexFileName.trim() === "") && lastPart === "index") {
+			parts.pop();
+			path = parts.join('/');
+			addTrailingSlash = true;
 		}
 
 		const slugParts = path.split('/').map(part => this.toKebabCase(part));
@@ -181,8 +210,13 @@ export class LinkConverter {
 
 		// Format base path
 		if (basePath) {
-			if (!basePath.startsWith("/")) basePath = "/" + basePath;
-			if (!basePath.endsWith("/")) basePath += "/";
+			// Only add leading slash if the base path starts with "/" (absolute URL)
+			// For relative URLs, don't add leading slash
+			if (basePath.startsWith("/") && !basePath.endsWith("/")) {
+				basePath += "/";
+			} else if (!basePath.startsWith("/") && !basePath.endsWith("/")) {
+				basePath += "/";
+			}
 		}
 
 		// Determine if we should add trailing slash
@@ -192,36 +226,56 @@ export class LinkConverter {
 	}
 
 	private getContentTypeForPath(filePath: string): { basePath: string; creationMode: "file" | "folder"; indexFileName: string } {
-		// Check posts folder
-		if (this.settings.postsFolder && filePath.startsWith(this.settings.postsFolder + '/')) {
-			return {
-				basePath: this.settings.postsLinkBasePath,
-				creationMode: this.settings.creationMode,
-				indexFileName: this.settings.indexFileName
-			};
+		console.log("getContentTypeForPath called with:", filePath);
+		console.log("postsFolder setting:", this.settings.postsFolder);
+		
+		// Check custom content types FIRST (highest priority)
+		for (const customType of this.settings.customContentTypes) {
+			if (customType.enabled && customType.folder && filePath.startsWith(customType.folder + '/')) {
+				console.log("Matched custom content type:", customType.folder);
+				return {
+					basePath: customType.linkBasePath || "",
+					creationMode: customType.creationMode,
+					indexFileName: customType.indexFileName
+				};
+			}
 		}
+		
 		// Check pages folder
-		else if (this.settings.enablePages && this.settings.pagesFolder && filePath.startsWith(this.settings.pagesFolder + '/')) {
+		if (this.settings.enablePages && this.settings.pagesFolder && filePath.startsWith(this.settings.pagesFolder + '/')) {
+			console.log("Matched pages folder");
 			return {
 				basePath: this.settings.pagesLinkBasePath,
 				creationMode: this.settings.pagesCreationMode || "file",
 				indexFileName: this.settings.pagesIndexFileName || ""
 			};
 		}
-		// Check custom content types
-		else {
-			for (const customType of this.settings.customContentTypes) {
-				if (customType.enabled && customType.folder && filePath.startsWith(customType.folder + '/')) {
-					return {
-						basePath: customType.linkBasePath || "",
-						creationMode: customType.creationMode,
-						indexFileName: customType.indexFileName
-					};
-				}
-			}
+		
+		// Check posts folder
+		if (this.settings.postsFolder && filePath.startsWith(this.settings.postsFolder + '/')) {
+			console.log("Matched posts folder");
+			return {
+				basePath: this.settings.postsLinkBasePath,
+				creationMode: this.settings.creationMode,
+				indexFileName: this.settings.indexFileName || "index"
+			};
+		}
+		
+		// Check if posts folder is blank - treat ALL files as posts
+		if (!this.settings.postsFolder && this.settings.automatePostCreation && !this.settings.onlyAutomateInPostsFolder) {
+			console.log("Checking blank posts folder logic for:", filePath);
+			
+			// When posts folder is blank, treat ALL files as posts
+			console.log("Posts folder is blank, treating as post");
+			return {
+				basePath: this.settings.postsLinkBasePath,
+				creationMode: this.settings.creationMode,
+				indexFileName: this.settings.indexFileName || "index"
+			};
 		}
 		
 		// Default fallback
+		console.log("Using default fallback - no content type matched for:", filePath);
 		return {
 			basePath: "",
 			creationMode: "file",

@@ -33,31 +33,39 @@ export class HeadingLinkGenerator {
 		let creationMode: "file" | "folder" = "file";
 		let indexFileName = "";
 
-		// Check posts folder
-		if (this.settings.postsFolder && path.startsWith(this.settings.postsFolder + '/')) {
-			contentFolder = this.settings.postsFolder;
-			basePath = this.settings.postsLinkBasePath;
-			creationMode = this.settings.creationMode;
-			indexFileName = this.settings.indexFileName;
+		// Check custom content types first (highest priority)
+		let foundCustomType = false;
+		for (const customType of this.settings.customContentTypes) {
+			if (customType.enabled && customType.folder && path.startsWith(customType.folder + '/')) {
+				contentFolder = customType.folder;
+				basePath = customType.linkBasePath || "";
+				creationMode = customType.creationMode;
+				indexFileName = customType.indexFileName;
+				foundCustomType = true;
+				break;
+			}
 		}
-		// Check pages folder
-		else if (this.settings.enablePages && this.settings.pagesFolder && path.startsWith(this.settings.pagesFolder + '/')) {
+		
+		// Check pages folder (second priority)
+		if (!foundCustomType && this.settings.enablePages && this.settings.pagesFolder && path.startsWith(this.settings.pagesFolder + '/')) {
 			contentFolder = this.settings.pagesFolder;
 			basePath = this.settings.pagesLinkBasePath;
 			creationMode = this.settings.pagesCreationMode || "file";
 			indexFileName = this.settings.pagesIndexFileName || "";
 		}
-		// Check custom content types
-		else {
-			for (const customType of this.settings.customContentTypes) {
-				if (customType.enabled && customType.folder && path.startsWith(customType.folder + '/')) {
-					contentFolder = customType.folder;
-					basePath = customType.linkBasePath || "";
-					creationMode = customType.creationMode;
-					indexFileName = customType.indexFileName;
-					break;
-				}
-			}
+		// Check posts folder (third priority)
+		else if (!foundCustomType && this.settings.postsFolder && path.startsWith(this.settings.postsFolder + '/')) {
+			contentFolder = this.settings.postsFolder;
+			basePath = this.settings.postsLinkBasePath;
+			creationMode = this.settings.creationMode;
+			indexFileName = this.settings.indexFileName || "index";
+		}
+		// Check if posts folder is blank - treat ALL files as posts
+		else if (!foundCustomType && !this.settings.postsFolder && this.settings.automatePostCreation && !this.settings.onlyAutomateInPostsFolder) {
+			// When posts folder is blank, treat ALL files as posts
+			basePath = this.settings.postsLinkBasePath;
+			creationMode = this.settings.creationMode;
+			indexFileName = this.settings.indexFileName || "index";
 		}
 
 		// Strip content folder if present
@@ -78,8 +86,10 @@ export class HeadingLinkGenerator {
 			}
 		} else if (creationMode === "folder") {
 			// Fallback to original logic if no index file name is specified
+			// Default to "index" when indexFileName is blank
+			const defaultIndexName = "index";
 			const parts = path.split('/');
-			if (parts[parts.length - 1] === indexFileName) {
+			if (parts[parts.length - 1] === defaultIndexName) {
 				parts.pop();
 				path = parts.join('/');
 				addTrailingSlash = true;

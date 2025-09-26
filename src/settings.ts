@@ -8,7 +8,7 @@ export const DEFAULT_SETTINGS: AstroComposerSettings = {
 	defaultTemplate:
 		'---\ntitle: "{{title}}"\ndate: {{date}}\ntags: []\n---\n',
 	postsFolder: "posts",
-	postsLinkBasePath: "/blog/",
+	postsLinkBasePath: "blog/",
 	automatePostCreation: true,
 	autoInsertProperties: true,
 	creationMode: "file",

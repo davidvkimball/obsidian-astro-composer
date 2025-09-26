@@ -38,7 +38,16 @@ export class FileOperations {
 		
 		// Check posts
 		const postsFolder = this.settings.postsFolder || "";
-		const isPost = this.settings.automatePostCreation && postsFolder && (filePath.startsWith(postsFolder + "/") || filePath === postsFolder);
+		let isPost = false;
+		if (this.settings.automatePostCreation) {
+			if (postsFolder) {
+				// If postsFolder is specified, check if file is in that folder
+				isPost = filePath.startsWith(postsFolder + "/") || filePath === postsFolder;
+		} else {
+			// If postsFolder is blank, only treat files in vault root as posts
+			isPost = !filePath.includes("/");
+		}
+		}
 		if (isPost) return "post";
 		
 		// If no folder structure matches, return "note" as fallback
@@ -108,7 +117,14 @@ export class FileOperations {
 			const customType = this.getCustomContentType(type);
 			targetFolder = customType ? customType.folder : "";
 		} else {
-			targetFolder = type === "post" ? this.settings.postsFolder || "" : this.settings.pagesFolder || "";
+			// For posts and pages, only move if target folder is specified
+			const postsFolder = this.settings.postsFolder || "";
+			const pagesFolder = this.settings.pagesFolder || "";
+			if (type === "post") {
+				targetFolder = postsFolder; // Will be empty string if blank
+			} else {
+				targetFolder = pagesFolder; // Will be empty string if blank
+			}
 		}
 		
 		if (targetFolder) {
@@ -127,7 +143,21 @@ export class FileOperations {
 
 	private async createFolderStructure(file: TFile, kebabTitle: string, prefix: string, targetFolder: string, type: PostType | string): Promise<TFile | null> {
 		const folderName = `${prefix}${kebabTitle}`;
-		const folderPath = targetFolder ? `${targetFolder}/${folderName}` : folderName;
+		let folderPath: string;
+		
+		if (targetFolder) {
+			// Move to target folder
+			folderPath = `${targetFolder}/${folderName}`;
+		} else {
+			// Keep in current location
+			const currentDir = file.parent ? file.parent.path : "";
+			if (currentDir && currentDir !== "/") {
+				folderPath = `${currentDir}/${folderName}`;
+			} else {
+				// File is in vault root, just use folder name
+				folderPath = folderName;
+			}
+		}
 
 		try {
 			const folder = this.app.vault.getAbstractFileByPath(folderPath);
@@ -138,7 +168,8 @@ export class FileOperations {
 			// Folder might already exist, proceed
 		}
 
-		const fileName = `${this.settings.indexFileName}.md`;
+		const indexFileName = this.settings.indexFileName || "index";
+		const fileName = `${indexFileName}.md`;
 		const newPath = `${folderPath}/${fileName}`;
 
 		const existingFile = this.app.vault.getAbstractFileByPath(newPath);
@@ -158,7 +189,7 @@ export class FileOperations {
 				const fileExplorer = this.app.workspace.getLeavesOfType("file-explorer")[0];
 				if (fileExplorer && fileExplorer.view) {
 					const fileTree = (fileExplorer.view as any).tree;
-					if (fileTree && newFile instanceof TFile) {
+					if (fileTree && newFile instanceof TFile && typeof fileTree.revealFile === 'function') {
 						fileTree.revealFile(newFile);
 					}
 				}
@@ -176,7 +207,21 @@ export class FileOperations {
 
 	private async createFileStructure(file: TFile, kebabTitle: string, prefix: string, targetFolder: string): Promise<TFile | null> {
 		const newName = `${prefix}${kebabTitle}.md`;
-		const newPath = targetFolder ? `${targetFolder}/${newName}` : newName;
+		let newPath: string;
+		
+		if (targetFolder) {
+			// Move to target folder
+			newPath = `${targetFolder}/${newName}`;
+		} else {
+			// Keep in current location, just rename the file
+			const currentDir = file.parent ? file.parent.path : "";
+			if (currentDir && currentDir !== "/") {
+				newPath = `${currentDir}/${newName}`;
+			} else {
+				// File is in vault root, just use new name
+				newPath = newName;
+			}
+		}
 
 		const existingFile = this.app.vault.getAbstractFileByPath(newPath);
 		if (existingFile instanceof TFile && existingFile !== file) {
@@ -225,10 +270,10 @@ export class FileOperations {
 	}
 
 	private async renameFolderStructure(file: TFile, kebabTitle: string, prefix: string, type: PostType | string): Promise<TFile | null> {
-		// Smart detection: only treat as index if indexFileName is specified and matches
-		const isIndex = this.settings.indexFileName && 
-			this.settings.indexFileName.trim() !== "" && 
-			file.basename === this.settings.indexFileName;
+		// Smart detection: treat as index if filename matches the index file name
+		// Default to "index" when indexFileName is blank
+		const indexFileName = this.settings.indexFileName || "index";
+		const isIndex = file.basename === indexFileName;
 		if (isIndex) {
 			if (!file.parent) {
 				new Notice("Cannot rename: File has no parent folder.");
@@ -249,13 +294,17 @@ export class FileOperations {
 				return null;
 			}
 
+			console.log("Renaming folder from", file.parent.path, "to", newFolderPath);
 			await this.app.vault.rename(file.parent, newFolderPath);
 			const newFilePath = `${newFolderPath}/${file.name}`;
+			console.log("Looking for new file at:", newFilePath);
 			const newFile = this.app.vault.getAbstractFileByPath(newFilePath);
 			if (!(newFile instanceof TFile)) {
+				console.log("Failed to locate renamed file at:", newFilePath);
 				new Notice("Failed to locate renamed file.");
 				return null;
 			}
+			console.log("Successfully found renamed file:", newFile.path);
 			return newFile;
 		} else {
 			if (!file.parent) {

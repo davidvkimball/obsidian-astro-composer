@@ -169,10 +169,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		new Setting(this.autoRenameContainer)
 			.setName("Posts link base path")
-			.setDesc("Base path for converted links in posts (e.g., /blog/, leave blank for root domain).")
+			.setDesc("Base path for converted links in posts (e.g., blog/, leave blank for root domain).")
 			.addText((text) =>
 				text
-					.setPlaceholder("/blog/")
+					.setPlaceholder("blog/")
 					.setValue(settings.postsLinkBasePath)
 					.onChange(async (value: string) => {
 						settings.postsLinkBasePath = value;
@@ -183,7 +183,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		this.creationModeContainer = this.autoRenameContainer.createDiv();
 		new Setting(this.creationModeContainer)
 			.setName("Creation mode")
-			.setDesc("How to create new posts: file-based or folder-based with index.md.")
+			.setDesc("How to create new entries: file-based or folder-based with an index file.")
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOption("file", "File-based (post-title.md)")
@@ -201,7 +201,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		new Setting(this.indexFileContainer)
 			.setName("Index file name")
-			.setDesc("Name for index files that should be treated as folder-based (without .md extension). Leave empty to disable smart detection.")
+			.setDesc("Name for index files in folder-based content (without .md extension). Defaults to 'index' if left blank.")
 			.addText((text) =>
 				text
 					.setPlaceholder("index")
@@ -292,10 +292,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		new Setting(this.pagesFieldsContainer)
 			.setName("Pages link base path")
-			.setDesc("Base path for converted links in pages (e.g., leave blank for root domain).")
+			.setDesc("Base path for converted links in pages (leave blank for root domain).")
 			.addText((text) =>
 				text
-					.setPlaceholder("")
+					.setPlaceholder("Enter link base path")
 					.setValue(settings.pagesLinkBasePath)
 					.onChange(async (value: string) => {
 						settings.pagesLinkBasePath = value;
@@ -305,7 +305,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		new Setting(this.pagesFieldsContainer)
 			.setName("Creation mode")
-			.setDesc("How to create new pages: file-based or folder-based with index.md.")
+			.setDesc("How to create new entries: file-based or folder-based with an index file.")
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOption("file", "File-based (page-title.md)")
@@ -323,7 +323,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		new Setting(this.pagesIndexFileContainer)
 			.setName("Index file name")
-			.setDesc("Name for index files that should be treated as folder-based (without .md extension). Leave empty to disable smart detection.")
+			.setDesc("Name for index files in folder-based content (without .md extension). Defaults to 'index' if left blank.")
 			.addText((text) =>
 				text
 					.setPlaceholder("index")
@@ -531,7 +531,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			const linkContainer = settingsContainer.createDiv();
 			new Setting(linkContainer)
 				.setName("Link base path")
-				.setDesc("Base path for converted links (e.g., '/projects/', '/notes/tutorials/', leave blank for root domain).")
+				.setDesc("Base path for converted links (e.g., 'projects/', 'notes/tutorials/', leave blank for root domain).")
 				.addText((text) => {
 					text
 						.setPlaceholder("Enter link base path")
@@ -546,7 +546,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			const creationModeContainer = settingsContainer.createDiv();
 			new Setting(creationModeContainer)
 				.setName("Creation mode")
-				.setDesc("How to create new files: file-based or folder-based with index.md.")
+				.setDesc("How to create new entries: file-based or folder-based with an index file.")
 				.addDropdown((dropdown) =>
 					dropdown
 						.addOption("file", "File-based (content-title.md)")
@@ -564,7 +564,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			indexFileContainer.style.display = customType.creationMode === "folder" ? "block" : "none";
 			new Setting(indexFileContainer)
 				.setName("Index file name")
-				.setDesc("Name for index files that should be treated as folder-based (without .md extension). Leave empty to disable smart detection.")
+				.setDesc("Name for index files in folder-based content (without .md extension). Defaults to 'index' if left blank.")
 				.addText((text) =>
 					text
 						.setPlaceholder("index")

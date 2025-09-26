@@ -95,10 +95,59 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 						shouldProcess = true;
 					}
 
-					// Check posts folder
-					if (!shouldProcess && this.settings.automatePostCreation && postsFolder && 
-						(filePath.startsWith(postsFolder + "/") || filePath === postsFolder)) {
-						shouldProcess = true;
+					// Check posts folder - but only if not already matched as page or custom content type
+					if (!shouldProcess && this.settings.automatePostCreation) {
+						// First check if we should exclude this file from post automation
+						let shouldExcludeFromPosts = false;
+						
+						// Exclude if in pages folder
+						if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
+							shouldExcludeFromPosts = true;
+						}
+						
+						// Exclude if in custom content type folders
+						for (const customType of this.settings.customContentTypes) {
+							if (customType.enabled && customType.folder && 
+								(filePath.startsWith(customType.folder + "/") || filePath === customType.folder)) {
+								shouldExcludeFromPosts = true;
+								break;
+							}
+						}
+						
+						// Exclude if in excluded directories
+						if (this.settings.excludedDirectories) {
+							const excludedDirs = this.settings.excludedDirectories.split("|").map(dir => dir.trim()).filter(dir => dir);
+							for (const excludedDir of excludedDirs) {
+								if (filePath.startsWith(excludedDir + "/") || filePath === excludedDir) {
+									shouldExcludeFromPosts = true;
+									break;
+								}
+							}
+						}
+						
+						// Only process as post if not excluded and meets posts folder criteria
+						if (!shouldExcludeFromPosts) {
+							if (this.settings.onlyAutomateInPostsFolder) {
+								// Only automate in posts folder when this setting is enabled
+								if (postsFolder && (filePath.startsWith(postsFolder + "/") || filePath === postsFolder)) {
+									shouldProcess = true;
+								}
+							} else {
+								// Normal post automation logic
+								if (postsFolder) {
+									// If postsFolder is specified, check if file is in that folder
+									if (filePath.startsWith(postsFolder + "/") || filePath === postsFolder) {
+										shouldProcess = true;
+									}
+								} else {
+									// If postsFolder is blank, only treat files in vault root as posts
+									// (but exclusions are already handled above)
+									if (!filePath.includes("/")) {
+										shouldProcess = true;
+									}
+								}
+							}
+						}
 					}
 
 					// If not in any relevant folder, skip entirely
