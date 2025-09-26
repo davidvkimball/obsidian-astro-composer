@@ -135,14 +135,13 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 						this.updateOnlyAutomateField();
 						this.updateExcludedDirsField();
-						this.checkForFolderConflicts();
 					})
 			);
 
 
 		this.onlyAutomateContainer = this.autoRenameContainer.createDiv();
 		new Setting(this.onlyAutomateContainer)
-			.setName("Only automate in this folder")
+			.setName("Ignore subfolders")
 			.setDesc("When enabled, automation will only trigger for new .md files within the Posts folder and one level down (for folder-based posts). Files in deeper subfolders will be ignored.")
 			.addToggle((toggle) =>
 				toggle
@@ -290,7 +289,6 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					.onChange(async (value: string) => {
 						settings.pagesFolder = value;
 						await this.plugin.saveSettings();
-						this.checkForFolderConflicts();
 					})
 			);
 
@@ -368,7 +366,6 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		this.updateOnlyAutomateField();
 		this.updatePagesFields();
 		this.updateCopyHeadingFields();
-		this.checkForFolderConflicts();
 	}
 
 	updateConditionalFields() {
@@ -388,7 +385,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	updateOnlyAutomateField() {
 		if (this.onlyAutomateContainer) {
 			const settings = this.plugin.settings;
-			// Hide "Only automate in this folder" when Posts folder is blank
+			// Hide "Ignore subfolders" when Posts folder is blank
 			this.onlyAutomateContainer.style.display = settings.postsFolder ? "block" : "none";
 		}
 	}
@@ -396,7 +393,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	updateExcludedDirsField() {
 		if (this.excludedDirsContainer) {
 			const settings = this.plugin.settings;
-			// Hide "Excluded directories" when Posts folder is blank OR when "Only automate in this folder" is enabled
+			// Hide "Excluded directories" when Posts folder is blank OR when "Ignore subfolders" is enabled
 			this.excludedDirsContainer.style.display = settings.postsFolder && !settings.onlyAutomateInPostsFolder ? "block" : "none";
 		}
 	}
@@ -472,21 +469,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			}
 		}
 		
-		// Show warning if conflicts exist
-		if (hasConflicts) {
-			const warningEl = this.containerEl.querySelector('.folder-conflict-warning');
-			if (warningEl) {
-				warningEl.remove();
-			}
-			
-			const warning = this.containerEl.createDiv({ cls: 'folder-conflict-warning' });
-			warning.style.cssText = 'background: #ff6b6b; color: white; padding: 15px; border-radius: 5px; margin: 15px 0; border: 2px solid #ff0000; font-weight: bold;';
-			warning.innerHTML = `
-				<strong>⚠️ FOLDER CONFLICT DETECTED ⚠️</strong><br><br>
-				${conflictMessage}
-				This will cause automation conflicts! Consider specifying different folders for each content type.
-			`;
-		}
+		// Warning box removed - conflicts are still detected at runtime
 	}
 
 	private addCustomContentType() {
@@ -504,7 +487,6 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		settings.customContentTypes.push(newType);
 		this.plugin.saveSettings();
 		this.renderCustomContentTypes();
-		this.checkForFolderConflicts();
 		this.plugin.registerCreateEvent();
 	}
 
@@ -561,8 +543,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				// Update visibility
 				this.updateCustomContentTypeVisibility(customType.id, newValue);
 				
-				// Check for conflicts
-				this.checkForFolderConflicts();
+				// Conflict checking removed from settings UI
 			});
 			
 			// Also add change event as backup
@@ -627,7 +608,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				.setDesc("Base path for converted links (e.g., '/projects/', '/notes/tutorials/', leave blank for root /).")
 				.addText((text) => {
 					text
-						.setPlaceholder("/projects/")
+						.setPlaceholder("Enter link base path")
 						.setValue(customType.linkBasePath || "")
 						.onChange(async (value: string) => {
 							customType.linkBasePath = value;
@@ -758,6 +739,5 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		this.plugin.saveSettings();
 		this.renderCustomContentTypes();
 		this.plugin.registerCreateEvent();
-		this.checkForFolderConflicts();
 	}
 }

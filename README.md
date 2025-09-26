@@ -31,7 +31,7 @@ This plugin streamlines blogging in Obsidian for Astro static sites with automat
    - **Automate post creation**: Toggle to enable the title dialog for new `.md` files created via Obsidian's "New note" action.
    - **Auto-insert properties**: Enable to automatically apply the frontmatter template when creating new files (requires "Automate post creation" to be enabled).
    - **Posts folder**: Set the folder for blog posts (leave blank to use the vault root). Specify the default location for new notes in Obsidian's **Settings > Files and links**.
-   - **Only automate in this folder**: Restrict automation to the specified posts folder and its subfolders.
+   - **Ignore subfolders**: Restrict automation to the specified posts folder and its subfolders.
    - **Excluded directories**: List directories to exclude from automation (e.g., `pages|posts/example`), separated by `|`, when not restricted to the posts folder.
    - **Use underscore prefix for drafts**: Add a prefix (e.g., `_my-post.md`) to hide drafts from Astro.
    - **Creation mode**: Choose file-based (`my-post.md`) or folder-based (`my-post/index.md`) structure.

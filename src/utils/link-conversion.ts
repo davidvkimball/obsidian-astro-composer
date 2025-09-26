@@ -56,7 +56,7 @@ export class LinkConverter {
 			creationMode = this.settings.creationMode;
 			indexFileName = this.settings.indexFileName || "index";
 		}
-		// If posts folder is blank and "Only automate in this folder" is NOT checked, treat as post unless excluded
+		// If posts folder is blank and "Ignore subfolders" is NOT checked, treat as post unless excluded
 		else if (!foundCustomType && !this.settings.postsFolder && !this.settings.onlyAutomateInPostsFolder) {
 			// Only treat files in vault root as posts when posts folder is blank
 			// This includes both direct files and folder-based posts in vault root
