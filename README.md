@@ -48,4 +48,4 @@ This plugin streamlines blogging in Obsidian for Astro static sites with automat
 
 ## Contributing
 
-Submit issues or pull requests on the [GitHub repository](https://github.com/your-repo/astro-composer). Contributions to enhance features, improve documentation, or fix bugs are welcome!
+Submit issues or pull requests on the [GitHub repository](https://github.com/davidvkimball/obsidian-astro-composer). Contributions to enhance features, improve documentation, or fix bugs are welcome!
