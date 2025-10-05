@@ -33,9 +33,13 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		}
 		
 		// Check if it's a page
-		if (settings.enablePages && pagesFolder && 
-			(filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
-			return true;
+		if (settings.enablePages) {
+			if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
+				return true;
+			} else if (!pagesFolder && !filePath.includes("/")) {
+				// If pagesFolder is blank, only treat files in vault root as pages
+				return true;
+			}
 		}
 		
 		// Check if it's a custom content type
@@ -138,9 +142,13 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 	}
 	
 	// Check if it's a page
-	if (!hasMatchingContentType && settings.enablePages && pagesFolder && 
-		(filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
-		hasMatchingContentType = true;
+	if (!hasMatchingContentType && settings.enablePages) {
+		if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
+			hasMatchingContentType = true;
+		} else if (!pagesFolder && !filePath.includes("/")) {
+			// If pagesFolder is blank, only treat files in vault root as pages
+			hasMatchingContentType = true;
+		}
 	}
 	
 	// Check if it's a custom content type

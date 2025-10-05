@@ -162,8 +162,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 						if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
 							isPage = true;
 							shouldProcess = true;
-						} else if (!pagesFolder && this.settings.enablePages) {
-							// Pages folder is blank - treat all files as pages (like posts)
+						} else if (!pagesFolder && this.settings.enablePages && isInVaultRoot) {
+							// Pages folder is blank - only treat files in vault root as pages
 							isPage = true;
 							shouldProcess = true;
 						}

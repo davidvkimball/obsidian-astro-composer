@@ -33,7 +33,16 @@ export class FileOperations {
 		
 		// Check pages
 		const pagesFolder = this.settings.pagesFolder || "";
-		const isPage = this.settings.enablePages && pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder);
+		let isPage = false;
+		if (this.settings.enablePages) {
+			if (pagesFolder) {
+				// If pagesFolder is specified, check if file is in that folder
+				isPage = filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder;
+			} else {
+				// If pagesFolder is blank, only treat files in vault root as pages
+				isPage = !filePath.includes("/");
+			}
+		}
 		if (isPage) return "page";
 		
 		// Check posts

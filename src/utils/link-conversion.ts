@@ -248,12 +248,21 @@ export class LinkConverter {
 		}
 		
 		// Check pages folder
-		if (this.settings.enablePages && this.settings.pagesFolder && filePath.startsWith(this.settings.pagesFolder + '/')) {
-			return {
-				basePath: this.settings.pagesLinkBasePath,
-				creationMode: this.settings.pagesCreationMode || "file",
-				indexFileName: this.settings.pagesIndexFileName || ""
-			};
+		if (this.settings.enablePages) {
+			if (this.settings.pagesFolder && filePath.startsWith(this.settings.pagesFolder + '/')) {
+				return {
+					basePath: this.settings.pagesLinkBasePath,
+					creationMode: this.settings.pagesCreationMode || "file",
+					indexFileName: this.settings.pagesIndexFileName || ""
+				};
+			} else if (!this.settings.pagesFolder && !filePath.includes('/')) {
+				// If pagesFolder is blank, only treat files in vault root as pages
+				return {
+					basePath: this.settings.pagesLinkBasePath,
+					creationMode: this.settings.pagesCreationMode || "file",
+					indexFileName: this.settings.pagesIndexFileName || ""
+				};
+			}
 		}
 		
 		// Check posts folder
