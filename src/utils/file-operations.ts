@@ -253,7 +253,9 @@ export class FileOperations {
 		}
 
 		try {
-			await this.app.vault.rename(file, newPath);
+			// Use fileManager.renameFile() which respects user settings and handles all link formats
+			await this.app.fileManager.renameFile(file, newPath);
+			
 			const newFile = this.app.vault.getAbstractFileByPath(newPath);
 			if (!(newFile instanceof TFile)) {
 				return null;
@@ -273,6 +275,7 @@ export class FileOperations {
 			return null;
 		}
 	}
+
 
 	async renameFile(options: RenameOptions): Promise<TFile | null> {
 		const { file, title, type } = options;
@@ -317,13 +320,15 @@ export class FileOperations {
 				return null;
 			}
 
-			await this.app.vault.rename(file.parent, newFolderPath);
+			await this.app.fileManager.renameFile(file.parent, newFolderPath);
 			const newFilePath = `${newFolderPath}/${file.name}`;
 			const newFile = this.app.vault.getAbstractFileByPath(newFilePath);
 			if (!(newFile instanceof TFile)) {
 				new Notice("Failed to locate renamed file.");
 				return null;
 			}
+			
+			
 			return newFile;
 		} else {
 			if (!file.parent) {
@@ -340,12 +345,18 @@ export class FileOperations {
 				return null;
 			}
 
+			// Store old paths for link updating
+			const oldPath = file.path;
+			const oldName = file.name;
+			
 			await this.app.vault.rename(file, newPath);
 			const newFile = this.app.vault.getAbstractFileByPath(newPath);
 			if (!(newFile instanceof TFile)) {
 				new Notice("Failed to locate renamed file.");
 				return null;
 			}
+			
+			
 			return newFile;
 		}
 	}
@@ -361,6 +372,7 @@ export class FileOperations {
 		const isIndex = this.settings.indexFileName && 
 			this.settings.indexFileName.trim() !== "" && 
 			file.basename === this.settings.indexFileName;
+		
 		if (isIndex) {
 			prefix = file.parent.name.startsWith("_") ? "_" : "";
 			const newFolderName = `${prefix}${kebabTitle}`;
@@ -377,13 +389,18 @@ export class FileOperations {
 				return null;
 			}
 
-			await this.app.vault.rename(file.parent, newFolderPath);
+			// Store old values before rename
+			const oldPath = file.path;
+			const oldName = file.name;
+			
+			await this.app.fileManager.renameFile(file.parent, newFolderPath);
 			const newFilePath = `${newFolderPath}/${file.name}`;
 			const newFile = this.app.vault.getAbstractFileByPath(newFilePath);
 			if (!(newFile instanceof TFile)) {
 				new Notice("Failed to locate renamed file.");
 				return null;
 			}
+			
 			return newFile;
 		}
 		
@@ -398,12 +415,14 @@ export class FileOperations {
 			return null;
 		}
 
-		await this.app.vault.rename(file, newPath);
+		await this.app.fileManager.renameFile(file, newPath);
+		
 		const newFile = this.app.vault.getAbstractFileByPath(newPath);
 		if (!(newFile instanceof TFile)) {
 			new Notice("Failed to locate renamed file.");
 			return null;
 		}
+		
 		return newFile;
 	}
 }
