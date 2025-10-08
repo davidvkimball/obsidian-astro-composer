@@ -8,5 +8,5 @@
 	"authorUrl": "https://davidvkimball.com",
 	"fundingUrl": "https://patreon.com/davidvkimball",
 	"isDesktopOnly": false,
-	"css": "styles.css"
+	"styles": "styles.css"
 }
