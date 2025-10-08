@@ -234,6 +234,33 @@ export class LinkConverter {
 		return `${basePath}${slug}${shouldAddTrailingSlash ? '/' : ''}${anchor}`;
 	}
 
+	private isInConfiguredContentDirectory(filePath: string): boolean {
+		// Check custom content types
+		for (const customType of this.settings.customContentTypes) {
+			if (customType.enabled && customType.folder && filePath.startsWith(customType.folder + '/')) {
+				return true;
+			}
+		}
+		
+		// Check pages folder
+		if (this.settings.enablePages) {
+			if (this.settings.pagesFolder && filePath.startsWith(this.settings.pagesFolder + '/')) {
+				return true;
+			} else if (!this.settings.pagesFolder && !filePath.includes('/')) {
+				return true; // Files in vault root when pages folder is blank
+			}
+		}
+		
+		// Check posts folder
+		if (this.settings.postsFolder && filePath.startsWith(this.settings.postsFolder + '/')) {
+			return true;
+		} else if (!this.settings.postsFolder && this.settings.automatePostCreation && !filePath.includes('/')) {
+			return true; // Files in vault root when posts folder is blank
+		}
+		
+		return false;
+	}
+
 	private getContentTypeForPath(filePath: string): { basePath: string; creationMode: "file" | "folder"; indexFileName: string } {
 		
 		// Check custom content types FIRST (highest priority)
@@ -299,6 +326,9 @@ export class LinkConverter {
 
 		const content = editor.getValue();
 		let newContent = content;
+		let convertedCount = 0;
+		let skippedCount = 0;
+		const skippedLinks: string[] = [];
 
 		// Determine the current file's content type for relative links
 		const currentFileContentType = this.getContentTypeForPath(file.path);
@@ -306,13 +336,52 @@ export class LinkConverter {
 		// Define common image extensions
 		const imageExtensions = /\.(png|jpg|jpeg|gif|svg)$/i;
 
+		// Helper function to check if a link can be reliably converted
+		const canConvertLink = (linkText: string): boolean => {
+			// Don't convert if it's an image
+			if (imageExtensions.test(linkText)) {
+				return false;
+			}
+
+			// Don't convert external links
+			if (linkText.match(/^https?:\/\//)) {
+				return false;
+			}
+
+			// Don't convert if it's not a .md file and doesn't look like a valid internal link
+			if (!linkText.includes('.md') && !linkText.match(/^[a-zA-Z0-9_-]+(\/[a-zA-Z0-9_-]+)*$/)) {
+				return false;
+			}
+
+			// Check if the target file is in any configured content directory
+			const targetPath = linkText.endsWith('.md') ? linkText : linkText + '.md';
+			
+			// Check if it's in a configured content directory
+			const isInConfiguredDirectory = this.isInConfiguredContentDirectory(targetPath);
+			
+			// Also check if it's a simple filename (no path) and current file has a content type
+			const isSimpleFilename = !targetPath.includes('/');
+			const hasCurrentContentType = currentFileContentType.basePath !== "" || currentFileContentType.creationMode !== "file" || currentFileContentType.indexFileName !== "";
+			
+			return isInConfiguredDirectory || (isSimpleFilename && hasCurrentContentType);
+		};
+
 		// Handle regular Wikilinks (non-image)
 		newContent = newContent.replace(
 			/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g,
 			(match, linkText, _pipe, displayText) => {
 				// Check if it's an image Wikilink
 				if (imageExtensions.test(linkText)) {
+					skippedCount++;
+					skippedLinks.push(linkText);
 					return match; // Ignore and return original image Wikilink
+				}
+
+				// Check if we can reliably convert this link
+				if (!canConvertLink(linkText)) {
+					skippedCount++;
+					skippedLinks.push(linkText);
+					return match; // Return original if we can't convert reliably
 				}
 
 				const display = displayText || linkText.replace(/\.md$/, "");
@@ -320,26 +389,33 @@ export class LinkConverter {
 				// For relative links (no folder path), use current file's content type
 				const url = this.getAstroUrlFromInternalLinkWithContext(linkText, file.path, currentFileContentType);
 
+				convertedCount++;
 				return `[${display}](${url})`;
 			}
 		);
 
 		// Handle standard Markdown links (non-image, non-external)
+		// Only process links that contain .md to avoid processing already-converted links
 		newContent = newContent.replace(
-			/\[([^\]]+)\]\(([^)]+)\)/g,
+			/\[([^\]]+)\]\(([^)]+\.md[^)]*)\)/g,
 			(match, displayText, link) => {
 				// Check if it's an image link or external link
 				if (link.match(/^https?:\/\//) || imageExtensions.test(link)) {
+					skippedCount++;
+					skippedLinks.push(link);
 					return match; // Ignore external or image links
 				}
 
-				// Check if it's internal .md link
-				if (!link.includes('.md')) {
-					return match; // Ignore if not .md
+				// Check if we can reliably convert this link
+				if (!canConvertLink(link)) {
+					skippedCount++;
+					skippedLinks.push(link);
+					return match; // Return original if we can't convert reliably
 				}
 
 				const url = this.getAstroUrlFromInternalLinkWithContext(link, file.path, currentFileContentType);
 
+				convertedCount++;
 				return `[${displayText}](${url})`;
 			}
 		);
@@ -348,6 +424,7 @@ export class LinkConverter {
 		newContent = newContent.replace(
 			/!\[(.*?)\]\(([^)]+)\)/g,
 			(match) => {
+				skippedCount++;
 				return match; // Ignore all image links
 			}
 		);
@@ -355,15 +432,35 @@ export class LinkConverter {
 		// Handle {{embed}} syntax
 		newContent = newContent.replace(/\{\{([^}]+)\}\}/g, (match, fileName) => {
 			if (imageExtensions.test(fileName)) {
+				skippedCount++;
+				skippedLinks.push(fileName);
 				return match; // Ignore embedded images
+			}
+
+			// Check if we can reliably convert this link
+			if (!canConvertLink(fileName)) {
+				skippedCount++;
+				skippedLinks.push(fileName);
+				return match; // Return original if we can't convert reliably
 			}
 
 			const url = this.getAstroUrlFromInternalLinkWithContext(fileName, file.path, currentFileContentType);
 
+			convertedCount++;
 			return `[Embedded: ${fileName}](${url})`;
 		});
 
 		editor.setValue(newContent);
-		new Notice("All internal links converted for Astro.");
+		
+		// Show appropriate notice based on results
+		if (convertedCount > 0 && skippedCount === 0) {
+			new Notice(`Converted ${convertedCount} internal link${convertedCount > 1 ? 's' : ''} for Astro.`);
+		} else if (convertedCount > 0 && skippedCount > 0) {
+			new Notice(`Converted ${convertedCount} link${convertedCount > 1 ? 's' : ''} for Astro. Skipped ${skippedCount} link${skippedCount > 1 ? 's' : ''} outside configured content directories.`);
+		} else if (skippedCount > 0) {
+			new Notice(`No links converted. All ${skippedCount} link${skippedCount > 1 ? 's' : ''} are outside configured content directories or are images/external links.`);
+		} else {
+			new Notice("No internal links found to convert.");
+		}
 	}
 }

@@ -1,5 +1,5 @@
 import { Plugin, Editor, MarkdownView, TFile, Notice, App } from "obsidian";
-import { AstroComposerSettings } from "../types";
+import { AstroComposerSettings, AstroComposerPluginInterface } from "../types";
 import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
 import { LinkConverter } from "../utils/link-conversion";
@@ -104,7 +104,7 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 					return;
 				}
 				
-				new TitleModal(plugin.app, ctx.file, plugin as any, type, true).open();
+				new TitleModal(plugin.app, ctx.file, plugin as unknown as AstroComposerPluginInterface, type, true).open();
 			}
 		},
 	});
@@ -114,56 +114,16 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 	const templateParser = new TemplateParser(app, settings);
 	const fileOps = new FileOperations(app, settings, plugin);
 	
-	// Determine content type
+	// Determine content type using the existing logic
 	const type = fileOps.determineType(file);
-	let templateString: string;
 	
-	// Check if this file matches any content type criteria
-	const filePath = file.path;
-	const postsFolder = settings.postsFolder || "";
-	const pagesFolder = settings.enablePages ? (settings.pagesFolder || "") : "";
-	
-	let hasMatchingContentType = false;
-	
-	// Check if it's a post
-	if (settings.automatePostCreation) {
-		if (postsFolder) {
-			// If postsFolder is specified, check if file is in that folder
-			if (filePath.startsWith(postsFolder + "/") || filePath === postsFolder) {
-				hasMatchingContentType = true;
-			}
-		} else {
-			// If postsFolder is blank, only treat files in vault root as posts
-			// This includes both direct files and folder-based posts in vault root
-			if (!filePath.includes("/") || (filePath.includes("/") && !filePath.startsWith("/") && filePath.split("/").length === 2)) {
-				hasMatchingContentType = true;
-			}
-		}
-	}
-	
-	// Check if it's a page
-	if (!hasMatchingContentType && settings.enablePages) {
-		if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
-			hasMatchingContentType = true;
-		} else if (!pagesFolder && !filePath.includes("/")) {
-			// If pagesFolder is blank, only treat files in vault root as pages
-			hasMatchingContentType = true;
-		}
-	}
-	
-	// Check if it's a custom content type
-	if (!hasMatchingContentType && fileOps.isCustomContentType(type)) {
-		const customType = fileOps.getCustomContentType(type);
-		if (customType && customType.enabled) {
-			hasMatchingContentType = true;
-		}
-	}
-	
-	// If no content type matches, show notification and return
-	if (!hasMatchingContentType) {
+	// Check if this file has a valid content type (not just "note")
+	if (type === "note") {
 		new Notice("No properties template specified for this content. This file doesn't match any configured content type folders.");
 		return;
 	}
+	
+	let templateString: string;
 	
 	// Determine template based on content type
 	if (fileOps.isCustomContentType(type)) {

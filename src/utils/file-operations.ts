@@ -211,7 +211,7 @@ export class FileOperations {
 			setTimeout(() => {
 				const fileExplorer = this.app.workspace.getLeavesOfType("file-explorer")[0];
 				if (fileExplorer && fileExplorer.view) {
-					const fileTree = (fileExplorer.view as any).tree;
+					const fileTree = (fileExplorer.view as { tree?: { revealFile?: (file: TFile) => void } }).tree;
 					if (fileTree && newFile instanceof TFile && typeof fileTree.revealFile === 'function') {
 						fileTree.revealFile(newFile);
 					}
@@ -263,7 +263,7 @@ export class FileOperations {
 
 			// Track that this file was created by the plugin to avoid triggering the create event
 			if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
-				(this.plugin as any).pluginCreatedFiles.add(newPath);
+				(this.plugin as { pluginCreatedFiles?: Set<string> }).pluginCreatedFiles?.add(newPath);
 			}
 
 			const leaf = this.app.workspace.getLeaf(false);

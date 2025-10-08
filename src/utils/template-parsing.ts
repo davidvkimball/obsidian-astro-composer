@@ -13,7 +13,7 @@ export class TemplateParser {
 		if (content.startsWith("---")) {
 			propertiesEnd = content.indexOf("\n---", 3);
 			if (propertiesEnd === -1) {
-				propertiesEnd = content.length; // Treat entire content as frontmatter if no second ---
+				propertiesEnd = content.length; // Treat entire content as properties if no second ---
 			} else {
 				propertiesEnd += 4; // Move past the second ---
 			}
@@ -104,7 +104,7 @@ export class TemplateParser {
 					templateProps.push(key);
 					
 					// Check if this is an array property (known array keys or YAML list format)
-					const isKnownArrayKey = KNOWN_ARRAY_KEYS.includes(key as any);
+					const isKnownArrayKey = KNOWN_ARRAY_KEYS.includes(key as typeof KNOWN_ARRAY_KEYS[number]);
 					// Check if it's a YAML list format (no value after colon, empty brackets, or empty value means it's an array)
 					const isEmptyArray = !value || value.trim() === "" || value.trim() === "[]";
 					const isArrayProperty = isKnownArrayKey || isEmptyArray;
@@ -129,7 +129,7 @@ export class TemplateParser {
 									const item = nextLine.replace(/^-\s*/, "").trim();
 									if (item) (templateValues[key] as string[]).push(item);
 								} else if (nextLine === "---" || (nextLine && !nextLine.startsWith("- ") && nextLine.includes(":"))) {
-									// Stop at next property or end of frontmatter
+									// Stop at next property or end of properties section
 									break;
 								}
 							}
@@ -207,7 +207,7 @@ export class TemplateParser {
 					titleKeyPosition = index;
 				}
 				
-				const isKnownArrayKey = KNOWN_ARRAY_KEYS.includes(key as any);
+				const isKnownArrayKey = KNOWN_ARRAY_KEYS.includes(key as typeof KNOWN_ARRAY_KEYS[number]);
 				const isEmptyArray = !value || value.trim() === "" || value.trim() === "[]";
 				const isArrayProperty = isKnownArrayKey || isEmptyArray;
 				
@@ -239,10 +239,10 @@ export class TemplateParser {
 		const titleVal = newTitle.includes(" ") || newTitle.includes('"') ? `"${escapedTitle}"` : newTitle;
 		existing[titleKey] = titleVal;
 
-		// If title key was found in original frontmatter, preserve its position
+		// If title key was found in original properties, preserve its position
 		// Otherwise, add it at the end
 		if (titleKeyPosition === -1) {
-			// Title key not found in original frontmatter, add it at the end
+			// Title key not found in original properties, add it at the end
 			propOrder.push(titleKey);
 		}
 		// If titleKeyPosition >= 0, the title key is already in propOrder at the correct position

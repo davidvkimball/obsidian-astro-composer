@@ -56,7 +56,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			);
 
 		this.copyHeadingContainer = containerEl.createDiv({ cls: "copy-heading-fields" });
-		this.copyHeadingContainer.style.display = settings.enableCopyHeadingLink ? "block" : "none";
+		this.copyHeadingContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableCopyHeadingLink);
+		this.copyHeadingContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableCopyHeadingLink);
 
 		new Setting(this.copyHeadingContainer)
 			.setName("Default heading link format")
@@ -106,7 +107,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			);
 
 		this.autoRenameContainer = containerEl.createDiv({ cls: "auto-rename-fields" });
-		this.autoRenameContainer.style.display = settings.automatePostCreation ? "block" : "none";
+		this.autoRenameContainer.classList.toggle("astro-composer-setting-container-visible", settings.automatePostCreation);
+		this.autoRenameContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.automatePostCreation);
 
 		this.autoInsertContainer = this.autoRenameContainer.createDiv();
 		new Setting(this.autoInsertContainer)
@@ -154,7 +156,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			);
 
 		this.excludedDirsContainer = this.autoRenameContainer.createDiv({ cls: "excluded-dirs-field" });
-		this.excludedDirsContainer.style.display = !settings.onlyAutomateInPostsFolder ? "block" : "none";
+		this.excludedDirsContainer.classList.toggle("astro-composer-setting-container-visible", !settings.onlyAutomateInPostsFolder);
+		this.excludedDirsContainer.classList.toggle("astro-composer-setting-container-hidden", settings.onlyAutomateInPostsFolder);
 
 		new Setting(this.excludedDirsContainer)
 			.setName("Excluded directories")
@@ -199,7 +202,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			);
 
 		this.indexFileContainer = this.autoRenameContainer.createDiv({ cls: "index-file-field" });
-		this.indexFileContainer.style.display = settings.creationMode === "folder" ? "block" : "none";
+		this.indexFileContainer.classList.toggle("astro-composer-setting-container-visible", settings.creationMode === "folder");
+		this.indexFileContainer.classList.toggle("astro-composer-setting-container-hidden", settings.creationMode !== "folder");
 
 		new Setting(this.indexFileContainer)
 			.setName("Index file name")
@@ -247,13 +251,12 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				return text;
 			})
 			.then((setting) => {
-				setting.descEl.empty();
-				const descDiv = setting.descEl.createEl("div");
-				descDiv.innerHTML = 
-					"Used for new posts and when standardizing properties.<br />" +
-					"Variables include {{title}} and {{date}}.<br />" +
-					"Do not wrap {{date}} in quotes as it represents a datetime value, not a string.<br />" +
-					"The 'standardize properties' command ignores anything below the second '---' line.";
+			setting.descEl.empty();
+			const descDiv = setting.descEl.createEl("div");
+			descDiv.createEl("div", { text: "Used for new posts and when standardizing properties." });
+			descDiv.createEl("div", { text: "Variables include {{title}} and {{date}}." });
+			descDiv.createEl("div", { text: "Do not wrap {{date}} in quotes as it represents a datetime value, not a string." });
+			descDiv.createEl("div", { text: "The 'standardize properties' command ignores anything below the second '---' line." });
 			});
 
 		// Pages settings
@@ -277,7 +280,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			);
 
 		this.pagesFieldsContainer = containerEl.createDiv({ cls: "pages-fields" });
-		this.pagesFieldsContainer.style.display = settings.enablePages ? "block" : "none";
+		this.pagesFieldsContainer.classList.toggle("astro-composer-setting-container-visible", settings.enablePages);
+		this.pagesFieldsContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enablePages);
 
 		new Setting(this.pagesFieldsContainer)
 			.setName("Pages folder")
@@ -321,7 +325,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			);
 
 		this.pagesIndexFileContainer = this.pagesFieldsContainer.createDiv({ cls: "pages-index-file-field" });
-		this.pagesIndexFileContainer.style.display = (settings.pagesCreationMode || "file") === "folder" ? "block" : "none";
+		this.pagesIndexFileContainer.classList.toggle("astro-composer-setting-container-visible", (settings.pagesCreationMode || "file") === "folder");
+		this.pagesIndexFileContainer.classList.toggle("astro-composer-setting-container-hidden", (settings.pagesCreationMode || "file") !== "folder");
 
 		new Setting(this.pagesIndexFileContainer)
 			.setName("Index file name")
@@ -371,14 +376,16 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	updateConditionalFields() {
 		if (this.autoRenameContainer) {
 			const settings = this.plugin.settings;
-			this.autoRenameContainer.style.display = settings.automatePostCreation ? "block" : "none";
+			this.autoRenameContainer.classList.toggle("astro-composer-setting-container-visible", settings.automatePostCreation);
+		this.autoRenameContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.automatePostCreation);
 		}
 	}
 
 	updateIndexFileField() {
 		if (this.indexFileContainer) {
 			const settings = this.plugin.settings;
-			this.indexFileContainer.style.display = settings.creationMode === "folder" ? "block" : "none";
+			this.indexFileContainer.classList.toggle("astro-composer-setting-container-visible", settings.creationMode === "folder");
+		this.indexFileContainer.classList.toggle("astro-composer-setting-container-hidden", settings.creationMode !== "folder");
 		}
 	}
 
@@ -386,7 +393,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		if (this.onlyAutomateContainer) {
 			const settings = this.plugin.settings;
 			// Hide "Ignore subfolders" when Posts folder is blank
-			this.onlyAutomateContainer.style.display = settings.postsFolder ? "block" : "none";
+			this.onlyAutomateContainer.classList.toggle("astro-composer-setting-container-visible", !!settings.postsFolder);
+			this.onlyAutomateContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.postsFolder);
 		}
 	}
 
@@ -394,21 +402,24 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		if (this.excludedDirsContainer) {
 			const settings = this.plugin.settings;
 			// Hide "Excluded directories" when Posts folder is blank OR when "Ignore subfolders" is enabled
-			this.excludedDirsContainer.style.display = settings.postsFolder && !settings.onlyAutomateInPostsFolder ? "block" : "none";
+			this.excludedDirsContainer.classList.toggle("astro-composer-setting-container-visible", !!settings.postsFolder && !settings.onlyAutomateInPostsFolder);
+			this.excludedDirsContainer.classList.toggle("astro-composer-setting-container-hidden", !(!!settings.postsFolder && !settings.onlyAutomateInPostsFolder));
 		}
 	}
 
 	updatePagesFields() {
 		if (this.pagesFieldsContainer) {
 			const settings = this.plugin.settings;
-			this.pagesFieldsContainer.style.display = settings.enablePages ? "block" : "none";
+			this.pagesFieldsContainer.classList.toggle("astro-composer-setting-container-visible", settings.enablePages);
+		this.pagesFieldsContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enablePages);
 		}
 	}
 
 	updateCopyHeadingFields() {
 		if (this.copyHeadingContainer) {
 			const settings = this.plugin.settings;
-			this.copyHeadingContainer.style.display = settings.enableCopyHeadingLink ? "block" : "none";
+			this.copyHeadingContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableCopyHeadingLink);
+		this.copyHeadingContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableCopyHeadingLink);
 		}
 	}
 
@@ -505,10 +516,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 			// Header with name and toggle on the far right
 			const header = typeContainer.createDiv({ cls: "custom-content-type-header" });
-			header.style.display = "flex";
-			header.style.justifyContent = "space-between";
-			header.style.alignItems = "center";
-			header.style.padding = "8px 0";
+			header.classList.add("astro-composer-custom-type-header");
 			
 			// Left side - just the name
 			const headerName = header.createDiv();
@@ -635,7 +643,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 			// Index file name (only show for folder-based)
 			const indexFileContainer = settingsContainer.createDiv({ cls: "custom-index-file-field" });
-			indexFileContainer.style.display = customType.creationMode === "folder" ? "block" : "none";
+			indexFileContainer.classList.toggle("astro-composer-setting-container-visible", customType.creationMode === "folder");
+		indexFileContainer.classList.toggle("astro-composer-setting-container-hidden", customType.creationMode !== "folder");
 			new Setting(indexFileContainer)
 				.setName("Index file name")
 				.setDesc("Name for index files in folder-based content (without .md extension). Defaults to 'index' if left blank.")
@@ -665,12 +674,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					return text;
 				})
 				.then((setting) => {
-					setting.descEl.empty();
-					const descDiv = setting.descEl.createEl("div");
-					descDiv.innerHTML = 
-						"Template for new files of this content type.<br />" +
-						"Variables include {{title}} and {{date}}.<br />" +
-						"Do not wrap {{date}} in quotes as it represents a datetime value, not a string.";
+				setting.descEl.empty();
+				const descDiv = setting.descEl.createEl("div");
+				descDiv.createEl("div", { text: "Template for new files of this content type." });
+				descDiv.createEl("div", { text: "Variables include {{title}} and {{date}}." });
+				descDiv.createEl("div", { text: "Do not wrap {{date}} in quotes as it represents a datetime value, not a string." });
 				});
 
 			// Remove button at the bottom (no divider)
@@ -687,7 +695,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				});
 			
 			// Hide the divider line for the remove button
-			removeSetting.settingEl.style.borderTop = "none";
+			removeSetting.settingEl.classList.add("astro-composer-remove-setting");
 
 			// Set initial visibility
 			this.updateCustomContentTypeVisibility(customType.id, customType.enabled);
@@ -707,13 +715,14 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			});
 		
 		// Hide the divider line for the add button
-		addButtonSetting.settingEl.style.borderTop = "none";
+		addButtonSetting.settingEl.classList.add("astro-composer-add-button");
 	}
 
 	private updateCustomContentTypeVisibility(typeId: string, enabled: boolean) {
 		const settingsContainer = this.customContentTypesContainer?.querySelector(`[data-type-id="${typeId}"].custom-content-type-settings`) as HTMLElement;
 		if (settingsContainer) {
-			settingsContainer.style.display = enabled ? "block" : "none";
+			settingsContainer.classList.toggle("astro-composer-setting-container-visible", enabled);
+			settingsContainer.classList.toggle("astro-composer-setting-container-hidden", !enabled);
 		}
 	}
 
@@ -723,13 +732,15 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		const indexFileContainer = this.customContentTypesContainer?.querySelector(`[data-type-id="${typeId}"] .custom-index-file-field`) as HTMLElement;
 		if (indexFileContainer) {
-			indexFileContainer.style.display = customType.creationMode === "folder" ? "block" : "none";
+			indexFileContainer.classList.toggle("astro-composer-setting-container-visible", customType.creationMode === "folder");
+		indexFileContainer.classList.toggle("astro-composer-setting-container-hidden", customType.creationMode !== "folder");
 		}
 	}
 
 	private updatePagesIndexFileField() {
 		if (this.pagesIndexFileContainer) {
-			this.pagesIndexFileContainer.style.display = this.plugin.settings.pagesCreationMode === "folder" ? "block" : "none";
+			this.pagesIndexFileContainer.classList.toggle("astro-composer-setting-container-visible", this.plugin.settings.pagesCreationMode === "folder");
+			this.pagesIndexFileContainer.classList.toggle("astro-composer-setting-container-hidden", this.plugin.settings.pagesCreationMode !== "folder");
 		}
 	}
 

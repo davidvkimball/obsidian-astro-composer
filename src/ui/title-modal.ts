@@ -218,7 +218,7 @@ export class TitleModal extends Modal {
 			
 			// Track that this file was created by the plugin to avoid triggering the create event
 			if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
-				(this.plugin as any).pluginCreatedFiles.add(filePath);
+				(this.plugin as { pluginCreatedFiles?: Set<string> }).pluginCreatedFiles?.add(filePath);
 			}
 			
 			// Open the new file

@@ -45,9 +45,6 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	}
 
 	public registerCreateEvent() {
-		if (this.createEvent) {
-			this.app.vault.off("create", this.createEvent as any);
-		}
 
 		// Register create event for automation
 		const hasCustomContentTypes = this.settings.customContentTypes.some(ct => ct.enabled);
@@ -211,11 +208,11 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 						return;
 					}
 
-					// Check if file already has frontmatter that looks like it was created by another plugin
+					// Check if file already has properties that look like they were created by another plugin
 					const cache = this.app.metadataCache.getFileCache(file);
 					if (cache?.frontmatter) {
-						// If it already has frontmatter, it might have been created by another plugin
-						// Only proceed if it's a very basic frontmatter (like just a title)
+						// If it already has properties, it might have been created by another plugin
+						// Only proceed if it's very basic properties (like just a title)
 						const frontmatterKeys = Object.keys(cache.frontmatter);
 						if (frontmatterKeys.length > 1 || !frontmatterKeys.includes('title')) {
 							// This looks like it was created by another plugin with a full template
@@ -234,7 +231,12 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 					}
 				}
 			};
-			this.registerEvent(this.app.vault.on("create", this.createEvent as any));
+			// Use workspace event instead of vault event since vault.create doesn't exist
+			this.registerEvent(this.app.workspace.on("file-open", (file) => {
+				if (file instanceof TFile) {
+					this.createEvent(file);
+				}
+			}));
 		}
 	}
 

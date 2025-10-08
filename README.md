@@ -1,6 +1,6 @@
 # Astro Composer for Obsidian
 
-This plugin streamlines blogging in Obsidian for Astro static sites with automated file renaming, note properties management for post frontmatter, and internal link conversion.
+This plugin streamlines blogging in Obsidian for Astro static sites with automated file renaming, note properties management for post properties, and internal link conversion.
 
 ![astro-composer-plugin-demo](https://github.com/user-attachments/assets/794e965b-a122-433f-a081-dcc643b6af8d)
 
@@ -10,8 +10,8 @@ This plugin streamlines blogging in Obsidian for Astro static sites with automat
 
 ## Features
 
-- **New Post Dialog**: When enabled, prompts for a title when creating a new Markdown file via Obsidian's "New note" action, auto-generating a kebab-case filename (e.g., "My Blog Post" → `my-blog-post.md`) and optionally inserting frontmatter with `title`, `date`, etc.
-- **Property Standardization**: Updates a note's properties to match a customizable template using the "Standardize Properties" command. Preserves existing frontmatter values, adds missing properties from the template in the specified order, and appends unrecognized properties at the end.
+- **New Post Dialog**: When enabled, prompts for a title when creating a new Markdown file via Obsidian's "New note" action, auto-generating a kebab-case filename (e.g., "My Blog Post" → `my-blog-post.md`) and optionally inserting properties with `title`, `date`, etc.
+- **Property Standardization**: Updates a note's properties to match a customizable template using the "Standardize Properties" command. Preserves existing property values, adds missing properties from the template in the specified order, and appends unrecognized properties at the end.
 - **Draft Management**: Optionally adds an underscore prefix (e.g., `_my-post.md`) to hide drafts from Astro, configurable via settings.
 - **Internal Link Conversion**: Converts Obsidian wikilinks and markdown internal links (`[[My Post]] or [My Post](my-post)`) to Astro-friendly Markdown links (`[My Post](/blog/my-post/)`), supporting both file-based and folder-based post structures.
 - **Configurable Workflow**: Customize posts folder, link base path, creation mode (file-based or folder-based with `index.md`), date format, and excluded directories. Enable or disable automation for new notes and properties insertion independently.
@@ -29,14 +29,14 @@ This plugin streamlines blogging in Obsidian for Astro static sites with automat
 
 1. **Customize Settings**: In **Settings > Astro Composer**, configure:
    - **Automate post creation**: Toggle to enable the title dialog for new `.md` files created via Obsidian's "New note" action.
-   - **Auto-insert properties**: Enable to automatically apply the frontmatter template when creating new files (requires "Automate post creation" to be enabled).
+   - **Auto-insert properties**: Enable to automatically apply the properties template when creating new files (requires "Automate post creation" to be enabled).
    - **Posts folder**: Set the folder for blog posts (leave blank to use the vault root). Specify the default location for new notes in Obsidian's **Settings > Files and links**.
    - **Ignore subfolders**: Restrict automation to the specified posts folder and its subfolders.
    - **Excluded directories**: List directories to exclude from automation (e.g., `pages|posts/example`), separated by `|`, when not restricted to the posts folder.
    - **Use underscore prefix for drafts**: Add a prefix (e.g., `_my-post.md`) to hide drafts from Astro.
    - **Creation mode**: Choose file-based (`my-post.md`) or folder-based (`my-post/index.md`) structure.
    - **Index file name**: Name the main file in folder-based mode (e.g., `index`).
-   - **Date format**: Set the frontmatter date format (e.g., `YYYY-MM-DD` or `MMMM D, YYYY`).
+   - **Date format**: Set the properties date format (e.g., `YYYY-MM-DD` or `MMMM D, YYYY`).
    - **Properties template**: Define the template for new posts and standardization (e.g., `---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\n---`).
 2. **Create a Post**: With "Automate post creation" enabled, use Obsidian's "New note" action to trigger the title dialog, which renames the file and optionally adds properties.
 3. **Standardize Properties**: Use the `Astro Composer: Standardize Properties` command to update a note's properties, preserving existing values, adding missing properties, and maintaining the template's order with unrecognized properties at the end.
