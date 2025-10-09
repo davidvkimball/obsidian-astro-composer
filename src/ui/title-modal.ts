@@ -136,7 +136,6 @@ export class TitleModal extends Modal {
 
 	async submit() {
 		const title = this.titleInput.value.trim();
-		console.log('TitleModal: Starting submit with title:', title);
 		
 		if (!title) {
 			new Notice("Please enter a title.");
@@ -146,50 +145,38 @@ export class TitleModal extends Modal {
 		try {
 			let newFile: TFile | null = null;
 			if (this.isRename) {
-				console.log('TitleModal: Starting rename process for file:', this.file?.path);
-				console.log('TitleModal: File type:', this.type);
-				
 				newFile = await this.fileOps.renameFile({ file: this.file!, title, type: this.type });
-				console.log('TitleModal: renameFile returned:', newFile ? 'success' : 'null');
 				
 				if (newFile) {
-					console.log('TitleModal: Updating frontmatter for new file:', newFile.path);
 					await this.templateParser.updateTitleInFrontmatter(newFile, title, this.type);
-					console.log('TitleModal: Frontmatter update completed');
 				} else {
-					console.log('TitleModal: renameFile failed, showing error and closing modal');
 					// renameFile already showed an error notice, close modal and return
 					this.close();
 					return;
 				}
 			} else if (this.isNewNote) {
-				console.log('TitleModal: Creating new file');
 				// Create a new file from scratch
 				newFile = await this.createNewFile(title);
 			} else if (this.file) {
-				console.log('TitleModal: Processing existing file');
 				// We have an existing file, process it
 				newFile = await this.fileOps.createFile({ file: this.file, title, type: this.type });
 				if (newFile && this.plugin.settings.autoInsertProperties) {
 					await this.addPropertiesToFile(newFile, title, this.type);
 				}
 			} else {
-				console.log('TitleModal: Fallback - creating new file');
 				// Fallback - create new file
 				newFile = await this.createNewFile(title);
 			}
 			
 			if (!newFile) {
-				console.log('TitleModal: No newFile returned, showing error');
 				new Notice(`Failed to ${this.isRename ? "rename" : "create"} ${this.type}.`);
 				this.close();
 				return;
 			}
-			
-			console.log('TitleModal: Process completed successfully, closing modal');
 		} catch (error) {
 			console.error('TitleModal: Error during process:', error);
-			new Notice(`Error ${this.isRename ? "renaming" : "creating"} ${this.type}: ${(error as Error).message}.`);
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			new Notice(`Error ${this.isRename ? "renaming" : "creating"} ${this.type}: ${errorMessage}.`);
 			this.close();
 			return;
 		}
@@ -252,7 +239,8 @@ export class TitleModal extends Modal {
 			
 			return newFile;
 		} catch (error) {
-			throw new Error(`Failed to create file: ${(error as Error).message}`);
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			throw new Error(`Failed to create file: ${errorMessage}`);
 		}
 	}
 

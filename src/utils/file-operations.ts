@@ -216,9 +216,12 @@ export class FileOperations {
 			setTimeout(() => {
 				const fileExplorer = this.app.workspace.getLeavesOfType("file-explorer")[0];
 				if (fileExplorer && fileExplorer.view) {
-					const fileTree = (fileExplorer.view as { tree?: { revealFile?: (file: TFile) => void } }).tree;
-					if (fileTree && newFile instanceof TFile && typeof fileTree.revealFile === 'function') {
-						fileTree.revealFile(newFile);
+					const view = fileExplorer.view;
+					if (view && typeof view === 'object' && 'tree' in view) {
+						const fileTree = (view as any).tree;
+						if (fileTree && newFile instanceof TFile && typeof fileTree.revealFile === 'function') {
+							fileTree.revealFile(newFile);
+						}
 					}
 				}
 			}, 200);
@@ -228,7 +231,8 @@ export class FileOperations {
 
 			return newFile;
 		} catch (error) {
-			new Notice(`Failed to create folder structure: ${(error as Error).message}.`);
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			new Notice(`Failed to create folder structure: ${errorMessage}.`);
 			return null;
 		}
 	}
@@ -269,7 +273,8 @@ export class FileOperations {
 
 			// Track that this file was created by the plugin to avoid triggering the create event
 			if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
-				(this.plugin as { pluginCreatedFiles?: Set<string> }).pluginCreatedFiles?.add(newPath);
+				const pluginWithFiles = this.plugin as { pluginCreatedFiles?: Set<string> };
+				pluginWithFiles.pluginCreatedFiles?.add(newPath);
 			}
 
 			const leaf = this.app.workspace.getLeaf(false);
@@ -277,7 +282,8 @@ export class FileOperations {
 
 			return newFile;
 		} catch (error) {
-			new Notice(`Failed to rename file: ${(error as Error).message}.`);
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			new Notice(`Failed to rename file: ${errorMessage}.`);
 			return null;
 		}
 	}
@@ -285,26 +291,18 @@ export class FileOperations {
 
 	async renameFile(options: RenameOptions): Promise<TFile | null> {
 		const { file, title, type } = options;
-		console.log('FileOperations: Starting renameFile');
-		console.log('FileOperations: Original file:', file.path);
-		console.log('FileOperations: New title:', title);
-		console.log('FileOperations: Type:', type);
 		
 		if (!title) {
-			console.log('FileOperations: No title provided');
 			new Notice(`Title is required to rename the content.`);
 			return null;
 		}
 
 		const kebabTitle = this.toKebabCase(title);
-		console.log('FileOperations: Kebab title:', kebabTitle);
 		const prefix = "";
 
 		if (this.settings.creationMode === "folder") {
-			console.log('FileOperations: Using folder structure rename');
 			return this.renameFolderStructure(file, kebabTitle, prefix, type);
 		} else {
-			console.log('FileOperations: Using file structure rename');
 			return this.renameFileStructure(file, kebabTitle, prefix);
 		}
 	}
@@ -345,7 +343,8 @@ export class FileOperations {
 			try {
 				await this.app.fileManager.renameFile(file.parent, newFolderPath);
 			} catch (error) {
-				new Notice(`Failed to rename folder: ${(error as Error).message}.`);
+				const errorMessage = error instanceof Error ? error.message : String(error);
+				new Notice(`Failed to rename folder: ${errorMessage}.`);
 				return null;
 			}
 			
@@ -390,12 +389,7 @@ export class FileOperations {
 	}
 
 	private async renameFileStructure(file: TFile, kebabTitle: string, prefix: string): Promise<TFile | null> {
-		console.log('FileOperations: renameFileStructure called');
-		console.log('FileOperations: File path:', file.path);
-		console.log('FileOperations: Kebab title:', kebabTitle);
-		
 		if (!file.parent) {
-			console.log('FileOperations: No parent folder');
 			new Notice("Cannot rename: File has no parent folder.");
 			return null;
 		}
@@ -406,17 +400,11 @@ export class FileOperations {
 			this.settings.indexFileName.trim() !== "" && 
 			file.basename === this.settings.indexFileName;
 		
-		console.log('FileOperations: Is index file:', isIndex);
-		console.log('FileOperations: Index file name setting:', this.settings.indexFileName);
-		console.log('FileOperations: File basename:', file.basename);
-		
 		if (isIndex) {
-			console.log('FileOperations: Renaming folder structure');
 			prefix = file.parent.name.startsWith("_") ? "_" : "";
 			const newFolderName = `${prefix}${kebabTitle}`;
 			const parentFolder = file.parent.parent;
 			if (!parentFolder) {
-				console.log('FileOperations: No parent folder parent');
 				new Notice("Cannot rename: Parent folder has no parent.");
 				return null;
 			}
@@ -429,11 +417,9 @@ export class FileOperations {
 				// Parent is in a subfolder
 				newFolderPath = `${parentFolder.path}/${newFolderName}`;
 			}
-			console.log('FileOperations: New folder path:', newFolderPath);
 
 			const existingFolder = this.app.vault.getAbstractFileByPath(newFolderPath);
 			if (existingFolder instanceof TFolder) {
-				console.log('FileOperations: Folder already exists');
 				new Notice(`Folder already exists at ${newFolderPath}.`);
 				return null;
 			}
@@ -443,30 +429,25 @@ export class FileOperations {
 			const oldName = file.name;
 			
 			try {
-				console.log('FileOperations: Attempting to rename folder from', file.parent.path, 'to', newFolderPath);
 				await this.app.fileManager.renameFile(file.parent, newFolderPath);
-				console.log('FileOperations: Folder rename successful');
 			} catch (error) {
 				console.error('FileOperations: Folder rename failed:', error);
-				new Notice(`Failed to rename folder: ${(error as Error).message}.`);
+				const errorMessage = error instanceof Error ? error.message : String(error);
+				new Notice(`Failed to rename folder: ${errorMessage}.`);
 				return null;
 			}
 			
 			const newFilePath = `${newFolderPath}/${file.name}`;
-			console.log('FileOperations: Looking for renamed file at:', newFilePath);
 			const newFile = this.app.vault.getAbstractFileByPath(newFilePath);
 			if (!(newFile instanceof TFile)) {
-				console.log('FileOperations: Could not locate renamed file');
 				new Notice("Failed to locate renamed file.");
 				return null;
 			}
 			
-			console.log('FileOperations: Folder rename completed successfully');
 			return newFile;
 		}
 		
 		// For non-index files, rename the file itself
-		console.log('FileOperations: Renaming file directly');
 		prefix = file.basename.startsWith("_") ? "_" : "";
 		const newName = `${prefix}${kebabTitle}.md`;
 		
@@ -479,33 +460,28 @@ export class FileOperations {
 			// File is in a subfolder
 			newPath = `${file.parent.path}/${newName}`;
 		}
-		console.log('FileOperations: New file path:', newPath);
 
 		const existingFile = this.app.vault.getAbstractFileByPath(newPath);
 		if (existingFile instanceof TFile && existingFile !== file) {
-			console.log('FileOperations: File already exists at new path');
 			new Notice(`File already exists at ${newPath}.`);
 			return null;
 		}
 
 		try {
-			console.log('FileOperations: Attempting to rename file from', file.path, 'to', newPath);
 			await this.app.fileManager.renameFile(file, newPath);
-			console.log('FileOperations: File rename successful');
 		} catch (error) {
 			console.error('FileOperations: File rename failed:', error);
-			new Notice(`Failed to rename file: ${(error as Error).message}.`);
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			new Notice(`Failed to rename file: ${errorMessage}.`);
 			return null;
 		}
 		
 		const newFile = this.app.vault.getAbstractFileByPath(newPath);
 		if (!(newFile instanceof TFile)) {
-			console.log('FileOperations: Could not locate renamed file');
 			new Notice("Failed to locate renamed file.");
 			return null;
 		}
 		
-		console.log('FileOperations: File rename completed successfully');
 		return newFile;
 	}
 }
