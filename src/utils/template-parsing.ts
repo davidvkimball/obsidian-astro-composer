@@ -235,8 +235,19 @@ export class TemplateParser {
 			}
 		});
 
-		const escapedTitle = newTitle.replace(/"/g, '\\"');
-		const titleVal = newTitle.includes(" ") || newTitle.includes('"') ? `"${escapedTitle}"` : newTitle;
+		// Properly escape YAML string values
+		// YAML strings with quotes need to be wrapped in single quotes or escaped properly
+		let titleVal: string;
+		if (newTitle.includes('"') || newTitle.includes("'") || newTitle.includes('\n') || newTitle.includes('\\')) {
+			// For strings with quotes, newlines, or backslashes, use single quotes and escape single quotes
+			titleVal = `'${newTitle.replace(/'/g, "''")}'`;
+		} else if (newTitle.includes(" ") || newTitle.includes(":") || newTitle.includes("#") || newTitle.includes("@")) {
+			// For strings with spaces or special YAML characters, wrap in double quotes and escape double quotes
+			titleVal = `"${newTitle.replace(/"/g, '\\"')}"`;
+		} else {
+			// For simple strings, no quotes needed
+			titleVal = newTitle;
+		}
 		existing[titleKey] = titleVal;
 
 		// If title key was found in original properties, preserve its position

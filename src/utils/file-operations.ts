@@ -7,7 +7,10 @@ export class FileOperations {
 	toKebabCase(str: string): string {
 		return str
 			.toLowerCase()
-			.replace(/[^a-z0-9\s-]/g, "")
+			// Remove or replace problematic characters for filenames
+			.replace(/[<>:"/\\|?*]/g, "") // Remove Windows/Unix invalid filename characters
+			.replace(/['"]/g, "") // Remove quotes
+			.replace(/[^\w\s-]/g, "") // Remove other special characters but keep letters, numbers, spaces, hyphens
 			.trim()
 			.replace(/\s+/g, "-")
 			.replace(/-+/g, "-")
@@ -16,8 +19,10 @@ export class FileOperations {
 
 	generateFilename(title: string): string {
 		const kebabTitle = this.toKebabCase(title);
+		// If kebab case results in empty string, use a fallback
+		const safeKebabTitle = kebabTitle || "untitled";
 		const prefix = this.settings.enableUnderscorePrefix ? "_" : "";
-		return `${prefix}${kebabTitle}`;
+		return `${prefix}${safeKebabTitle}`;
 	}
 
 	determineType(file: TFile): PostType | string {
@@ -258,6 +263,7 @@ export class FileOperations {
 			
 			const newFile = this.app.vault.getAbstractFileByPath(newPath);
 			if (!(newFile instanceof TFile)) {
+				new Notice("Failed to locate renamed file.");
 				return null;
 			}
 
@@ -279,18 +285,26 @@ export class FileOperations {
 
 	async renameFile(options: RenameOptions): Promise<TFile | null> {
 		const { file, title, type } = options;
+		console.log('FileOperations: Starting renameFile');
+		console.log('FileOperations: Original file:', file.path);
+		console.log('FileOperations: New title:', title);
+		console.log('FileOperations: Type:', type);
 		
 		if (!title) {
+			console.log('FileOperations: No title provided');
 			new Notice(`Title is required to rename the content.`);
 			return null;
 		}
 
 		const kebabTitle = this.toKebabCase(title);
+		console.log('FileOperations: Kebab title:', kebabTitle);
 		const prefix = "";
 
 		if (this.settings.creationMode === "folder") {
+			console.log('FileOperations: Using folder structure rename');
 			return this.renameFolderStructure(file, kebabTitle, prefix, type);
 		} else {
+			console.log('FileOperations: Using file structure rename');
 			return this.renameFileStructure(file, kebabTitle, prefix);
 		}
 	}
@@ -312,7 +326,15 @@ export class FileOperations {
 				new Notice("Cannot rename: Parent folder has no parent.");
 				return null;
 			}
-			const newFolderPath = `${parentFolder.path}/${newFolderName}`;
+			// Fix path construction to avoid double slashes
+			let newFolderPath: string;
+			if (parentFolder.path === "" || parentFolder.path === "/") {
+				// Parent is vault root
+				newFolderPath = newFolderName;
+			} else {
+				// Parent is in a subfolder
+				newFolderPath = `${parentFolder.path}/${newFolderName}`;
+			}
 
 			const existingFolder = this.app.vault.getAbstractFileByPath(newFolderPath);
 			if (existingFolder instanceof TFolder) {
@@ -320,7 +342,13 @@ export class FileOperations {
 				return null;
 			}
 
-			await this.app.fileManager.renameFile(file.parent, newFolderPath);
+			try {
+				await this.app.fileManager.renameFile(file.parent, newFolderPath);
+			} catch (error) {
+				new Notice(`Failed to rename folder: ${(error as Error).message}.`);
+				return null;
+			}
+			
 			const newFilePath = `${newFolderPath}/${file.name}`;
 			const newFile = this.app.vault.getAbstractFileByPath(newFilePath);
 			if (!(newFile instanceof TFile)) {
@@ -362,7 +390,12 @@ export class FileOperations {
 	}
 
 	private async renameFileStructure(file: TFile, kebabTitle: string, prefix: string): Promise<TFile | null> {
+		console.log('FileOperations: renameFileStructure called');
+		console.log('FileOperations: File path:', file.path);
+		console.log('FileOperations: Kebab title:', kebabTitle);
+		
 		if (!file.parent) {
+			console.log('FileOperations: No parent folder');
 			new Notice("Cannot rename: File has no parent folder.");
 			return null;
 		}
@@ -373,18 +406,34 @@ export class FileOperations {
 			this.settings.indexFileName.trim() !== "" && 
 			file.basename === this.settings.indexFileName;
 		
+		console.log('FileOperations: Is index file:', isIndex);
+		console.log('FileOperations: Index file name setting:', this.settings.indexFileName);
+		console.log('FileOperations: File basename:', file.basename);
+		
 		if (isIndex) {
+			console.log('FileOperations: Renaming folder structure');
 			prefix = file.parent.name.startsWith("_") ? "_" : "";
 			const newFolderName = `${prefix}${kebabTitle}`;
 			const parentFolder = file.parent.parent;
 			if (!parentFolder) {
+				console.log('FileOperations: No parent folder parent');
 				new Notice("Cannot rename: Parent folder has no parent.");
 				return null;
 			}
-			const newFolderPath = `${parentFolder.path}/${newFolderName}`;
+			// Fix path construction to avoid double slashes
+			let newFolderPath: string;
+			if (parentFolder.path === "" || parentFolder.path === "/") {
+				// Parent is vault root
+				newFolderPath = newFolderName;
+			} else {
+				// Parent is in a subfolder
+				newFolderPath = `${parentFolder.path}/${newFolderName}`;
+			}
+			console.log('FileOperations: New folder path:', newFolderPath);
 
 			const existingFolder = this.app.vault.getAbstractFileByPath(newFolderPath);
 			if (existingFolder instanceof TFolder) {
+				console.log('FileOperations: Folder already exists');
 				new Notice(`Folder already exists at ${newFolderPath}.`);
 				return null;
 			}
@@ -393,36 +442,70 @@ export class FileOperations {
 			const oldPath = file.path;
 			const oldName = file.name;
 			
-			await this.app.fileManager.renameFile(file.parent, newFolderPath);
+			try {
+				console.log('FileOperations: Attempting to rename folder from', file.parent.path, 'to', newFolderPath);
+				await this.app.fileManager.renameFile(file.parent, newFolderPath);
+				console.log('FileOperations: Folder rename successful');
+			} catch (error) {
+				console.error('FileOperations: Folder rename failed:', error);
+				new Notice(`Failed to rename folder: ${(error as Error).message}.`);
+				return null;
+			}
+			
 			const newFilePath = `${newFolderPath}/${file.name}`;
+			console.log('FileOperations: Looking for renamed file at:', newFilePath);
 			const newFile = this.app.vault.getAbstractFileByPath(newFilePath);
 			if (!(newFile instanceof TFile)) {
+				console.log('FileOperations: Could not locate renamed file');
 				new Notice("Failed to locate renamed file.");
 				return null;
 			}
 			
+			console.log('FileOperations: Folder rename completed successfully');
 			return newFile;
 		}
 		
 		// For non-index files, rename the file itself
+		console.log('FileOperations: Renaming file directly');
 		prefix = file.basename.startsWith("_") ? "_" : "";
 		const newName = `${prefix}${kebabTitle}.md`;
-		const newPath = `${file.parent.path}/${newName}`;
+		
+		// Fix path construction to avoid double slashes
+		let newPath: string;
+		if (file.parent.path === "" || file.parent.path === "/") {
+			// File is in vault root
+			newPath = newName;
+		} else {
+			// File is in a subfolder
+			newPath = `${file.parent.path}/${newName}`;
+		}
+		console.log('FileOperations: New file path:', newPath);
 
 		const existingFile = this.app.vault.getAbstractFileByPath(newPath);
 		if (existingFile instanceof TFile && existingFile !== file) {
+			console.log('FileOperations: File already exists at new path');
 			new Notice(`File already exists at ${newPath}.`);
 			return null;
 		}
 
-		await this.app.fileManager.renameFile(file, newPath);
+		try {
+			console.log('FileOperations: Attempting to rename file from', file.path, 'to', newPath);
+			await this.app.fileManager.renameFile(file, newPath);
+			console.log('FileOperations: File rename successful');
+		} catch (error) {
+			console.error('FileOperations: File rename failed:', error);
+			new Notice(`Failed to rename file: ${(error as Error).message}.`);
+			return null;
+		}
 		
 		const newFile = this.app.vault.getAbstractFileByPath(newPath);
 		if (!(newFile instanceof TFile)) {
+			console.log('FileOperations: Could not locate renamed file');
 			new Notice("Failed to locate renamed file.");
 			return null;
 		}
 		
+		console.log('FileOperations: File rename completed successfully');
 		return newFile;
 	}
 }

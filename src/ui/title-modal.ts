@@ -136,6 +136,8 @@ export class TitleModal extends Modal {
 
 	async submit() {
 		const title = this.titleInput.value.trim();
+		console.log('TitleModal: Starting submit with title:', title);
+		
 		if (!title) {
 			new Notice("Please enter a title.");
 			return;
@@ -144,28 +146,52 @@ export class TitleModal extends Modal {
 		try {
 			let newFile: TFile | null = null;
 			if (this.isRename) {
+				console.log('TitleModal: Starting rename process for file:', this.file?.path);
+				console.log('TitleModal: File type:', this.type);
+				
 				newFile = await this.fileOps.renameFile({ file: this.file!, title, type: this.type });
+				console.log('TitleModal: renameFile returned:', newFile ? 'success' : 'null');
+				
 				if (newFile) {
+					console.log('TitleModal: Updating frontmatter for new file:', newFile.path);
 					await this.templateParser.updateTitleInFrontmatter(newFile, title, this.type);
+					console.log('TitleModal: Frontmatter update completed');
+				} else {
+					console.log('TitleModal: renameFile failed, showing error and closing modal');
+					// renameFile already showed an error notice, close modal and return
+					this.close();
+					return;
 				}
 			} else if (this.isNewNote) {
+				console.log('TitleModal: Creating new file');
 				// Create a new file from scratch
 				newFile = await this.createNewFile(title);
 			} else if (this.file) {
+				console.log('TitleModal: Processing existing file');
 				// We have an existing file, process it
 				newFile = await this.fileOps.createFile({ file: this.file, title, type: this.type });
 				if (newFile && this.plugin.settings.autoInsertProperties) {
 					await this.addPropertiesToFile(newFile, title, this.type);
 				}
 			} else {
+				console.log('TitleModal: Fallback - creating new file');
 				// Fallback - create new file
 				newFile = await this.createNewFile(title);
 			}
+			
 			if (!newFile) {
-				throw new Error("Failed to process the content.");
+				console.log('TitleModal: No newFile returned, showing error');
+				new Notice(`Failed to ${this.isRename ? "rename" : "create"} ${this.type}.`);
+				this.close();
+				return;
 			}
+			
+			console.log('TitleModal: Process completed successfully, closing modal');
 		} catch (error) {
+			console.error('TitleModal: Error during process:', error);
 			new Notice(`Error ${this.isRename ? "renaming" : "creating"} ${this.type}: ${(error as Error).message}.`);
+			this.close();
+			return;
 		}
 
 		this.close();
@@ -237,7 +263,9 @@ export class TitleModal extends Modal {
 		let template: string;
 		if (this.type === "note") {
 			// For generic notes, use a simple template
-			template = `---\ntitle: "${title}"\ndate: ${dateString}\n---\n`;
+			// Properly escape the title for YAML
+			const escapedTitle = this.escapeYamlString(title);
+			template = `---\ntitle: ${escapedTitle}\ndate: ${dateString}\n---\n`;
 		} else if (this.fileOps.isCustomContentType(this.type)) {
 			const customType = this.fileOps.getCustomContentType(this.type);
 			template = customType ? customType.template : this.plugin.settings.defaultTemplate;
@@ -258,7 +286,9 @@ export class TitleModal extends Modal {
 		let template: string;
 		if (type === "note") {
 			// For generic notes, use a simple template
-			template = `---\ntitle: "${title}"\ndate: ${dateString}\n---\n`;
+			// Properly escape the title for YAML
+			const escapedTitle = this.escapeYamlString(title);
+			template = `---\ntitle: ${escapedTitle}\ndate: ${dateString}\n---\n`;
 		} else if (this.fileOps.isCustomContentType(type)) {
 			const customType = this.fileOps.getCustomContentType(type);
 			template = customType ? customType.template : this.plugin.settings.defaultTemplate;
@@ -271,6 +301,21 @@ export class TitleModal extends Modal {
 
 		// Ensure no extra newlines or --- are added beyond the template
 		await this.app.vault.modify(file, template);
+	}
+
+	private escapeYamlString(str: string): string {
+		// Properly escape YAML string values
+		// YAML strings with quotes need to be wrapped in single quotes or escaped properly
+		if (str.includes('"') || str.includes("'") || str.includes('\n') || str.includes('\\')) {
+			// For strings with quotes, newlines, or backslashes, use single quotes and escape single quotes
+			return `'${str.replace(/'/g, "''")}'`;
+		} else if (str.includes(" ") || str.includes(":") || str.includes("#") || str.includes("@")) {
+			// For strings with spaces or special YAML characters, wrap in double quotes and escape double quotes
+			return `"${str.replace(/"/g, '\\"')}"`;
+		} else {
+			// For simple strings, no quotes needed
+			return str;
+		}
 	}
 
 	onClose() {
