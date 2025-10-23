@@ -231,8 +231,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 					}
 				}
 			};
-			// Use workspace event instead of vault event since vault.create doesn't exist
-			this.registerEvent(this.app.workspace.on("file-open", (file) => {
+			// Use vault.create event to detect new file creation
+			this.registerEvent(this.app.vault.on("create", (file) => {
 				if (file instanceof TFile) {
 					this.createEvent(file);
 				}
