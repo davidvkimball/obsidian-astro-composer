@@ -207,7 +207,7 @@ export class FileOperations {
 		}
 
 		try {
-			await this.app.vault.rename(file, newPath);
+			await this.app.fileManager.renameFile(file, newPath);
 			const newFile = this.app.vault.getAbstractFileByPath(newPath);
 			if (!(newFile instanceof TFile)) {
 				return null;
@@ -372,11 +372,8 @@ export class FileOperations {
 				return null;
 			}
 
-			// Store old paths for link updating
-			const oldPath = file.path;
-			const oldName = file.name;
-			
-			await this.app.vault.rename(file, newPath);
+			// Use fileManager.renameFile() which automatically updates links
+			await this.app.fileManager.renameFile(file, newPath);
 			const newFile = this.app.vault.getAbstractFileByPath(newPath);
 			if (!(newFile instanceof TFile)) {
 				new Notice("Failed to locate renamed file.");
@@ -424,10 +421,6 @@ export class FileOperations {
 				return null;
 			}
 
-			// Store old values before rename
-			const oldPath = file.path;
-			const oldName = file.name;
-			
 			try {
 				await this.app.fileManager.renameFile(file.parent, newFolderPath);
 			} catch (error) {
