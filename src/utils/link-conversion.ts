@@ -301,8 +301,8 @@ export class LinkConverter {
 			};
 		}
 		
-		// Check if posts folder is blank - treat ALL files as posts
-		if (!this.settings.postsFolder && this.settings.automatePostCreation) {
+		// Check if posts folder is blank - treat files in vault root as posts (only if automation is enabled)
+		if (!this.settings.postsFolder && this.settings.automatePostCreation && !filePath.includes('/')) {
 			return {
 				basePath: this.settings.postsLinkBasePath,
 				creationMode: this.settings.creationMode,

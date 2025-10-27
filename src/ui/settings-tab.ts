@@ -93,7 +93,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Automate post creation")
-			.setDesc("Automatically show title dialog for new .md files, rename them based on the title, and insert properties if enabled.")
+			.setDesc("Automatically show title dialog for new .md files in the posts folder, rename them based on the title, and insert properties if enabled. This setting only applies to posts, not custom content types or pages.")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(settings.automatePostCreation)

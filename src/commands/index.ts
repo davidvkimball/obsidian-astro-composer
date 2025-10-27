@@ -16,23 +16,23 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		const postsFolder = settings.postsFolder || "";
 		const pagesFolder = settings.enablePages ? (settings.pagesFolder || "") : "";
 		
-		// Check if it's a post
+		// Check if it's a post (only if automation is enabled)
 		if (settings.automatePostCreation) {
 			if (postsFolder) {
 				// If postsFolder is specified, check if file is in that folder
 				if (filePath.startsWith(postsFolder + "/") || filePath === postsFolder) {
 					return true;
 				}
-		} else {
-			// If postsFolder is blank, only treat files in vault root as posts
-			// This includes both direct files and folder-based posts in vault root
-			if (!filePath.includes("/") || (filePath.includes("/") && !filePath.startsWith("/") && filePath.split("/").length === 2)) {
-				return true;
+			} else {
+				// If postsFolder is blank, only treat files in vault root as posts
+				// This includes both direct files and folder-based posts in vault root
+				if (!filePath.includes("/") || (filePath.includes("/") && !filePath.startsWith("/") && filePath.split("/").length === 2)) {
+					return true;
+				}
 			}
 		}
-		}
 		
-		// Check if it's a page
+		// Check if it's a page (automation is automatic when pages are enabled)
 		if (settings.enablePages) {
 			if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
 				return true;

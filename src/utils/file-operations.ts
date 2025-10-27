@@ -57,10 +57,10 @@ export class FileOperations {
 			if (postsFolder) {
 				// If postsFolder is specified, check if file is in that folder
 				isPost = filePath.startsWith(postsFolder + "/") || filePath === postsFolder;
-		} else {
-			// If postsFolder is blank, only treat files in vault root as posts
-			isPost = !filePath.includes("/");
-		}
+			} else {
+				// If postsFolder is blank, only treat files in vault root as posts
+				isPost = !filePath.includes("/");
+			}
 		}
 		if (isPost) return "post";
 		

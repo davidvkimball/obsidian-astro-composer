@@ -156,13 +156,16 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 					}
 
 					if (!customTypeId) {
-						if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
-							isPage = true;
-							shouldProcess = true;
-						} else if (!pagesFolder && this.settings.enablePages && isInVaultRoot) {
-							// Pages folder is blank - only treat files in vault root as pages
-							isPage = true;
-							shouldProcess = true;
+						// Check if it's a page (automation is automatic when pages are enabled)
+						if (this.settings.enablePages) {
+							if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
+								isPage = true;
+								shouldProcess = true;
+							} else if (!pagesFolder && isInVaultRoot) {
+								// Pages folder is blank - only treat files in vault root as pages
+								isPage = true;
+								shouldProcess = true;
+							}
 						}
 					}
 
@@ -193,6 +196,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 							shouldProcess = true;
 						}
 					}
+
 
 					// If not in any relevant folder, skip entirely
 					if (!shouldProcess) {

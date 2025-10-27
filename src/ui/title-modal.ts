@@ -160,7 +160,13 @@ export class TitleModal extends Modal {
 			} else if (this.file) {
 				// We have an existing file, process it
 				newFile = await this.fileOps.createFile({ file: this.file, title, type: this.type });
-				if (newFile && this.plugin.settings.autoInsertProperties) {
+				// Always insert properties for custom content types and pages when automation is enabled
+				// For posts, check the autoInsertProperties setting
+				const shouldInsertProperties = this.fileOps.isCustomContentType(this.type) || 
+					this.type === "page" || 
+					this.plugin.settings.autoInsertProperties;
+				
+				if (newFile && shouldInsertProperties) {
 					await this.addPropertiesToFile(newFile, title, this.type);
 				}
 			} else {
@@ -222,7 +228,13 @@ export class TitleModal extends Modal {
 
 		// Create the file with initial content
 		let initialContent = "";
-		if (this.plugin.settings.autoInsertProperties) {
+		// Always insert properties for custom content types and pages when automation is enabled
+		// For posts, check the autoInsertProperties setting
+		const shouldInsertProperties = this.fileOps.isCustomContentType(this.type) || 
+			this.type === "page" || 
+			this.plugin.settings.autoInsertProperties;
+		
+		if (shouldInsertProperties) {
 			initialContent = await this.generateInitialContent(title);
 		}
 
