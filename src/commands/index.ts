@@ -1,4 +1,4 @@
-import { Plugin, Editor, MarkdownView, TFile, Notice, App } from "obsidian";
+import { Plugin, Editor, MarkdownView, TFile, Notice, App, MarkdownFileInfo } from "obsidian";
 import { AstroComposerSettings, AstroComposerPluginInterface } from "../types";
 import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
@@ -6,7 +6,7 @@ import { LinkConverter } from "../utils/link-conversion";
 import { TitleModal } from "../ui/title-modal";
 
 export function registerCommands(plugin: Plugin, settings: AstroComposerSettings): void {
-	const fileOps = new FileOperations(plugin.app, settings, plugin);
+	const fileOps = new FileOperations(plugin.app, settings, plugin as unknown as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
 	const linkConverter = new LinkConverter(settings);
 
 
@@ -59,9 +59,10 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		id: "standardize-properties",
 		name: "Standardize Properties",
 		icon: "file-check",
-		editorCallback: (editor: Editor, ctx: MarkdownView | any) => {
-			if (ctx.file instanceof TFile) {
-				standardizeProperties(plugin.app, settings, ctx.file, plugin);
+		editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
+			const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
+			if (file instanceof TFile) {
+				standardizeProperties(plugin.app, settings, file, plugin as unknown as AstroComposerPluginInterface);
 			}
 		},
 	});
@@ -71,9 +72,10 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		id: "convert-wikilinks-astro",
 		name: "Convert internal links for Astro",
 		icon: "link-2",
-		editorCallback: (editor: Editor, ctx: MarkdownView | any) => {
-			if (ctx.file instanceof TFile) {
-				linkConverter.convertWikilinksForAstro(editor, ctx.file);
+		editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
+			const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
+			if (file instanceof TFile) {
+				linkConverter.convertWikilinksForAstro(editor, file);
 			}
 		},
 	});
@@ -83,17 +85,18 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		id: "rename-content",
 		name: "Rename Current Content",
 		icon: "pencil",
-		editorCallback: (editor: Editor, ctx: MarkdownView | any) => {
-			if (ctx.file instanceof TFile) {
+		editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
+			const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
+			if (file instanceof TFile) {
 				// Check if this file matches any configured content type
-				if (!hasMatchingContentType(ctx.file, settings)) {
+				if (!hasMatchingContentType(file, settings)) {
 					new Notice("Cannot rename: This file is not part of a configured content type folder.");
 					return;
 				}
 				
 				// Determine content type from folder structure
-				const type = fileOps.determineType(ctx.file);
-				const cache = plugin.app.metadataCache.getFileCache(ctx.file);
+				const type = fileOps.determineType(file);
+				const cache = plugin.app.metadataCache.getFileCache(file);
 				
 				// Get the appropriate title key for this content type
 				const titleKey = fileOps.getTitleKey(type);
@@ -104,13 +107,13 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 					return;
 				}
 				
-				new TitleModal(plugin.app, ctx.file, plugin as unknown as AstroComposerPluginInterface, type, true).open();
+				new TitleModal(plugin.app, file, plugin as unknown as AstroComposerPluginInterface, type, true).open();
 			}
 		},
 	});
 }
 
-async function standardizeProperties(app: App, settings: AstroComposerSettings, file: TFile, plugin?: any): Promise<void> {
+async function standardizeProperties(app: App, settings: AstroComposerSettings, file: TFile, plugin?: AstroComposerPluginInterface): Promise<void> {
 	const templateParser = new TemplateParser(app, settings);
 	const fileOps = new FileOperations(app, settings, plugin);
 	
@@ -141,7 +144,7 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 	const content = await app.vault.read(file);
 	const title = file.basename.replace(/^_/, "");
 	
-	const parsed = await templateParser.parseFrontmatter(content);
+	const parsed = templateParser.parseFrontmatter(content);
 	const { templateProps, templateValues } = templateParser.parseTemplate(templateString, title);
 
 	// Merge template properties with existing ones, preserving all existing

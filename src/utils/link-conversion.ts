@@ -26,7 +26,6 @@ export class LinkConverter {
 		// Determine content type and appropriate base path
 		let basePath = "";
 		let contentFolder = "";
-		let creationMode: "file" | "folder" = "file";
 		let indexFileName = "";
 
 		// Check custom content types first (highest priority)
@@ -35,7 +34,6 @@ export class LinkConverter {
 			if (customType.enabled && customType.folder && path.startsWith(customType.folder + '/')) {
 				contentFolder = customType.folder;
 				basePath = customType.linkBasePath || "";
-				creationMode = customType.creationMode;
 				indexFileName = customType.indexFileName;
 				foundCustomType = true;
 				break;
@@ -46,14 +44,12 @@ export class LinkConverter {
 		if (!foundCustomType && this.settings.enablePages && this.settings.pagesFolder && path.startsWith(this.settings.pagesFolder + '/')) {
 			contentFolder = this.settings.pagesFolder;
 			basePath = this.settings.pagesLinkBasePath;
-			creationMode = this.settings.pagesCreationMode || "file";
 			indexFileName = this.settings.pagesIndexFileName || "";
 		}
 		// Check posts folder (third priority)
 		else if (!foundCustomType && this.settings.postsFolder && path.startsWith(this.settings.postsFolder + '/')) {
 			contentFolder = this.settings.postsFolder;
 			basePath = this.settings.postsLinkBasePath;
-			creationMode = this.settings.creationMode;
 			indexFileName = this.settings.indexFileName || "index";
 		}
 		// If posts folder is blank and "Ignore subfolders" is NOT checked, treat as post unless excluded
@@ -83,7 +79,6 @@ export class LinkConverter {
 				// If not excluded, treat as post
 				if (!shouldExcludeFromPosts) {
 					basePath = this.settings.postsLinkBasePath;
-					creationMode = this.settings.creationMode;
 					indexFileName = this.settings.indexFileName || "index";
 				}
 			}
@@ -318,7 +313,7 @@ export class LinkConverter {
 		};
 	}
 
-	async convertWikilinksForAstro(editor: Editor, file: TFile | null): Promise<void> {
+	convertWikilinksForAstro(editor: Editor, file: TFile | null): void {
 		if (!(file instanceof TFile)) {
 			new Notice("No active file.");
 			return;

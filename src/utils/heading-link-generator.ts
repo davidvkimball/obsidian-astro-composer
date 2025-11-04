@@ -1,4 +1,4 @@
-import { TFile, HeadingCache } from "obsidian";
+import { TFile, HeadingCache, App } from "obsidian";
 import { AstroComposerSettings } from "../types";
 
 export class HeadingLinkGenerator {
@@ -114,35 +114,36 @@ export class HeadingLinkGenerator {
 	/**
 	 * Generates a standard Obsidian link to a heading, respecting user's link format preference
 	 */
-	generateObsidianLink(app: any, file: TFile, heading: HeadingCache): string {
+	generateObsidianLink(app: App, file: TFile, heading: HeadingCache): string {
 		const headingText = heading.heading;
 		
 		// Check if user prefers wikilinks by testing Obsidian's default behavior
 		const testLink = app.fileManager.generateMarkdownLink(file, '', '');
 		if (testLink.startsWith('[[')) {
-			// User prefers wikilinks
-			const filePath = file.path.replace(/\.md$/, "");
-			return `[[${filePath}#${headingText}|${headingText}]]`;
+			// User prefers wikilinks - use just the filename (basename) without path
+			const fileName = file.basename;
+			return `[[${fileName}#${headingText}|${headingText}]]`;
 		} else {
-			// User prefers markdown links - use Obsidian's method but fix the display text
-			const anchor = this.toKebabCase(headingText);
+			// User prefers markdown links - use Obsidian's method with heading text as-is (URL-encoded)
 			// Get the base link from Obsidian (respects user's path settings)
 			const baseLink = app.fileManager.generateMarkdownLink(file, '', '');
 			// Extract the path part and add our anchor with proper display text
 			if (baseLink.startsWith('[[')) {
 				// This shouldn't happen since we're in the markdown branch, but just in case
-				const filePath = file.path.replace(/\.md$/, "");
-				return `[[${filePath}#${headingText}|${headingText}]]`;
+				const fileName = file.basename;
+				return `[[${fileName}#${headingText}|${headingText}]]`;
 			} else {
 				// Extract the path from the generated link and reconstruct with proper display text
 				const match = baseLink.match(/\[([^\]]+)\]\(([^)]+)\)/);
 				if (match) {
 					const [, , path] = match;
-					return `[${headingText}](${path}#${encodeURIComponent(anchor)})`;
+					// For Obsidian, use the heading text as-is (URL-encoded), not kebab-case
+					return `[${headingText}](${path}#${encodeURIComponent(headingText)})`;
 				} else {
 					// Fallback to manual construction
 					const encodedFilename = encodeURIComponent(file.name);
-					return `[${headingText}](${encodedFilename}#${encodeURIComponent(anchor)})`;
+					// For Obsidian, use the heading text as-is (URL-encoded)
+					return `[${headingText}](${encodedFilename}#${encodeURIComponent(headingText)})`;
 				}
 			}
 		}
@@ -153,8 +154,9 @@ export class HeadingLinkGenerator {
 	 */
 	generateObsidianWikilink(file: TFile, heading: HeadingCache): string {
 		const headingText = heading.heading;
-		const filePath = file.path.replace(/\.md$/, "");
-		return `[[${filePath}#${headingText}|${headingText}]]`;
+		// Use just the filename (basename), not the full path
+		const fileName = file.basename;
+		return `[[${fileName}#${headingText}|${headingText}]]`;
 	}
 
 	/**
@@ -183,9 +185,32 @@ export class HeadingLinkGenerator {
 	}
 
 	/**
+	 * Extracts the URL from a markdown link or wikilink
+	 */
+	extractUrl(link: string): string {
+		// Handle markdown links: [text](url)
+		const markdownMatch = link.match(/\[([^\]]+)\]\(([^)]+)\)/);
+		if (markdownMatch) {
+			return markdownMatch[2];
+		}
+		
+		// Handle wikilinks: [[path#heading|text]] or [[path#heading]]
+		const wikilinkMatch = link.match(/\[\[([^\]]+)\]\]/);
+		if (wikilinkMatch) {
+			const content = wikilinkMatch[1];
+			// Extract the path part (before | if present)
+			const pathPart = content.split('|')[0];
+			return pathPart;
+		}
+		
+		// If it doesn't match either format, return as-is (might already be a URL)
+		return link;
+	}
+
+	/**
 	 * Generates the appropriate link format based on settings
 	 */
-	generateLink(app: any, file: TFile, heading: HeadingCache): string {
+	generateLink(app: App, file: TFile, heading: HeadingCache): string {
 		if (this.settings.copyHeadingLinkFormat === "astro") {
 			// Astro format always uses markdown links (wikilinks with Astro URLs don't make sense)
 			return this.generateAstroLink(file, heading);
@@ -198,7 +223,7 @@ export class HeadingLinkGenerator {
 	/**
 	 * Finds the heading at a specific line in a file
 	 */
-	findHeadingAtLine(app: any, file: TFile, line: number): HeadingCache | null {
+	findHeadingAtLine(app: App, file: TFile, line: number): HeadingCache | null {
 		const cache = app.metadataCache.getFileCache(file);
 		if (!cache || !cache.headings) {
 			return null;

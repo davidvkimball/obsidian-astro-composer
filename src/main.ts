@@ -25,7 +25,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		await this.loadSettings();
 
 		// Initialize utilities
-		this.fileOps = new FileOperations(this.app, this.settings, this);
+		this.fileOps = new FileOperations(this.app, this.settings, this as unknown as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
 		this.templateParser = new TemplateParser(this.app, this.settings);
 		this.headingLinkGenerator = new HeadingLinkGenerator(this.settings);
 
@@ -271,15 +271,28 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				const heading = this.headingLinkGenerator.findHeadingAtLine(this.app, file, cursor.line);
 				
 				if (heading) {
-					// Main copy button - uses the default format and respects Obsidian settings
+					const fullLink = this.headingLinkGenerator.generateLink(this.app, file, heading);
+					const urlOnly = this.headingLinkGenerator.extractUrl(fullLink);
+					
+					// Option 1: Copy URL only (for CTRL+K workflow)
 					menu.addItem((item) => {
 						item
-							.setTitle('Copy Heading Link')
+							.setTitle('Copy heading link')
 							.setIcon('link-2')
 							.onClick(async () => {
-								const link = this.headingLinkGenerator.generateLink(this.app, file, heading);
-								await navigator.clipboard.writeText(link);
+								await navigator.clipboard.writeText(urlOnly);
 								new Notice('Heading link copied to clipboard');
+							});
+					});
+					
+					// Option 2: Copy full link with text (for standalone pasting)
+					menu.addItem((item) => {
+						item
+							.setTitle('Copy heading link with text')
+							.setIcon('heading')
+							.onClick(async () => {
+								await navigator.clipboard.writeText(fullLink);
+								new Notice('Heading link with text copied to clipboard');
 							});
 					});
 				}

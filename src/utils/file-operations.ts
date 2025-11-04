@@ -1,8 +1,8 @@
 import { App, TFile, TFolder, Notice } from "obsidian";
-import { AstroComposerSettings, PostType, FileCreationOptions, RenameOptions, CustomContentType } from "../types";
+import { AstroComposerSettings, PostType, FileCreationOptions, RenameOptions, CustomContentType, AstroComposerPluginInterface, ContentType } from "../types";
 
 export class FileOperations {
-	constructor(private app: App, private settings: AstroComposerSettings, private plugin?: any) {}
+	constructor(private app: App, private settings: AstroComposerSettings, private plugin?: AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> }) {}
 
 	toKebabCase(str: string): string {
 		return str
@@ -25,7 +25,7 @@ export class FileOperations {
 		return `${prefix}${safeKebabTitle}`;
 	}
 
-	determineType(file: TFile): PostType | string {
+	determineType(file: TFile): ContentType {
 		const filePath = file.path;
 		
 		// Check custom content types first
@@ -72,11 +72,11 @@ export class FileOperations {
 		return this.settings.customContentTypes.find(ct => ct.id === typeId) || null;
 	}
 
-	isCustomContentType(type: PostType | string): boolean {
+	isCustomContentType(type: ContentType): boolean {
 		return type !== "post" && type !== "page";
 	}
 
-	getTitleKey(type: PostType | string): string {
+	getTitleKey(type: ContentType): string {
 		// For generic notes, always use "title"
 		if (type === "note") return "title";
 		
@@ -169,7 +169,7 @@ export class FileOperations {
 		}
 	}
 
-	private async createFolderStructure(file: TFile, kebabTitle: string, prefix: string, targetFolder: string, type: PostType | string): Promise<TFile | null> {
+	private async createFolderStructure(file: TFile, kebabTitle: string, prefix: string, targetFolder: string, type: ContentType): Promise<TFile | null> {
 		const folderName = `${prefix}${kebabTitle}`;
 		let folderPath: string;
 		
@@ -307,7 +307,7 @@ export class FileOperations {
 		}
 	}
 
-	private async renameFolderStructure(file: TFile, kebabTitle: string, prefix: string, type: PostType | string): Promise<TFile | null> {
+	private async renameFolderStructure(file: TFile, kebabTitle: string, prefix: string, type: ContentType): Promise<TFile | null> {
 		// Smart detection: treat as index if filename matches the index file name
 		// Default to "index" when indexFileName is blank
 		const indexFileName = this.settings.indexFileName || "index";

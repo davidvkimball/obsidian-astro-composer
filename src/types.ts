@@ -37,6 +37,10 @@ export interface TemplateValues {
 
 export type PostType = "post" | "page";
 
+// ContentType represents either a built-in PostType or a custom content type ID (string)
+// Note: TypeScript treats this as string, but we use it for documentation and type checking
+export type ContentType = PostType | string;
+
 export interface CustomContentType {
 	id: string;
 	name: string;
@@ -51,13 +55,13 @@ export interface CustomContentType {
 export interface FileCreationOptions {
 	file: TFile;
 	title: string;
-	type: PostType | string; // string for custom content types
+	type: ContentType; // PostType for posts/pages, string for custom content types
 }
 
 export interface RenameOptions {
 	file: TFile;
 	title: string;
-	type: PostType | string; // string for custom content types
+	type: ContentType; // PostType for posts/pages, string for custom content types
 }
 
 export const KNOWN_ARRAY_KEYS = ['tags', 'aliases', 'cssclasses'] as const;

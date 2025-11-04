@@ -87,7 +87,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		// Post settings
 		new Setting(containerEl)
-			.setName("Post settings")
+			.setName("Posts")
 			.setDesc("")
 			.setHeading();
 
@@ -261,7 +261,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		// Pages settings
 		new Setting(containerEl)
-			.setName("Page settings")
+			.setName("Pages")
 			.setDesc("")
 			.setHeading();
 
@@ -463,23 +463,6 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		}
 		
 		// Check for conflicts
-		let hasConflicts = false;
-		let conflictMessage = "";
-		
-		// Check blank folder conflicts
-		if (blankFolders.length > 1) {
-			hasConflicts = true;
-			conflictMessage += `Multiple content types are set to use the vault root: <strong>${blankFolders.join(", ")}</strong><br><br>`;
-		}
-		
-		// Check same folder conflicts
-		for (const [folder, contentTypes] of Object.entries(folderConflicts)) {
-			if (contentTypes.length > 1) {
-				hasConflicts = true;
-				conflictMessage += `Multiple content types are set to use the same folder "${folder}": <strong>${contentTypes.join(", ")}</strong><br><br>`;
-			}
-		}
-		
 		// Warning box removed - conflicts are still detected at runtime
 	}
 
@@ -496,7 +479,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			indexFileName: "",
 		};
 		settings.customContentTypes.push(newType);
-		this.plugin.saveSettings();
+		void this.plugin.saveSettings();
 		this.renderCustomContentTypes();
 		this.plugin.registerCreateEvent();
 	}
@@ -747,7 +730,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	private removeCustomContentType(typeId: string) {
 		const settings = this.plugin.settings;
 		settings.customContentTypes = settings.customContentTypes.filter((ct: CustomContentType) => ct.id !== typeId);
-		this.plugin.saveSettings();
+		void this.plugin.saveSettings();
 		this.renderCustomContentTypes();
 		this.plugin.registerCreateEvent();
 	}

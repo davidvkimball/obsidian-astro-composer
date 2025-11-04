@@ -1,10 +1,10 @@
 import { App, TFile, Notice } from "obsidian";
-import { AstroComposerSettings, PostType, ParsedFrontmatter, TemplateValues, KNOWN_ARRAY_KEYS, CustomContentType } from "../types";
+import { AstroComposerSettings, PostType, ParsedFrontmatter, TemplateValues, KNOWN_ARRAY_KEYS, CustomContentType, ContentType } from "../types";
 
 export class TemplateParser {
 	constructor(private app: App, private settings: AstroComposerSettings) {}
 
-	async parseFrontmatter(content: string): Promise<ParsedFrontmatter> {
+	parseFrontmatter(content: string): ParsedFrontmatter {
 		let propertiesEnd = 0;
 		let propertiesText = "";
 		const existingProperties: Record<string, string[]> = {};
@@ -169,7 +169,7 @@ export class TemplateParser {
 		return newContent;
 	}
 
-	async updateTitleInFrontmatter(file: TFile, newTitle: string, type: PostType | string): Promise<void> {
+	async updateTitleInFrontmatter(file: TFile, newTitle: string, type: ContentType): Promise<void> {
 		const titleKey = this.getTitleKey(type);
 		const content = await this.app.vault.read(file);
 		let propertiesEnd = 0;
@@ -280,7 +280,7 @@ export class TemplateParser {
 		await this.app.vault.modify(file, newContent);
 	}
 
-	private getTitleKey(type: PostType | string): string {
+	private getTitleKey(type: ContentType): string {
 		let template: string;
 		
 		if (this.isCustomContentType(type)) {
@@ -313,7 +313,7 @@ export class TemplateParser {
 		return "title";
 	}
 
-	private isCustomContentType(type: PostType | string): boolean {
+	private isCustomContentType(type: ContentType): boolean {
 		return type !== "post" && type !== "page";
 	}
 

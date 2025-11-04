@@ -1,19 +1,19 @@
-import { App, Modal, TFile, Notice } from "obsidian";
-import { PostType, AstroComposerPluginInterface } from "../types";
+import { App, Modal, TFile, Notice, Platform } from "obsidian";
+import { PostType, AstroComposerPluginInterface, ContentType } from "../types";
 import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
 
 export class TitleModal extends Modal {
 	file: TFile | null;
 	plugin: AstroComposerPluginInterface;
-	type: PostType | string;
+	type: ContentType;
 	isRename: boolean;
 	isNewNote: boolean;
 	titleInput!: HTMLInputElement;
 	private fileOps: FileOperations;
 	private templateParser: TemplateParser;
 
-	constructor(app: App, file: TFile | null, plugin: AstroComposerPluginInterface, type: PostType | string = "post", isRename = false, isNewNote = false) {
+	constructor(app: App, file: TFile | null, plugin: AstroComposerPluginInterface, type: ContentType = "post", isRename = false, isNewNote = false) {
 		super(app);
 		this.file = file;
 		this.plugin = plugin;
@@ -56,8 +56,8 @@ export class TitleModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 		
-		// Add mobile-friendly positioning class - check both width and user agent
-		const isMobile = window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+		// Add mobile-friendly positioning class - check both width and platform
+		const isMobile = window.innerWidth <= 768 || Platform.isMobile;
 		if (isMobile) {
 			this.modalEl.addClass('astro-composer-mobile-modal');
 		}
@@ -235,7 +235,7 @@ export class TitleModal extends Modal {
 			this.plugin.settings.autoInsertProperties;
 		
 		if (shouldInsertProperties) {
-			initialContent = await this.generateInitialContent(title);
+			initialContent = this.generateInitialContent(title);
 		}
 
 		try {
@@ -256,7 +256,7 @@ export class TitleModal extends Modal {
 		}
 	}
 
-	private async generateInitialContent(title: string): Promise<string> {
+	private generateInitialContent(title: string): string {
 		const now = new Date();
 		const dateString = window.moment(now).format(this.plugin.settings.dateFormat);
 
@@ -279,7 +279,7 @@ export class TitleModal extends Modal {
 		return template;
 	}
 
-	private async addPropertiesToFile(file: TFile, title: string, type: PostType | string = "post") {
+	private async addPropertiesToFile(file: TFile, title: string, type: ContentType = "post") {
 		const now = new Date();
 		const dateString = window.moment(now).format(this.plugin.settings.dateFormat);
 
