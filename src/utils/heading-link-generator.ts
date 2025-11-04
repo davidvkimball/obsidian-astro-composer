@@ -77,6 +77,7 @@ export class HeadingLinkGenerator {
 		
 		// Smart detection: if the filename matches the index file name (regardless of creation mode),
 		// treat it as folder-based logic
+		// Note: We only set addTrailingSlash here; the final check will prevent it if there's an anchor
 		if (indexFileName && indexFileName.trim() !== "") {
 			const parts = path.split('/');
 			if (parts[parts.length - 1] === indexFileName) {
@@ -106,7 +107,10 @@ export class HeadingLinkGenerator {
 		}
 
 		// Determine if we should add trailing slash
-		const shouldAddTrailingSlash = this.settings.addTrailingSlashToLinks || addTrailingSlash;
+		// CRITICAL: Never add trailing slash before an anchor (e.g., /about#heading not /about/#heading)
+		// This is especially important for anchor links from copy heading URL functionality
+		// Anchor links should NEVER have trailing slashes, regardless of settings
+		const shouldAddTrailingSlash = (this.settings.addTrailingSlashToLinks || addTrailingSlash) && !anchor;
 
 		return `${basePath}${slug}${shouldAddTrailingSlash ? '/' : ''}${anchor}`;
 	}
