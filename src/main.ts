@@ -54,7 +54,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			// Debounce to prevent multiple modals from rapid file creations
 			let lastProcessedTime = 0;
 
-			this.createEvent = async (file: TFile) => {
+			this.createEvent = (file: TFile) => {
+				void (async () => {
 				const now = Date.now();
 				if (now - lastProcessedTime < CONSTANTS.DEBOUNCE_MS) {
 					return; // Skip if within debounce period
@@ -234,6 +235,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 						new TitleModal(this.app, file, this, "post").open();
 					}
 				}
+				})();
 			};
 			// Use vault.create event to detect new file creation
 			this.registerEvent(this.app.vault.on("create", (file) => {

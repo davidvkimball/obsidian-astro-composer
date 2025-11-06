@@ -1,5 +1,5 @@
 import { App, TFile, Notice } from "obsidian";
-import { AstroComposerSettings, PostType, ParsedFrontmatter, TemplateValues, KNOWN_ARRAY_KEYS, CustomContentType, ContentType } from "../types";
+import { AstroComposerSettings, ParsedFrontmatter, TemplateValues, KNOWN_ARRAY_KEYS, CustomContentType, ContentType } from "../types";
 
 export class TemplateParser {
 	constructor(private app: App, private settings: AstroComposerSettings) {}
@@ -67,7 +67,7 @@ export class TemplateParser {
 						existingProperties[key] = [];
 					}
 				});
-			} catch (error) {
+			} catch {
 				// Fallback to template if parsing fails
 				new Notice("Falling back to template due to parsing error.");
 			}
@@ -127,7 +127,12 @@ export class TemplateParser {
 								const nextLine = templateLines[j].trim();
 								if (nextLine.startsWith("- ")) {
 									const item = nextLine.replace(/^-\s*/, "").trim();
-									if (item) (templateValues[key] as string[]).push(item);
+									if (item) {
+										const arrayValue = templateValues[key];
+										if (Array.isArray(arrayValue)) {
+											arrayValue.push(item);
+										}
+									}
 								} else if (nextLine === "---" || (nextLine && !nextLine.startsWith("- ") && nextLine.includes(":"))) {
 									// Stop at next property or end of properties section
 									break;
@@ -186,7 +191,7 @@ export class TemplateParser {
 		}
 
 		const propOrder: string[] = [];
-		const existing: Record<string, any> = {};
+		const existing: Record<string, string | string[]> = {};
 		let currentKey: string | null = null;
 		let titleKeyPosition = -1; // Track the original position of the title key
 

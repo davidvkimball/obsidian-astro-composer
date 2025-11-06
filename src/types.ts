@@ -38,8 +38,8 @@ export interface TemplateValues {
 export type PostType = "post" | "page";
 
 // ContentType represents either a built-in PostType or a custom content type ID (string)
-// Note: TypeScript treats this as string, but we use it for documentation and type checking
-export type ContentType = PostType | string;
+// Using a helper type to prevent TypeScript from simplifying PostType | string to just string
+export type ContentType = PostType | (string & {});
 
 export interface CustomContentType {
 	id: string;

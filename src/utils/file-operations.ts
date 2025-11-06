@@ -1,5 +1,5 @@
 import { App, TFile, TFolder, Notice } from "obsidian";
-import { AstroComposerSettings, PostType, FileCreationOptions, RenameOptions, CustomContentType, AstroComposerPluginInterface, ContentType } from "../types";
+import { AstroComposerSettings, FileCreationOptions, RenameOptions, CustomContentType, AstroComposerPluginInterface, ContentType } from "../types";
 
 export class FileOperations {
 	constructor(private app: App, private settings: AstroComposerSettings, private plugin?: AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> }) {}
@@ -141,9 +141,6 @@ export class FileOperations {
 			}
 		} else {
 			// For posts and pages, respect where the user created the file
-			const postsFolder = this.settings.postsFolder || "";
-			const pagesFolder = this.settings.pagesFolder || "";
-			
 			// Get the directory where the user created the file
 			const originalDir = file.parent?.path || "";
 			
@@ -192,7 +189,7 @@ export class FileOperations {
 			if (!(folder instanceof TFolder)) {
 				await this.app.vault.createFolder(folderPath);
 			}
-		} catch (error) {
+		} catch {
 			// Folder might already exist, proceed
 		}
 
@@ -218,7 +215,7 @@ export class FileOperations {
 				if (fileExplorer && fileExplorer.view) {
 					const view = fileExplorer.view;
 					if (view && typeof view === 'object' && 'tree' in view) {
-						const fileTree = (view as any).tree;
+						const fileTree = (view as { tree?: { revealFile?: (file: TFile) => void } }).tree;
 						if (fileTree && newFile instanceof TFile && typeof fileTree.revealFile === 'function') {
 							fileTree.revealFile(newFile);
 						}
@@ -314,14 +311,14 @@ export class FileOperations {
 		const isIndex = file.basename === indexFileName;
 		if (isIndex) {
 			if (!file.parent) {
-				new Notice("Cannot rename: File has no parent folder.");
+				new Notice("Cannot rename: file has no parent folder.");
 				return null;
 			}
 			prefix = file.parent.name.startsWith("_") ? "_" : "";
 			const newFolderName = `${prefix}${kebabTitle}`;
 			const parentFolder = file.parent.parent;
 			if (!parentFolder) {
-				new Notice("Cannot rename: Parent folder has no parent.");
+				new Notice("Cannot rename: parent folder has no parent.");
 				return null;
 			}
 			// Fix path construction to avoid double slashes
@@ -359,7 +356,7 @@ export class FileOperations {
 			return newFile;
 		} else {
 			if (!file.parent) {
-				new Notice("Cannot rename: File has no parent folder.");
+				new Notice("Cannot rename: file has no parent folder.");
 				return null;
 			}
 			prefix = file.basename.startsWith("_") ? "_" : "";
@@ -387,7 +384,7 @@ export class FileOperations {
 
 	private async renameFileStructure(file: TFile, kebabTitle: string, prefix: string): Promise<TFile | null> {
 		if (!file.parent) {
-			new Notice("Cannot rename: File has no parent folder.");
+			new Notice("Cannot rename: file has no parent folder.");
 			return null;
 		}
 		
@@ -402,7 +399,7 @@ export class FileOperations {
 			const newFolderName = `${prefix}${kebabTitle}`;
 			const parentFolder = file.parent.parent;
 			if (!parentFolder) {
-				new Notice("Cannot rename: Parent folder has no parent.");
+				new Notice("Cannot rename: parent folder has no parent.");
 				return null;
 			}
 			// Fix path construction to avoid double slashes

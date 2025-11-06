@@ -1,5 +1,5 @@
 import { App, Modal, TFile, Notice, Platform } from "obsidian";
-import { PostType, AstroComposerPluginInterface, ContentType } from "../types";
+import { AstroComposerPluginInterface, ContentType } from "../types";
 import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
 
@@ -67,14 +67,14 @@ export class TitleModal extends Modal {
 			const isCustomType = this.fileOps.isCustomContentType(this.type);
 			
 			if (isCustomType) {
-				contentEl.createEl("h2", { text: `Rename Custom Type: ${typeName}` });
+				contentEl.createEl("h2", { text: `Rename custom type: ${typeName}` });
 				contentEl.createEl("p", { text: "Enter a new title for this content type:" });
 			} else if (this.type === "note") {
 				// For generic notes outside of any known content type
-				contentEl.createEl("h2", { text: "Rename Custom Content Type" });
+				contentEl.createEl("h2", { text: "Rename custom content type" });
 				contentEl.createEl("p", { text: "Enter a title for this content type:" });
 			} else {
-				contentEl.createEl("h2", { text: `Rename ${typeName}` });
+				contentEl.createEl("h2", { text: `Rename ${typeName.toLowerCase()}` });
 				contentEl.createEl("p", { text: `Enter new title for your ${typeName.toLowerCase()}:` });
 			}
 			
@@ -89,10 +89,10 @@ export class TitleModal extends Modal {
 			const isCustomType = this.fileOps.isCustomContentType(this.type);
 			
 			if (isCustomType) {
-				contentEl.createEl("h2", { text: `New Custom Type: ${typeName}` });
+				contentEl.createEl("h2", { text: `New custom type: ${typeName}` });
 				contentEl.createEl("p", { text: "Enter a title for this content type:" });
 			} else {
-				contentEl.createEl("h2", { text: `Create New ${typeName}` });
+				contentEl.createEl("h2", { text: `Create new ${typeName.toLowerCase()}` });
 				contentEl.createEl("p", { text: `Enter a title for your new ${typeName.toLowerCase()}:` });
 			}
 			
@@ -106,10 +106,10 @@ export class TitleModal extends Modal {
 			const isCustomType = this.fileOps.isCustomContentType(this.type);
 			
 			if (isCustomType) {
-				contentEl.createEl("h2", { text: `New Custom Type: ${typeName}` });
+				contentEl.createEl("h2", { text: `New custom type: ${typeName}` });
 				contentEl.createEl("p", { text: "Enter a title for this content type:" });
 			} else {
-				contentEl.createEl("h2", { text: `New ${typeName}` });
+				contentEl.createEl("h2", { text: `New ${typeName.toLowerCase()}` });
 				contentEl.createEl("p", { text: `Enter a title for your ${typeName.toLowerCase()}:` });
 			}
 			
@@ -130,7 +130,7 @@ export class TitleModal extends Modal {
 		submitButton.onclick = () => this.submit();
 
 		this.titleInput.addEventListener("keypress", (e) => {
-			if (e.key === "Enter") this.submit();
+			if (e.key === "Enter") void this.submit();
 		});
 	}
 

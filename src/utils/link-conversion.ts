@@ -152,7 +152,6 @@ export class LinkConverter {
 		// Determine content type and appropriate base path
 		let basePath = "";
 		let contentFolder = "";
-		let creationMode: "file" | "folder" = "file";
 		let indexFileName = "";
 
 		// Use the same logic as getContentTypeForPath but for the target link
@@ -161,11 +160,9 @@ export class LinkConverter {
 		// If target link doesn't have a clear content type (no folder path), use current file's content type
 		if (!targetContentType.basePath && currentFileContentType.basePath) {
 			basePath = currentFileContentType.basePath;
-			creationMode = currentFileContentType.creationMode;
 			indexFileName = currentFileContentType.indexFileName;
 		} else {
 			basePath = targetContentType.basePath;
-			creationMode = targetContentType.creationMode;
 			indexFileName = targetContentType.indexFileName;
 		}
 		

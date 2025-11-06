@@ -515,44 +515,48 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			toggle.checked = customType.enabled;
 			
 			// Add click event to the container as well
-			toggleContainer.addEventListener("click", async (e) => {
-				e.preventDefault();
-				const newValue = !customType.enabled;
-				customType.enabled = newValue;
-				toggle.checked = newValue;
-				
-				await this.plugin.saveSettings();
-				this.plugin.registerCreateEvent();
-				
-				// Update the container class for visual feedback
-				if (newValue) {
-					toggleContainer.classList.add("is-enabled");
-				} else {
-					toggleContainer.classList.remove("is-enabled");
-				}
-				
-				// Update visibility
-				this.updateCustomContentTypeVisibility(customType.id, newValue);
-				
-				// Conflict checking removed from settings UI
+			toggleContainer.addEventListener("click", (e) => {
+				void (async () => {
+					e.preventDefault();
+					const newValue = !customType.enabled;
+					customType.enabled = newValue;
+					toggle.checked = newValue;
+					
+					await this.plugin.saveSettings();
+					this.plugin.registerCreateEvent();
+					
+					// Update the container class for visual feedback
+					if (newValue) {
+						toggleContainer.classList.add("is-enabled");
+					} else {
+						toggleContainer.classList.remove("is-enabled");
+					}
+					
+					// Update visibility
+					this.updateCustomContentTypeVisibility(customType.id, newValue);
+					
+					// Conflict checking removed from settings UI
+				})();
 			});
 			
 			// Also add change event as backup
-			toggle.addEventListener("change", async (e) => {
-				const value = (e.target as HTMLInputElement).checked;
-				customType.enabled = value;
-				await this.plugin.saveSettings();
-				this.plugin.registerCreateEvent();
-				
-				// Update the container class for visual feedback
-				if (value) {
-					toggleContainer.classList.add("is-enabled");
-				} else {
-					toggleContainer.classList.remove("is-enabled");
-				}
-				
-				// Update visibility
-				this.updateCustomContentTypeVisibility(customType.id, value);
+			toggle.addEventListener("change", (e) => {
+				void (async () => {
+					const value = (e.target as HTMLInputElement).checked;
+					customType.enabled = value;
+					await this.plugin.saveSettings();
+					this.plugin.registerCreateEvent();
+					
+					// Update the container class for visual feedback
+					if (value) {
+						toggleContainer.classList.add("is-enabled");
+					} else {
+						toggleContainer.classList.remove("is-enabled");
+					}
+					
+					// Update visibility
+					this.updateCustomContentTypeVisibility(customType.id, value);
+				})();
 			});
 
 			// Settings container that can be collapsed

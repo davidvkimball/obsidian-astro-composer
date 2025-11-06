@@ -57,12 +57,12 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 	// Standardize Properties command
 	plugin.addCommand({
 		id: "standardize-properties",
-		name: "Standardize Properties",
+		name: "Standardize properties",
 		icon: "file-check",
 		editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 			const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
 			if (file instanceof TFile) {
-				standardizeProperties(plugin.app, settings, file, plugin as unknown as AstroComposerPluginInterface);
+				void standardizeProperties(plugin.app, settings, file, plugin as unknown as AstroComposerPluginInterface);
 			}
 		},
 	});
@@ -83,14 +83,14 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 	// Rename Content command
 	plugin.addCommand({
 		id: "rename-content",
-		name: "Rename Current Content",
+		name: "Rename current content",
 		icon: "pencil",
 		editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 			const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
 			if (file instanceof TFile) {
 				// Check if this file matches any configured content type
 				if (!hasMatchingContentType(file, settings)) {
-					new Notice("Cannot rename: This file is not part of a configured content type folder.");
+					new Notice("Cannot rename: this file is not part of a configured content type folder.");
 					return;
 				}
 				
