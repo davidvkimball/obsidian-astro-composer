@@ -52,6 +52,52 @@ export class TitleModal extends Modal {
 		return fallbackTitle;
 	}
 
+	/**
+	 * Extracts a suggested title from the file basename for newly created files.
+	 * This is used when a file is created from a link (e.g., [[sEfsleif]]).
+	 * Preserves the original text as much as possible.
+	 */
+	getSuggestedTitleFromBasename(): string {
+		if (!this.file) {
+			return "";
+		}
+
+		let basename = this.file.basename;
+
+		// Handle index file names - use parent folder name instead
+		if (this.file.parent) {
+			// Check custom content type index file names
+			if (this.fileOps.isCustomContentType(this.type)) {
+				const customType = this.fileOps.getCustomContentType(this.type);
+				if (customType?.indexFileName && customType.indexFileName.trim() !== "" && 
+					basename === customType.indexFileName) {
+					basename = this.file.parent.name;
+				}
+			} else if (this.type === "page") {
+				// Check pages index file name
+				const pagesIndexFileName = this.plugin.settings.pagesIndexFileName || "";
+				if (pagesIndexFileName.trim() !== "" && basename === pagesIndexFileName) {
+					basename = this.file.parent.name;
+				}
+			} else {
+				// Check posts index file name
+				const postsIndexFileName = this.plugin.settings.indexFileName || "";
+				if (postsIndexFileName.trim() !== "" && basename === postsIndexFileName) {
+					basename = this.file.parent.name;
+				}
+			}
+		}
+
+		// Remove leading underscore if present
+		if (basename.startsWith("_")) {
+			basename = basename.slice(1);
+		}
+
+		// Return the basename as-is to preserve user's original input
+		// (e.g., "sEfsleif" stays as "sEfsleif")
+		return basename;
+	}
+
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
@@ -101,6 +147,13 @@ export class TitleModal extends Modal {
 				placeholder: `My Awesome ${typeName}`,
 				cls: "astro-composer-title-input"
 			});
+			// Pre-populate with suggested title from basename if available
+			if (this.file) {
+				const suggestedTitle = this.getSuggestedTitleFromBasename();
+				if (suggestedTitle) {
+					this.titleInput.value = suggestedTitle;
+				}
+			}
 		} else {
 			const typeName = this.getTypeDisplayName();
 			const isCustomType = this.fileOps.isCustomContentType(this.type);
@@ -118,6 +171,14 @@ export class TitleModal extends Modal {
 				placeholder: `My Awesome ${typeName}`,
 				cls: "astro-composer-title-input"
 			});
+			// Pre-populate with suggested title from basename if available
+			// This handles files created from links (e.g., [[sEfsleif]])
+			if (this.file) {
+				const suggestedTitle = this.getSuggestedTitleFromBasename();
+				if (suggestedTitle) {
+					this.titleInput.value = suggestedTitle;
+				}
+			}
 		}
 		this.titleInput.focus();
 
