@@ -28,7 +28,7 @@ Turn your Obsidian notes into posts and pages for your Astro blog with automated
 ## Usage
 
 1. **Customize Settings**: In **Settings > Astro Composer**, configure:
-   - **Automate post creation**: Toggle to enable the title dialog for new `.md` files created via Obsidian's "New note" action.
+   - **Automate post creation**: Toggle to enable the title dialog for new `.md` files created via Obsidian's "New note" action (ensure your default new note location matches your post location in Obsidian settings).
    - **Auto-insert properties**: Enable to automatically apply the properties template when creating new files (requires "Automate post creation" to be enabled).
    - **Posts folder**: Set the folder for blog posts (leave blank to use the vault root). Specify the default location for new notes in Obsidian's **Settings > Files and links**.
    - **Ignore subfolders**: Restrict automation to the specified posts folder and its subfolders.
