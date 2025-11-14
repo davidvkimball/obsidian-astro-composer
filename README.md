@@ -38,10 +38,10 @@ Turn your Obsidian notes into posts and pages for your Astro blog with automated
    - **Index file name**: Name the main file in folder-based mode (e.g., `index`).
    - **Date format**: Set the properties date format (e.g., `YYYY-MM-DD` or `MMMM D, YYYY`).
    - **Properties template**: Define the template for new posts and standardization (e.g., `---\ntitle: "{{title}}"\ndate: {{date}}\ndescription: ""\ntags: []\n---`).
-2. **Create a Post**: With "Automate post creation" enabled, use Obsidian's "New note" action to trigger the title dialog, which renames the file and optionally adds properties.
-3. **Standardize Properties**: Use the `Astro Composer: Standardize Properties` command to update a note's properties, preserving existing values, adding missing properties, and maintaining the template's order with unrecognized properties at the end.
+2. **Create More Content Types**: With "Enable pages" enabled and by creating custom content types, you can do the same automation behavior for any other content type, like pages, documentation, projects, etc.
+3. **Standardize Properties**: Use the `Astro Composer: Standardize Properties` command to update a note's properties to the relevant content type, preserving existing values, adding missing properties, and maintaining the template's order with unrecognized properties at the end.
 4. **Convert Internal Links**: Use the `Astro Composer: Convert internal links for Astro` command to transform Obsidian wikilinks and internal Markdown links into Astro-compatible Markdown links.
-5. **Rename a Post**: Using the `Astro Composer: Rename Current Note` command, set the title of your post and have the file or parent folder get automatically renamed with the kebab-case version.
+5. **Rename Content**: Using the `Astro Composer: Rename Current Note` command, set the title of your content and have the file or parent folder get automatically renamed with the kebab-case version.
 
 ## Roadmap
 - MDX Support
