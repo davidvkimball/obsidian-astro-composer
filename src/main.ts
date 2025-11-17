@@ -6,7 +6,7 @@ import {
 
 import { AstroComposerSettings, DEFAULT_SETTINGS, CONSTANTS } from "./settings";
 import { AstroComposerPluginInterface } from "./types";
-import { registerCommands } from "./commands";
+import { registerCommands, renameContentByPath as renameContentByPathFunction } from "./commands";
 import { AstroComposerSettingTab } from "./ui/settings-tab";
 import { TitleModal } from "./ui/title-modal";
 import { FileOperations } from "./utils/file-operations";
@@ -300,5 +300,13 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				}
 			})
 		);
+	}
+
+	/**
+	 * Rename a file by path (for programmatic use, e.g., from other plugins)
+	 * This allows the rename modal to appear without opening the file first
+	 */
+	async renameContentByPath(filePath: string): Promise<void> {
+		await renameContentByPathFunction(this.app, filePath, this.settings, this);
 	}
 }

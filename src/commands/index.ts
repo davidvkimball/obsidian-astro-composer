@@ -189,3 +189,75 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 	await app.vault.modify(file, newContent);
 	new Notice("Properties standardized using template.");
 }
+
+/**
+ * Rename a file by path (for programmatic use, e.g., from other plugins)
+ * This allows the rename modal to appear without opening the file first
+ */
+export async function renameContentByPath(
+	app: App,
+	filePath: string,
+	settings: AstroComposerSettings,
+	plugin: AstroComposerPluginInterface
+): Promise<void> {
+	const file = app.vault.getAbstractFileByPath(filePath);
+	if (!(file instanceof TFile)) {
+		new Notice(`File not found: ${filePath}`);
+		return;
+	}
+
+	const fileOps = new FileOperations(app, settings, plugin as unknown as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
+
+	// Helper function to check if file matches content type (copy from registerCommands)
+	function hasMatchingContentType(file: TFile, settings: AstroComposerSettings): boolean {
+		const filePath = file.path;
+		const postsFolder = settings.postsFolder || "";
+		const pagesFolder = settings.enablePages ? (settings.pagesFolder || "") : "";
+
+		if (settings.automatePostCreation) {
+			if (postsFolder) {
+				if (filePath.startsWith(postsFolder + "/") || filePath === postsFolder) {
+					return true;
+				}
+			} else {
+				if (!filePath.includes("/") || (filePath.includes("/") && !filePath.startsWith("/") && filePath.split("/").length === 2)) {
+					return true;
+				}
+			}
+		}
+
+		if (settings.enablePages) {
+			if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
+				return true;
+			} else if (!pagesFolder && !filePath.includes("/")) {
+				return true;
+			}
+		}
+
+		const type = fileOps.determineType(file);
+		if (fileOps.isCustomContentType(type)) {
+			const customType = fileOps.getCustomContentType(type);
+			if (customType && customType.enabled) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	if (!hasMatchingContentType(file, settings)) {
+		new Notice("Cannot rename: this file is not part of a configured content type folder.");
+		return;
+	}
+
+	const type = fileOps.determineType(file);
+	const cache = app.metadataCache.getFileCache(file);
+	const titleKey = fileOps.getTitleKey(type);
+
+	if (!cache?.frontmatter || !(titleKey in cache.frontmatter)) {
+		new Notice(`Cannot rename: No ${titleKey} found in properties`);
+		return;
+	}
+
+	new TitleModal(app, file, plugin, type, true).open();
+}
