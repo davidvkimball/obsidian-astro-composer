@@ -30,7 +30,7 @@ Turn your Obsidian notes into posts and pages for your Astro blog with automated
 
 1. Download the latest release from the [Releases page](https://github.com/davidvkimball/obsidian-astro-composer/releases) and navigate to your Obsidian vault's `.obsidian/plugins/` directory.
 2. Create a new folder called `astro-composer` and ensure `manifest.json`, `main.js`, and `styles.css` are in there.
-3. In Obsidian, go to **Settings > Community Plugins**, enable "Community Plugins" if not already enabled, and then enable "Astro Composer."
+3. In Obsidian, go to Settings > Community plugins (enable it if you haven't already) and then enable "Astro Composer."
 
 ## Usage
 
