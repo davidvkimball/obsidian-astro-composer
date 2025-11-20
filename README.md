@@ -20,6 +20,8 @@ Turn your Obsidian notes into posts and pages for your Astro blog with automated
 
 ## Installation
 
+Astro Composer is not yet available in the Community plugins section. Install using [BRAT](https://github.com/TfTHacker/obsidian42-brat) or manually:
+
 ### BRAT
 
 1. Download the [Beta Reviewers Auto-update Tester (BRAT)](https://github.com/TfTHacker/obsidian42-brat) plugin from the [Obsidian community plugins directory](https://obsidian.md/plugins?id=obsidian42-brat) and enable it.
