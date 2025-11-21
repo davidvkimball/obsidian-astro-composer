@@ -15,6 +15,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	pagesFieldsContainer: HTMLElement | null = null;
 	pagesIndexFileContainer: HTMLElement | null = null;
 	copyHeadingContainer: HTMLElement | null = null;
+	terminalCommandContainer: HTMLElement | null = null;
+	configCommandContainer: HTMLElement | null = null;
 	customContentTypesContainer: HTMLElement | null = null;
 
 	constructor(app: App, plugin: Plugin) {
@@ -365,12 +367,122 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		this.customContentTypesContainer = containerEl.createDiv({ cls: "custom-content-types-container" });
 		this.renderCustomContentTypes();
 
+		// Developer commands
+		new Setting(containerEl)
+			.setName("Developer commands")
+			.setDesc("")
+			.setHeading();
+
+		// Terminal command settings
+		new Setting(containerEl)
+			.setName("Enable open terminal command")
+			.setDesc("Enable command to open terminal in project root directory.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(settings.enableOpenTerminalCommand)
+					.onChange(async (value: boolean) => {
+						settings.enableOpenTerminalCommand = value;
+						await this.plugin.saveSettings();
+						this.updateTerminalCommandFields();
+					})
+			);
+
+		this.terminalCommandContainer = containerEl.createDiv({ cls: "terminal-command-fields" });
+		this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenTerminalCommand);
+		this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenTerminalCommand);
+
+		new Setting(this.terminalCommandContainer)
+			.setName("Project root directory path")
+			.setDesc("Path relative to the Obsidian vault root folder. Use ../.. for two levels up. Leave blank to use the vault folder. This is where the terminal will open.")
+			.addText((text) =>
+				text
+					.setPlaceholder("../..")
+					.setValue(settings.terminalProjectRootPath)
+					.onChange(async (value: string) => {
+						settings.terminalProjectRootPath = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.terminalCommandContainer)
+			.setName("Show open terminal ribbon icon")
+			.setDesc("Add a ribbon icon to launch the terminal command.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(settings.enableTerminalRibbonIcon)
+					.onChange(async (value: boolean) => {
+						// Update settings directly on plugin instance
+						(this.plugin as any).settings.enableTerminalRibbonIcon = value;
+						settings.enableTerminalRibbonIcon = value;
+						await this.plugin.saveSettings();
+						// Small delay to ensure settings are saved, then re-register
+						setTimeout(() => {
+							if ((this.plugin as any).registerRibbonIcons) {
+								(this.plugin as any).registerRibbonIcons();
+							}
+						}, 50);
+					})
+			);
+
+		// Config file command settings
+		new Setting(containerEl)
+			.setName("Enable edit config file command")
+			.setDesc("Enable command to open Astro config file in default editor.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(settings.enableOpenConfigFileCommand)
+					.onChange(async (value: boolean) => {
+						settings.enableOpenConfigFileCommand = value;
+						await this.plugin.saveSettings();
+						this.updateConfigCommandFields();
+					})
+			);
+
+		this.configCommandContainer = containerEl.createDiv({ cls: "config-command-fields" });
+		this.configCommandContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenConfigFileCommand);
+		this.configCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenConfigFileCommand);
+
+		new Setting(this.configCommandContainer)
+			.setName("Config file path")
+			.setDesc("Path to the config file relative to the vault root. Use ../config.ts or ../../astro.config.mjs. This setting is required.")
+			.addText((text) =>
+				text
+					.setPlaceholder("../config.ts")
+					.setValue(settings.configFilePath)
+					.onChange(async (value: string) => {
+						settings.configFilePath = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(this.configCommandContainer)
+			.setName("Show open config ribbon icon")
+			.setDesc("Add a ribbon icon to launch the config file command.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(settings.enableConfigRibbonIcon)
+					.onChange(async (value: boolean) => {
+						// Update settings directly on plugin instance
+						(this.plugin as any).settings.enableConfigRibbonIcon = value;
+						settings.enableConfigRibbonIcon = value;
+						await this.plugin.saveSettings();
+						// Small delay to ensure settings are saved, then re-register
+						setTimeout(() => {
+							if ((this.plugin as any).registerRibbonIcons) {
+								(this.plugin as any).registerRibbonIcons();
+							}
+						}, 50);
+					})
+			);
+
 		this.updateConditionalFields();
 		this.updateIndexFileField();
 		this.updateExcludedDirsField();
 		this.updateOnlyAutomateField();
 		this.updatePagesFields();
 		this.updateCopyHeadingFields();
+		this.updateTerminalCommandFields();
+		this.updateConfigCommandFields();
 	}
 
 	updateConditionalFields() {
@@ -419,7 +531,23 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		if (this.copyHeadingContainer) {
 			const settings = this.plugin.settings;
 			this.copyHeadingContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableCopyHeadingLink);
-		this.copyHeadingContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableCopyHeadingLink);
+			this.copyHeadingContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableCopyHeadingLink);
+		}
+	}
+
+	updateTerminalCommandFields() {
+		if (this.terminalCommandContainer) {
+			const settings = this.plugin.settings;
+			this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenTerminalCommand);
+			this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenTerminalCommand);
+		}
+	}
+
+	updateConfigCommandFields() {
+		if (this.configCommandContainer) {
+			const settings = this.plugin.settings;
+			this.configCommandContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenConfigFileCommand);
+			this.configCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenConfigFileCommand);
 		}
 	}
 

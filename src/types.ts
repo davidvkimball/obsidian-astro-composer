@@ -21,6 +21,12 @@ export interface AstroComposerSettings {
 	enableCopyHeadingLink: boolean;
 	copyHeadingLinkFormat: "obsidian" | "astro";
 	addTrailingSlashToLinks: boolean;
+	enableOpenTerminalCommand: boolean;
+	terminalProjectRootPath: string;
+	enableTerminalRibbonIcon: boolean;
+	enableOpenConfigFileCommand: boolean;
+	configFilePath: string;
+	enableConfigRibbonIcon: boolean;
 	customContentTypes: CustomContentType[];
 }
 

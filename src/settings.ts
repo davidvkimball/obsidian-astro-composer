@@ -26,5 +26,11 @@ export const DEFAULT_SETTINGS: AstroComposerSettings = {
 	enableCopyHeadingLink: true,
 	copyHeadingLinkFormat: "obsidian",
 	addTrailingSlashToLinks: false,
+	enableOpenTerminalCommand: false,
+	terminalProjectRootPath: "",
+	enableTerminalRibbonIcon: false,
+	enableOpenConfigFileCommand: false,
+	configFilePath: "",
+	enableConfigRibbonIcon: false,
 	customContentTypes: [],
 };

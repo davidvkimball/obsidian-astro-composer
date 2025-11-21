@@ -111,6 +111,34 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 			}
 		},
 	});
+
+	// Open Terminal command (always registered, checks settings at runtime)
+	plugin.addCommand({
+		id: "open-project-terminal",
+		name: "Open project terminal",
+		icon: "terminal-square",
+		callback: async () => {
+			if (!settings.enableOpenTerminalCommand) {
+				new Notice("Open terminal command is disabled. Enable it in settings to use this command.");
+				return;
+			}
+			await openTerminalInProjectRoot(plugin.app, settings);
+		},
+	});
+
+	// Edit Config File command (always registered, checks settings at runtime)
+	plugin.addCommand({
+		id: "edit-astro-config",
+		name: "Edit Astro config",
+		icon: "wrench",
+		callback: async () => {
+			if (!settings.enableOpenConfigFileCommand) {
+				new Notice("Edit config file command is disabled. Enable it in settings to use this command.");
+				return;
+			}
+			await openConfigFile(plugin.app, settings);
+		},
+	});
 }
 
 async function standardizeProperties(app: App, settings: AstroComposerSettings, file: TFile, plugin?: AstroComposerPluginInterface): Promise<void> {
@@ -260,4 +288,148 @@ export async function renameContentByPath(
 	}
 
 	new TitleModal(app, file, plugin, type, true).open();
+}
+
+/**
+ * Open terminal in project root directory
+ * Exported for use by ribbon icons
+ */
+export async function openTerminalInProjectRoot(app: App, settings: AstroComposerSettings): Promise<void> {
+	try {
+		const { exec } = require('child_process');
+		const path = require('path');
+		const fs = require('fs');
+
+		// Get the actual vault path string from the adapter
+		const vaultPath = (app.vault.adapter as any).basePath || (app.vault.adapter as any).path;
+		const vaultPathString = typeof vaultPath === 'string' ? vaultPath : vaultPath.toString();
+
+		// Resolve project root path
+		let projectPath: string;
+		if (settings.terminalProjectRootPath && settings.terminalProjectRootPath.trim()) {
+			// Use custom path relative to vault
+			projectPath = path.resolve(vaultPathString, settings.terminalProjectRootPath);
+		} else {
+			// Default: vault folder itself
+			projectPath = vaultPathString;
+		}
+
+		// Verify the path exists
+		if (!fs.existsSync(projectPath)) {
+			new Notice(`Project root directory not found at: ${projectPath}`);
+			return;
+		}
+
+		const platform = process.platform;
+		let command: string;
+
+		if (platform === 'win32') {
+			// Windows: Try Windows Terminal first, fallback to cmd
+			exec('where wt', (error: any) => {
+				if (!error) {
+					// Windows Terminal is available
+					exec(`wt -d "${projectPath}"`, (execError: any) => {
+						if (execError) {
+							// Fallback to cmd
+							exec(`cmd /k cd /d "${projectPath}"`, (cmdError: any) => {
+								if (cmdError) {
+									new Notice(`Error opening terminal: ${cmdError.message}`);
+								}
+							});
+						}
+					});
+				} else {
+					// Fallback to cmd
+					exec(`cmd /k cd /d "${projectPath}"`, (cmdError: any) => {
+						if (cmdError) {
+							new Notice(`Error opening terminal: ${cmdError.message}`);
+						}
+					});
+				}
+			});
+			return; // Early return since we handle Windows asynchronously
+		} else if (platform === 'darwin') {
+			// macOS: Use osascript to open Terminal.app
+			command = `osascript -e 'tell application "Terminal" to do script "cd \\"${projectPath}\\" && bash"'`;
+		} else {
+			// Linux: Try common terminals
+			const terminals = [
+				`gnome-terminal --working-directory="${projectPath}"`,
+				`konsole --workdir "${projectPath}"`,
+				`xterm -e "cd \\"${projectPath}\\" && bash"`
+			];
+
+			// Try each terminal until one works
+			const tryTerminal = (index: number) => {
+				if (index >= terminals.length) {
+					new Notice('No supported terminal found. Please install gnome-terminal, konsole, or xterm.');
+					return;
+				}
+
+				exec(`which ${terminals[index].split(' ')[0]}`, (error: any) => {
+					if (!error) {
+						exec(terminals[index], (execError: any) => {
+							if (execError && index < terminals.length - 1) {
+								tryTerminal(index + 1);
+							} else if (execError) {
+								new Notice(`Error opening terminal: ${execError.message}`);
+							}
+						});
+					} else {
+						tryTerminal(index + 1);
+					}
+				});
+			};
+
+			tryTerminal(0);
+			return; // Early return since we handle Linux asynchronously
+		}
+
+		// Execute command for macOS
+		if (command) {
+			exec(command, (error: any) => {
+				if (error) {
+					new Notice(`Error opening terminal: ${error.message}`);
+				}
+			});
+		}
+	} catch (error) {
+		new Notice(`Error opening terminal: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+
+/**
+ * Open config file in default editor
+ * Exported for use by ribbon icons
+ */
+export async function openConfigFile(app: App, settings: AstroComposerSettings): Promise<void> {
+	try {
+		const fs = require('fs');
+		const path = require('path');
+		const { shell } = require('electron');
+
+		// Get the actual vault path string from the adapter
+		const vaultPath = (app.vault.adapter as any).basePath || (app.vault.adapter as any).path;
+		const vaultPathString = typeof vaultPath === 'string' ? vaultPath : vaultPath.toString();
+
+		// Resolve config file path
+		if (!settings.configFilePath || !settings.configFilePath.trim()) {
+			new Notice("Please specify a config file path in settings.");
+			return;
+		}
+
+		// Use custom path relative to vault
+		const configPath = path.resolve(vaultPathString, settings.configFilePath);
+
+		// Check if file exists
+		if (!fs.existsSync(configPath)) {
+			new Notice(`Config file not found at: ${configPath}`);
+			return;
+		}
+
+		// Use Electron's shell to open the file with the default editor
+		await shell.openPath(configPath);
+	} catch (error) {
+		new Notice(`Error opening config file: ${error instanceof Error ? error.message : String(error)}`);
+	}
 }

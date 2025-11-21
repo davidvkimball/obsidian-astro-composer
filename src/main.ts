@@ -6,7 +6,7 @@ import {
 
 import { AstroComposerSettings, DEFAULT_SETTINGS, CONSTANTS } from "./settings";
 import { AstroComposerPluginInterface } from "./types";
-import { registerCommands, renameContentByPath as renameContentByPathFunction } from "./commands";
+import { registerCommands, renameContentByPath as renameContentByPathFunction, openTerminalInProjectRoot, openConfigFile } from "./commands";
 import { AstroComposerSettingTab } from "./ui/settings-tab";
 import { TitleModal } from "./ui/title-modal";
 import { FileOperations } from "./utils/file-operations";
@@ -20,6 +20,10 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	private templateParser!: TemplateParser;
 	private headingLinkGenerator!: HeadingLinkGenerator;
 	private pluginCreatedFiles: Set<string> = new Set();
+	private terminalRibbonIcon: HTMLElement | null = null;
+	private configRibbonIcon: HTMLElement | null = null;
+	private ribbonContextMenuStyleEl?: HTMLStyleElement;
+	private ribbonContextMenuObserver?: MutationObserver;
 
 	async onload() {
 		await this.loadSettings();
@@ -42,6 +46,12 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 		// Register context menu for copy heading links
 		this.registerContextMenu();
+
+		// Register ribbon icons if enabled
+		this.registerRibbonIcons();
+		
+		// Setup ribbon context menu handling
+		this.setupRibbonContextMenuHandling();
 	}
 
 	public registerCreateEvent() {
@@ -308,5 +318,283 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	 */
 	async renameContentByPath(filePath: string): Promise<void> {
 		await renameContentByPathFunction(this.app, filePath, this.settings, this);
+	}
+
+	public registerRibbonIcons() {
+		// Calculate what should exist FIRST (before DOM search)
+		const terminalRibbonEnabled = this.settings.enableTerminalRibbonIcon === true;
+		const terminalCommandEnabled = this.settings.enableOpenTerminalCommand === true;
+		const terminalShouldExist = terminalRibbonEnabled && terminalCommandEnabled;
+
+		const configRibbonEnabled = this.settings.enableConfigRibbonIcon === true;
+		const configCommandEnabled = this.settings.enableOpenConfigFileCommand === true;
+		const configShouldExist = configRibbonEnabled && configCommandEnabled;
+
+		// ALWAYS remove all icons first, regardless of state - this ensures clean slate
+		// Remove from our references first
+		if (this.terminalRibbonIcon) {
+			try {
+				if (this.terminalRibbonIcon.parentNode) {
+					this.terminalRibbonIcon.remove();
+				}
+			} catch (e) {
+				// Silently handle errors
+			}
+			this.terminalRibbonIcon = null;
+		}
+		
+		if (this.configRibbonIcon) {
+			try {
+				if (this.configRibbonIcon.parentNode) {
+					this.configRibbonIcon.remove();
+				}
+			} catch (e) {
+				// Silently handle errors
+			}
+			this.configRibbonIcon = null;
+		}
+		
+		// Search DOM and remove ALL instances of our icons (by aria-label)
+		// This catches any icons that might exist but aren't tracked
+		try {
+			// ALWAYS remove ALL terminal icons, regardless of settings
+			const terminalIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Open project terminal"]');
+			terminalIcons.forEach((icon: Element) => icon.remove());
+			
+			// ALWAYS remove ALL config icons, regardless of settings
+			const configIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit Astro config"]');
+			configIcons.forEach((icon: Element) => icon.remove());
+		} catch (e) {
+			// Silently handle errors
+		}
+
+		// Now add only the icons that should exist
+		if (terminalShouldExist) {
+			// Only add if icon doesn't exist in DOM
+			const existingTerminal = document.querySelector('.side-dock-ribbon-action[aria-label="Open project terminal"]');
+			if (!existingTerminal) {
+				this.terminalRibbonIcon = this.addRibbonIcon('terminal-square', 'Open project terminal', async () => {
+					if (!this.settings.enableOpenTerminalCommand) {
+						new Notice("Open terminal command is disabled. Enable it in settings to use this command.");
+						return;
+					}
+					await openTerminalInProjectRoot(this.app, this.settings);
+				});
+				// Add data attribute to identify our icon
+				if (this.terminalRibbonIcon) {
+					this.terminalRibbonIcon.setAttribute('data-astro-composer-terminal-ribbon', 'true');
+				}
+			} else {
+				this.terminalRibbonIcon = existingTerminal as HTMLElement;
+			}
+			
+			// Immediately check and remove config icon if it was re-added
+			if (!configShouldExist) {
+				const configIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit Astro config"]');
+				if (configIcons.length > 0) {
+					configIcons.forEach((icon: Element) => icon.remove());
+					this.configRibbonIcon = null;
+				}
+			}
+		} else {
+			this.terminalRibbonIcon = null;
+		}
+
+		if (configShouldExist) {
+			// Only add if icon doesn't exist in DOM
+			const existingConfig = document.querySelector('.side-dock-ribbon-action[aria-label="Edit Astro config"]');
+			if (!existingConfig) {
+				this.configRibbonIcon = this.addRibbonIcon('wrench', 'Edit Astro config', async () => {
+					if (!this.settings.enableOpenConfigFileCommand) {
+						new Notice("Edit config file command is disabled. Enable it in settings to use this command.");
+						return;
+					}
+					await openConfigFile(this.app, this.settings);
+				});
+				// Add data attribute to identify our icon
+				if (this.configRibbonIcon) {
+					this.configRibbonIcon.setAttribute('data-astro-composer-config-ribbon', 'true');
+				}
+			} else {
+				this.configRibbonIcon = existingConfig as HTMLElement;
+			}
+			
+			// Immediately check and remove terminal icon if it was re-added
+			if (!terminalShouldExist) {
+				const terminalIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Open project terminal"]');
+				if (terminalIcons.length > 0) {
+					terminalIcons.forEach((icon: Element) => icon.remove());
+					this.terminalRibbonIcon = null;
+				}
+			}
+		} else {
+			this.configRibbonIcon = null;
+		}
+		
+		// Update context menu handling after icons are registered
+		this.updateRibbonContextMenuCSS();
+		this.setupRibbonContextMenuObserver();
+		
+		// Final cleanup pass - ensure no unwanted icons exist in DOM
+		setTimeout(() => {
+			if (!terminalShouldExist) {
+				const terminalIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Open project terminal"]');
+				terminalIcons.forEach((icon: Element) => icon.remove());
+				this.terminalRibbonIcon = null;
+			}
+			if (!configShouldExist) {
+				const configIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit Astro config"]');
+				configIcons.forEach((icon: Element) => icon.remove());
+				this.configRibbonIcon = null;
+			}
+		}, 100);
+	}
+
+	onunload() {
+		// Clean up ribbon icons
+		if (this.terminalRibbonIcon) {
+			this.terminalRibbonIcon.remove();
+			this.terminalRibbonIcon = null;
+		}
+		if (this.configRibbonIcon) {
+			this.configRibbonIcon.remove();
+			this.configRibbonIcon = null;
+		}
+		
+		// Cleanup ribbon context menu handling
+		if (this.ribbonContextMenuObserver) {
+			this.ribbonContextMenuObserver.disconnect();
+			this.ribbonContextMenuObserver = undefined;
+		}
+		
+		if (this.ribbonContextMenuStyleEl) {
+			this.ribbonContextMenuStyleEl.remove();
+			this.ribbonContextMenuStyleEl = undefined;
+		}
+	}
+
+	// Ribbon context menu handling - based on Astro Modular Settings approach
+	private setupRibbonContextMenuHandling() {
+		this.updateRibbonContextMenuCSS();
+		this.setupRibbonContextMenuObserver();
+	}
+
+	private updateRibbonContextMenuCSS() {
+		// Remove existing style if any
+		if (this.ribbonContextMenuStyleEl) {
+			this.ribbonContextMenuStyleEl.remove();
+		}
+
+		// Check if either icon should be hidden
+		const terminalShouldBeHidden = !this.settings.enableTerminalRibbonIcon || !this.settings.enableOpenTerminalCommand;
+		const configShouldBeHidden = !this.settings.enableConfigRibbonIcon || !this.settings.enableOpenConfigFileCommand;
+
+		// Only add CSS if icons should be hidden
+		if (terminalShouldBeHidden || configShouldBeHidden) {
+			// Create style element to hide our ribbon icons from context menu
+			this.ribbonContextMenuStyleEl = document.createElement('style');
+			this.ribbonContextMenuStyleEl.id = 'astro-composer-hide-ribbon-context-menu';
+			let cssRules = '';
+			
+			if (terminalShouldBeHidden) {
+				cssRules += `
+					/* Hide terminal icon from context menu when disabled */
+					.menu-item:has(svg[data-lucide="terminal-square"]),
+					.menu-item:has(.lucide-terminal-square),
+					.menu-item .menu-item-icon:has(svg[data-lucide="terminal-square"]),
+					.menu-item .menu-item-icon:has(.lucide-terminal-square) {
+						display: none !important;
+					}
+				`;
+			}
+			
+			if (configShouldBeHidden) {
+				cssRules += `
+					/* Hide config icon from context menu when disabled */
+					.menu-item:has(svg[data-lucide="wrench"]),
+					.menu-item:has(.lucide-wrench),
+					.menu-item .menu-item-icon:has(svg[data-lucide="wrench"]),
+					.menu-item .menu-item-icon:has(.lucide-wrench) {
+						display: none !important;
+					}
+				`;
+			}
+			
+			this.ribbonContextMenuStyleEl.textContent = cssRules;
+			document.head.appendChild(this.ribbonContextMenuStyleEl);
+		}
+	}
+
+	private setupRibbonContextMenuObserver() {
+		// Disconnect existing observer if any
+		if (this.ribbonContextMenuObserver) {
+			this.ribbonContextMenuObserver.disconnect();
+		}
+
+		// Check if we need to hide any icons
+		const terminalShouldBeHidden = !this.settings.enableTerminalRibbonIcon || !this.settings.enableOpenTerminalCommand;
+		const configShouldBeHidden = !this.settings.enableConfigRibbonIcon || !this.settings.enableOpenConfigFileCommand;
+
+		// Only set up observer if any icon should be hidden
+		if (!terminalShouldBeHidden && !configShouldBeHidden) {
+			return;
+		}
+
+		// Watch for context menu creation and remove our items
+		this.ribbonContextMenuObserver = new MutationObserver((mutations) => {
+			for (const mutation of mutations) {
+				if (mutation.addedNodes.length > 0) {
+					// Check if a menu was added
+					for (const node of Array.from(mutation.addedNodes)) {
+						if (node instanceof HTMLElement) {
+							// Check if it's a menu
+							if (node.classList.contains('menu') || node.querySelector('.menu')) {
+								this.removeRibbonIconsFromContextMenu(node);
+							}
+						}
+					}
+				}
+			}
+		});
+
+		// Observe the document body for menu additions
+		this.ribbonContextMenuObserver.observe(document.body, {
+			childList: true,
+			subtree: true,
+		});
+	}
+
+	private removeRibbonIconsFromContextMenu(menuElement: HTMLElement) {
+		const terminalShouldBeHidden = !this.settings.enableTerminalRibbonIcon || !this.settings.enableOpenTerminalCommand;
+		const configShouldBeHidden = !this.settings.enableConfigRibbonIcon || !this.settings.enableOpenConfigFileCommand;
+
+		// Find all menu items
+		const menuItems = menuElement.querySelectorAll('.menu-item');
+		for (const item of Array.from(menuItems)) {
+			// Check if this menu item contains our icons
+			const svg = item.querySelector('svg');
+			if (svg) {
+				const iconName = svg.getAttribute('data-lucide') || 
+					svg.getAttribute('xmlns:lucide') ||
+					(svg.classList.contains('lucide-terminal-square') ? 'terminal-square' : null) ||
+					(svg.classList.contains('lucide-wrench') ? 'wrench' : null);
+				
+				// Remove terminal icon if it should be hidden
+				if (terminalShouldBeHidden && iconName === 'terminal-square') {
+					const itemText = item.textContent?.toLowerCase() || '';
+					if (itemText.includes('terminal') || itemText.includes('project terminal')) {
+						item.remove();
+					}
+				}
+				
+				// Remove config icon if it should be hidden
+				if (configShouldBeHidden && iconName === 'wrench') {
+					const itemText = item.textContent?.toLowerCase() || '';
+					if (itemText.includes('config') || itemText.includes('astro config')) {
+						item.remove();
+					}
+				}
+			}
+		}
 	}
 }
