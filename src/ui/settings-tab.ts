@@ -18,6 +18,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	terminalCommandContainer: HTMLElement | null = null;
 	configCommandContainer: HTMLElement | null = null;
 	customContentTypesContainer: HTMLElement | null = null;
+	terminalRibbonToggle: Setting | null = null;
+	configRibbonToggle: Setting | null = null;
+	private terminalRibbonToggleComponent: any = null;
+	private configRibbonToggleComponent: any = null;
 
 	constructor(app: App, plugin: Plugin) {
 		super(app, plugin);
@@ -384,6 +388,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						settings.enableOpenTerminalCommand = value;
 						await this.plugin.saveSettings();
 						this.updateTerminalCommandFields();
+						// registerRibbonIcons checks both command and icon settings
+						// If command is enabled AND icon is enabled, it will show; otherwise it will hide
+						if ((this.plugin as any).registerRibbonIcons) {
+							(this.plugin as any).registerRibbonIcons();
+						}
 					})
 			);
 
@@ -391,7 +400,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenTerminalCommand);
 		this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenTerminalCommand);
 
-		new Setting(this.terminalCommandContainer)
+		const projectPathSetting = new Setting(this.terminalCommandContainer)
 			.setName("Project root directory path")
 			.setDesc("Path relative to the Obsidian vault root folder. Use ../.. for two levels up. Leave blank to use the vault folder. This is where the terminal will open.")
 			.addText((text) =>
@@ -404,12 +413,14 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(this.terminalCommandContainer)
+		const terminalRibbonToggle = new Setting(this.terminalCommandContainer)
 			.setName("Show open terminal ribbon icon")
 			.setDesc("Add a ribbon icon to launch the terminal command.")
-			.addToggle((toggle) =>
+			.addToggle((toggle) => {
+				this.terminalRibbonToggleComponent = toggle;
 				toggle
 					.setValue(settings.enableTerminalRibbonIcon)
+					.setDisabled(!settings.enableOpenTerminalCommand)
 					.onChange(async (value: boolean) => {
 						// Update settings directly on plugin instance
 						(this.plugin as any).settings.enableTerminalRibbonIcon = value;
@@ -421,8 +432,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 								(this.plugin as any).registerRibbonIcons();
 							}
 						}, 50);
-					})
-			);
+					});
+			});
+		// Store reference for updating disabled state
+		this.terminalRibbonToggle = terminalRibbonToggle;
 
 		// Config file command settings
 		new Setting(containerEl)
@@ -435,6 +448,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						settings.enableOpenConfigFileCommand = value;
 						await this.plugin.saveSettings();
 						this.updateConfigCommandFields();
+						// registerRibbonIcons checks both command and icon settings
+						// If command is enabled AND icon is enabled, it will show; otherwise it will hide
+						if ((this.plugin as any).registerRibbonIcons) {
+							(this.plugin as any).registerRibbonIcons();
+						}
 					})
 			);
 
@@ -442,7 +460,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		this.configCommandContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenConfigFileCommand);
 		this.configCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenConfigFileCommand);
 
-		new Setting(this.configCommandContainer)
+		const configPathSetting = new Setting(this.configCommandContainer)
 			.setName("Config file path")
 			.setDesc("Path to the config file relative to the vault root. Use ../config.ts or ../../astro.config.mjs. This setting is required.")
 			.addText((text) =>
@@ -455,12 +473,14 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(this.configCommandContainer)
+		const configRibbonToggle = new Setting(this.configCommandContainer)
 			.setName("Show open config ribbon icon")
 			.setDesc("Add a ribbon icon to launch the config file command.")
-			.addToggle((toggle) =>
+			.addToggle((toggle) => {
+				this.configRibbonToggleComponent = toggle;
 				toggle
 					.setValue(settings.enableConfigRibbonIcon)
+					.setDisabled(!settings.enableOpenConfigFileCommand)
 					.onChange(async (value: boolean) => {
 						// Update settings directly on plugin instance
 						(this.plugin as any).settings.enableConfigRibbonIcon = value;
@@ -472,8 +492,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 								(this.plugin as any).registerRibbonIcons();
 							}
 						}, 50);
-					})
-			);
+					});
+			});
+		// Store reference for updating disabled state
+		this.configRibbonToggle = configRibbonToggle;
 
 		this.updateConditionalFields();
 		this.updateIndexFileField();
@@ -541,6 +563,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenTerminalCommand);
 			this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenTerminalCommand);
 		}
+		// Update ribbon toggle disabled state using the toggle component
+		if (this.terminalRibbonToggleComponent) {
+			this.terminalRibbonToggleComponent.setDisabled(!this.plugin.settings.enableOpenTerminalCommand);
+		}
 	}
 
 	updateConfigCommandFields() {
@@ -548,6 +574,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			const settings = this.plugin.settings;
 			this.configCommandContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenConfigFileCommand);
 			this.configCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenConfigFileCommand);
+		}
+		// Update ribbon toggle disabled state using the toggle component
+		if (this.configRibbonToggleComponent) {
+			this.configRibbonToggleComponent.setDisabled(!this.plugin.settings.enableOpenConfigFileCommand);
 		}
 	}
 

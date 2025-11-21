@@ -54,6 +54,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		this.setupRibbonContextMenuHandling();
 	}
 
+
 	public registerCreateEvent() {
 
 		// Register create event for automation
