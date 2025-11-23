@@ -28,6 +28,13 @@ export interface AstroComposerSettings {
 	configFilePath: string;
 	enableConfigRibbonIcon: boolean;
 	customContentTypes: CustomContentType[];
+	helpButtonReplacement: HelpButtonReplacementSettings;
+}
+
+export interface HelpButtonReplacementSettings {
+	enabled: boolean;
+	commandId: string;
+	iconId: string;
 }
 
 export interface ParsedFrontmatter {

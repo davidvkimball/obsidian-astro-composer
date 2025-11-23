@@ -33,4 +33,9 @@ export const DEFAULT_SETTINGS: AstroComposerSettings = {
 	configFilePath: "",
 	enableConfigRibbonIcon: false,
 	customContentTypes: [],
+	helpButtonReplacement: {
+		enabled: false,
+		commandId: 'edit-astro-config',
+		iconId: 'wrench',
+	},
 };

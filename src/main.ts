@@ -2,6 +2,7 @@ import {
 	Plugin,
 	TFile,
 	Notice,
+	setIcon,
 } from "obsidian";
 
 import { AstroComposerSettings, DEFAULT_SETTINGS, CONSTANTS } from "./settings";
@@ -24,6 +25,10 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	private configRibbonIcon: HTMLElement | null = null;
 	private ribbonContextMenuStyleEl?: HTMLStyleElement;
 	private ribbonContextMenuObserver?: MutationObserver;
+	private helpButtonObserver?: MutationObserver;
+	private helpButtonElement?: HTMLElement;
+	private customHelpButton?: HTMLElement;
+	private helpButtonStyleEl?: HTMLStyleElement;
 
 	async onload() {
 		await this.loadSettings();
@@ -36,6 +41,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		// Wait for the vault to be fully loaded before registering the create event
 		this.app.workspace.onLayoutReady(() => {
 			this.registerCreateEvent();
+			// Initialize help button replacement
+			this.updateHelpButton();
 		});
 
 		// Register commands
@@ -472,6 +479,24 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			this.ribbonContextMenuStyleEl.remove();
 			this.ribbonContextMenuStyleEl = undefined;
 		}
+
+		// Cleanup help button replacement
+		if (this.helpButtonObserver) {
+			this.helpButtonObserver.disconnect();
+			this.helpButtonObserver = undefined;
+		}
+
+		if (this.helpButtonStyleEl) {
+			this.helpButtonStyleEl.remove();
+			this.helpButtonStyleEl = undefined;
+		}
+
+		if (this.customHelpButton) {
+			this.customHelpButton.remove();
+			this.customHelpButton = undefined;
+		}
+
+		this.helpButtonElement = undefined;
 	}
 
 	// Ribbon context menu handling - based on Astro Modular Settings approach
@@ -563,6 +588,210 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			childList: true,
 			subtree: true,
 		});
+	}
+
+	private updateHelpButtonCSS() {
+		// Remove existing style if any
+		if (this.helpButtonStyleEl) {
+			this.helpButtonStyleEl.remove();
+		}
+
+		// Only add CSS if replacement is enabled
+		if (this.settings.helpButtonReplacement?.enabled) {
+			// Create style element to hide help button globally
+			// Use unique ID to avoid conflicts with other plugins
+			this.helpButtonStyleEl = document.createElement('style');
+			this.helpButtonStyleEl.id = 'astro-composer-hide-help-button';
+			this.helpButtonStyleEl.textContent = `
+				.workspace-drawer-vault-actions .clickable-icon:has(svg.help) {
+					display: none !important;
+				}
+			`;
+			document.head.appendChild(this.helpButtonStyleEl);
+		}
+	}
+
+	public async updateHelpButton() {
+		// Temporarily disconnect observer to prevent infinite loops
+		if (this.helpButtonObserver) {
+			this.helpButtonObserver.disconnect();
+		}
+
+		// Ensure we have the latest settings
+		await this.loadSettings();
+
+		// Update CSS first (this will hide the help button globally)
+		this.updateHelpButtonCSS();
+
+		try {
+			// Check if replacement is enabled
+			if (!this.settings.helpButtonReplacement?.enabled) {
+				this.restoreHelpButton();
+				return;
+			}
+
+			// Find the help button
+			const vaultActions = document.querySelector('.workspace-drawer-vault-actions');
+			if (!vaultActions) {
+				return;
+			}
+
+			// Find the help button - it's the first clickable-icon that contains an SVG with class "help"
+			const clickableIcons = Array.from(vaultActions.querySelectorAll('.clickable-icon'));
+			let helpButton: HTMLElement | null = null;
+			
+			for (const icon of clickableIcons) {
+				const svg = icon.querySelector('svg.help');
+				if (svg) {
+					helpButton = icon as HTMLElement;
+					break;
+				}
+			}
+			
+			if (!helpButton) {
+				return;
+			}
+
+			// Store reference to the button
+			this.helpButtonElement = helpButton;
+
+			// Remove existing custom button if it exists (always recreate to update icon/command)
+			// Check if it's actually in the DOM and has our identifier before trying to remove it
+			if (this.customHelpButton && 
+				this.customHelpButton.parentElement && 
+				document.body.contains(this.customHelpButton) &&
+				this.customHelpButton.hasAttribute('data-astro-composer-help-replacement')) {
+				this.customHelpButton.remove();
+			}
+			this.customHelpButton = undefined;
+
+			// Create a new custom button
+			const customButton = helpButton.cloneNode(true) as HTMLElement;
+			customButton.style.display = '';
+			customButton.removeAttribute('aria-label'); // Remove any existing aria-label
+			
+			// Add unique identifier to avoid conflicts with other plugins
+			customButton.setAttribute('data-astro-composer-help-replacement', 'true');
+			customButton.classList.add('astro-composer-help-replacement');
+			
+			// Clear any existing click handlers
+			customButton.onclick = null;
+			
+			// Replace the icon using Obsidian's setIcon function
+			const iconContainer = customButton.querySelector('svg')?.parentElement || customButton;
+			try {
+				setIcon(iconContainer as HTMLElement, this.settings.helpButtonReplacement.iconId);
+			} catch (error) {
+				console.warn('[Astro Composer] Error setting icon:', error);
+			}
+
+			// Add our custom click handler
+			customButton.addEventListener('click', async (evt: MouseEvent) => {
+				evt.preventDefault();
+				evt.stopPropagation();
+				
+				const commandId = this.settings.helpButtonReplacement?.commandId;
+				if (commandId) {
+					try {
+						await (this.app as any).commands.executeCommandById(commandId);
+					} catch (error) {
+						console.warn('[Astro Composer] Error executing command:', error);
+						new Notice(`Failed to execute command: ${commandId}`);
+					}
+				}
+			}, true); // Use capture phase to ensure we handle it first
+
+			// Insert the custom button right after the original (hidden) button
+			helpButton.parentElement?.insertBefore(customButton, helpButton.nextSibling);
+			
+			// Store reference to custom button
+			this.customHelpButton = customButton;
+		} finally {
+			// Reconnect observer after a delay
+			setTimeout(() => {
+				if (this.settings.helpButtonReplacement?.enabled) {
+					this.setupHelpButtonObserver();
+				}
+			}, 1000);
+		}
+	}
+
+	private setupHelpButtonObserver() {
+		// Disconnect existing observer if any
+		if (this.helpButtonObserver) {
+			this.helpButtonObserver.disconnect();
+		}
+
+		// Only set up observer if replacement is enabled
+		if (!this.settings.helpButtonReplacement?.enabled) {
+			return;
+		}
+
+		// Watch for changes to the vault profile area only (more targeted)
+		let updateTimeout: number | null = null;
+		this.helpButtonObserver = new MutationObserver(() => {
+			// Debounce updates to prevent infinite loops
+			if (updateTimeout) {
+				clearTimeout(updateTimeout);
+			}
+			updateTimeout = window.setTimeout(() => {
+				// Check if help button was recreated (CSS will hide it, but we need to inject our custom button)
+				const vaultActions = document.querySelector('.workspace-drawer-vault-actions');
+				if (!vaultActions) return;
+				
+			// Check if we have a custom button AND it's still in the DOM
+			// The reference might exist but the button could have been removed
+			// Also verify it has our unique identifier to avoid conflicts with other plugins
+			const customButtonExists = this.customHelpButton && 
+				this.customHelpButton.parentElement && 
+				document.body.contains(this.customHelpButton) &&
+				this.customHelpButton.hasAttribute('data-astro-composer-help-replacement');
+			
+			if (!customButtonExists) {
+				// Clear stale reference if button was removed or doesn't have our identifier
+				if (this.customHelpButton && (!document.body.contains(this.customHelpButton) || 
+					!this.customHelpButton.hasAttribute('data-astro-composer-help-replacement'))) {
+					this.customHelpButton = undefined;
+				}
+				this.updateHelpButton();
+			}
+			}, 100); // Shorter debounce for better responsiveness
+		});
+
+		// Observe the vault actions area more specifically
+		const vaultActions = document.querySelector('.workspace-drawer-vault-actions');
+		if (vaultActions) {
+			this.helpButtonObserver.observe(vaultActions, {
+				childList: true,
+				subtree: true, // Watch subtree to catch when buttons are recreated
+			});
+		}
+		
+		// Also observe the parent vault profile area
+		const vaultProfile = document.querySelector('.workspace-sidedock-vault-profile');
+		if (vaultProfile) {
+			this.helpButtonObserver.observe(vaultProfile, {
+				childList: true,
+				subtree: false,
+			});
+		}
+	}
+
+	private restoreHelpButton() {
+		// Remove CSS that hides help button
+		if (this.helpButtonStyleEl) {
+			this.helpButtonStyleEl.remove();
+			this.helpButtonStyleEl = undefined;
+		}
+
+		// Remove the custom button
+		if (this.customHelpButton) {
+			this.customHelpButton.remove();
+			this.customHelpButton = undefined;
+		}
+
+		// Clear stored references
+		this.helpButtonElement = undefined;
 	}
 
 	private removeRibbonIconsFromContextMenu(menuElement: HTMLElement) {

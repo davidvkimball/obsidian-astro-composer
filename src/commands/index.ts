@@ -118,11 +118,12 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		name: "Open project terminal",
 		icon: "terminal-square",
 		callback: async () => {
-			if (!settings.enableOpenTerminalCommand) {
+			const currentSettings = (plugin as unknown as AstroComposerPluginInterface).settings;
+			if (!currentSettings.enableOpenTerminalCommand) {
 				new Notice("Open terminal command is disabled. Enable it in settings to use this command.");
 				return;
 			}
-			await openTerminalInProjectRoot(plugin.app, settings);
+			await openTerminalInProjectRoot(plugin.app, currentSettings);
 		},
 	});
 
@@ -132,11 +133,12 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		name: "Edit Astro config",
 		icon: "wrench",
 		callback: async () => {
-			if (!settings.enableOpenConfigFileCommand) {
+			const currentSettings = (plugin as unknown as AstroComposerPluginInterface).settings;
+			if (!currentSettings.enableOpenConfigFileCommand) {
 				new Notice("Edit config file command is disabled. Enable it in settings to use this command.");
 				return;
 			}
-			await openConfigFile(plugin.app, settings);
+			await openConfigFile(plugin.app, currentSettings);
 		},
 	});
 }
