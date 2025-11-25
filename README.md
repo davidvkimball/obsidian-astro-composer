@@ -4,6 +4,10 @@ Turn your Obsidian notes into posts and pages for your Astro blog with automated
 
 ![astro-composer-plugin-demo](https://github.com/user-attachments/assets/794e965b-a122-433f-a081-dcc643b6af8d)
 
+## Made for Vault CMS
+
+Part of the [Vault CMS](https://github.com/davidvkimball/vault-cms) project.
+
 ## Video Guide
 
 📺 [Astro Composer Plugin for Obsidian Video Guide](https://www.youtube.com/watch?v=VVs9RytpTfc)
