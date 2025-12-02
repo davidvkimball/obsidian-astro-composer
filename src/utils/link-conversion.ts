@@ -1,6 +1,8 @@
 import { Editor, TFile, Notice } from "obsidian";
 import { AstroComposerSettings } from "../types";
 
+import { matchesFolderPattern, sortByPatternSpecificity } from "./path-matching";
+
 export class LinkConverter {
 	constructor(private settings: AstroComposerSettings) {}
 
@@ -236,8 +238,10 @@ export class LinkConverter {
 
 	private isInConfiguredContentDirectory(filePath: string): boolean {
 		// Check custom content types
-		for (const customType of this.settings.customContentTypes) {
-			if (customType.enabled && customType.folder && filePath.startsWith(customType.folder + '/')) {
+		// Sort by pattern specificity so more specific patterns are checked first
+		const sortedCustomTypes = sortByPatternSpecificity(this.settings.customContentTypes);
+		for (const customType of sortedCustomTypes) {
+			if (customType.enabled && customType.folder && matchesFolderPattern(filePath, customType.folder)) {
 				return true;
 			}
 		}
@@ -264,8 +268,10 @@ export class LinkConverter {
 	private getContentTypeForPath(filePath: string): { basePath: string; creationMode: "file" | "folder"; indexFileName: string } {
 		
 		// Check custom content types FIRST (highest priority)
-		for (const customType of this.settings.customContentTypes) {
-			if (customType.enabled && customType.folder && filePath.startsWith(customType.folder + '/')) {
+		// Sort by pattern specificity so more specific patterns are checked first
+		const sortedCustomTypes = sortByPatternSpecificity(this.settings.customContentTypes);
+		for (const customType of sortedCustomTypes) {
+			if (customType.enabled && customType.folder && matchesFolderPattern(filePath, customType.folder)) {
 				return {
 					basePath: customType.linkBasePath || "",
 					creationMode: customType.creationMode,

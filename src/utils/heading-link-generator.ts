@@ -1,5 +1,6 @@
 import { TFile, HeadingCache, App } from "obsidian";
 import { AstroComposerSettings } from "../types";
+import { matchesFolderPattern, sortByPatternSpecificity } from "./path-matching";
 
 export class HeadingLinkGenerator {
 	constructor(private settings: AstroComposerSettings) {}
@@ -34,9 +35,11 @@ export class HeadingLinkGenerator {
 		let indexFileName = "";
 
 		// Check custom content types first (highest priority)
+		// Sort by pattern specificity so more specific patterns are checked first
 		let foundCustomType = false;
-		for (const customType of this.settings.customContentTypes) {
-			if (customType.enabled && customType.folder && path.startsWith(customType.folder + '/')) {
+		const sortedCustomTypes = sortByPatternSpecificity(this.settings.customContentTypes);
+		for (const customType of sortedCustomTypes) {
+			if (customType.enabled && customType.folder && matchesFolderPattern(path, customType.folder)) {
 				contentFolder = customType.folder;
 				basePath = customType.linkBasePath || "";
 				creationMode = customType.creationMode;

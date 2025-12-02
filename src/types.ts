@@ -18,6 +18,7 @@ export interface AstroComposerSettings {
 	pagesCreationMode: "file" | "folder";
 	pagesIndexFileName: string;
 	pageTemplate: string;
+	onlyAutomateInPagesFolder: boolean;
 	enableCopyHeadingLink: boolean;
 	copyHeadingLinkFormat: "obsidian" | "astro";
 	addTrailingSlashToLinks: boolean;
@@ -63,6 +64,7 @@ export interface CustomContentType {
 	enabled: boolean;
 	creationMode: "file" | "folder";
 	indexFileName: string;
+	ignoreSubfolders: boolean;
 }
 
 export interface FileCreationOptions {

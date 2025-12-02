@@ -1,4 +1,4 @@
-import { Plugin, Editor, MarkdownView, TFile, Notice, App, MarkdownFileInfo } from "obsidian";
+import { Plugin, Editor, MarkdownView, TFile, Notice, App, MarkdownFileInfo, Platform } from "obsidian";
 import { AstroComposerSettings, AstroComposerPluginInterface } from "../types";
 import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
@@ -6,6 +6,110 @@ import { LinkConverter } from "../utils/link-conversion";
 import { TitleModal } from "../ui/title-modal";
 
 export function registerCommands(plugin: Plugin, settings: AstroComposerSettings): void {
+	// Terminal and config commands are desktop-only - NEVER register on mobile
+	// Check Platform.isMobile - if true, these commands must NEVER be registered
+	const isMobile = Platform.isMobile;
+	
+	// If on mobile, absolutely do not register terminal/config commands
+	// They use Node.js/Electron APIs that don't exist on mobile
+	if (isMobile) {
+		// On mobile, only register the safe commands that work on mobile
+		const fileOps = new FileOperations(plugin.app, settings, plugin as unknown as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
+		const linkConverter = new LinkConverter(settings);
+		
+		// Register only mobile-safe commands
+		plugin.addCommand({
+			id: "standardize-properties",
+			name: "Standardize properties",
+			icon: "file-check",
+			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
+				const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
+				if (file instanceof TFile) {
+					void standardizeProperties(plugin.app, settings, file, plugin as unknown as AstroComposerPluginInterface);
+				}
+			},
+		});
+
+		plugin.addCommand({
+			id: "convert-wikilinks-astro",
+			name: "Convert internal links for Astro",
+			icon: "link-2",
+			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
+				const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
+				if (file instanceof TFile) {
+					linkConverter.convertWikilinksForAstro(editor, file);
+				}
+			},
+		});
+
+		// Helper function for rename command
+		function hasMatchingContentType(file: TFile, settings: AstroComposerSettings): boolean {
+			const filePath = file.path;
+			const postsFolder = settings.postsFolder || "";
+			const pagesFolder = settings.enablePages ? (settings.pagesFolder || "") : "";
+			
+			if (settings.automatePostCreation) {
+				if (postsFolder) {
+					if (filePath.startsWith(postsFolder + "/") || filePath === postsFolder) {
+						return true;
+					}
+				} else {
+					if (!filePath.includes("/") || (filePath.includes("/") && !filePath.startsWith("/") && filePath.split("/").length === 2)) {
+						return true;
+					}
+				}
+			}
+			
+			if (settings.enablePages) {
+				if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
+					return true;
+				} else if (!pagesFolder && !filePath.includes("/")) {
+					return true;
+				}
+			}
+			
+			const type = fileOps.determineType(file);
+			if (fileOps.isCustomContentType(type)) {
+				const customType = fileOps.getCustomContentType(type);
+				if (customType && customType.enabled) {
+					return true;
+				}
+			}
+			
+			return false;
+		}
+
+		plugin.addCommand({
+			id: "rename-content",
+			name: "Rename current content",
+			icon: "pencil",
+			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
+				const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
+				if (file instanceof TFile) {
+					if (!hasMatchingContentType(file, settings)) {
+						new Notice("Cannot rename: this file is not part of a configured content type folder.");
+						return;
+					}
+					
+					const type = fileOps.determineType(file);
+					const cache = plugin.app.metadataCache.getFileCache(file);
+					const titleKey = fileOps.getTitleKey(type);
+					
+					if (!cache?.frontmatter || !(titleKey in cache.frontmatter)) {
+						new Notice(`Cannot rename: No ${titleKey} found in properties`);
+						return;
+					}
+					
+					new TitleModal(plugin.app, file, plugin as unknown as AstroComposerPluginInterface, type, true).open();
+				}
+			},
+		});
+
+		// DO NOT register terminal or config commands on mobile - return early
+		return;
+	}
+	
+	// Desktop: register all commands including terminal and config
 	const fileOps = new FileOperations(plugin.app, settings, plugin as unknown as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
 	const linkConverter = new LinkConverter(settings);
 
@@ -112,35 +216,39 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		},
 	});
 
-	// Open Terminal command (always registered, checks settings at runtime)
-	plugin.addCommand({
-		id: "open-project-terminal",
-		name: "Open project terminal",
-		icon: "terminal-square",
-		callback: async () => {
-			const currentSettings = (plugin as unknown as AstroComposerPluginInterface).settings;
-			if (!currentSettings.enableOpenTerminalCommand) {
-				new Notice("Open terminal command is disabled. Enable it in settings to use this command.");
-				return;
-			}
-			await openTerminalInProjectRoot(plugin.app, currentSettings);
-		},
-	});
+	// Open Terminal command (desktop only - not available on mobile)
+	if (!isMobile) {
+		plugin.addCommand({
+			id: "open-project-terminal",
+			name: "Open project terminal",
+			icon: "terminal-square",
+			callback: async () => {
+				const currentSettings = (plugin as unknown as AstroComposerPluginInterface).settings;
+				if (!currentSettings.enableOpenTerminalCommand) {
+					new Notice("Open terminal command is disabled. Enable it in settings to use this command.");
+					return;
+				}
+				await openTerminalInProjectRoot(plugin.app, currentSettings);
+			},
+		});
+	}
 
-	// Edit Config File command (always registered, checks settings at runtime)
-	plugin.addCommand({
-		id: "edit-astro-config",
-		name: "Edit Astro config",
-		icon: "wrench",
-		callback: async () => {
-			const currentSettings = (plugin as unknown as AstroComposerPluginInterface).settings;
-			if (!currentSettings.enableOpenConfigFileCommand) {
-				new Notice("Edit config file command is disabled. Enable it in settings to use this command.");
-				return;
-			}
-			await openConfigFile(plugin.app, currentSettings);
-		},
-	});
+	// Edit Config File command (desktop only - not available on mobile)
+	if (!isMobile) {
+		plugin.addCommand({
+			id: "edit-astro-config",
+			name: "Edit Astro config",
+			icon: "wrench",
+			callback: async () => {
+				const currentSettings = (plugin as unknown as AstroComposerPluginInterface).settings;
+				if (!currentSettings.enableOpenConfigFileCommand) {
+					new Notice("Edit config file command is disabled. Enable it in settings to use this command.");
+					return;
+				}
+				await openConfigFile(plugin.app, currentSettings);
+			},
+		});
+	}
 }
 
 async function standardizeProperties(app: App, settings: AstroComposerSettings, file: TFile, plugin?: AstroComposerPluginInterface): Promise<void> {

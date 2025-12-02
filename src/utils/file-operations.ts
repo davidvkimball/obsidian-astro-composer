@@ -1,5 +1,6 @@
 import { App, TFile, TFolder, Notice } from "obsidian";
 import { AstroComposerSettings, FileCreationOptions, RenameOptions, CustomContentType, AstroComposerPluginInterface, ContentType } from "../types";
+import { matchesFolderPattern, sortByPatternSpecificity } from "./path-matching";
 
 export class FileOperations {
 	constructor(private app: App, private settings: AstroComposerSettings, private plugin?: AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> }) {}
@@ -29,9 +30,10 @@ export class FileOperations {
 		const filePath = file.path;
 		
 		// Check custom content types first
-		for (const customType of this.settings.customContentTypes) {
-			if (customType.enabled && customType.folder && 
-				(filePath.startsWith(customType.folder + "/") || filePath === customType.folder)) {
+		// Sort by pattern specificity so more specific patterns are checked first
+		const sortedCustomTypes = sortByPatternSpecificity(this.settings.customContentTypes);
+		for (const customType of sortedCustomTypes) {
+			if (customType.enabled && customType.folder && matchesFolderPattern(filePath, customType.folder)) {
 				return customType.id;
 			}
 		}

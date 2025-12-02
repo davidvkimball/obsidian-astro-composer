@@ -3,6 +3,7 @@ import {
 	TFile,
 	Notice,
 	setIcon,
+	Platform,
 } from "obsidian";
 
 import { AstroComposerSettings, DEFAULT_SETTINGS, CONSTANTS } from "./settings";
@@ -13,6 +14,7 @@ import { TitleModal } from "./ui/title-modal";
 import { FileOperations } from "./utils/file-operations";
 import { TemplateParser } from "./utils/template-parsing";
 import { HeadingLinkGenerator } from "./utils/heading-link-generator";
+import { matchesFolderPattern, sortByPatternSpecificity } from "./utils/path-matching";
 
 export default class AstroComposerPlugin extends Plugin implements AstroComposerPluginInterface {
 	settings!: AstroComposerSettings;
@@ -41,8 +43,10 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		// Wait for the vault to be fully loaded before registering the create event
 		this.app.workspace.onLayoutReady(() => {
 			this.registerCreateEvent();
-			// Initialize help button replacement
-			this.updateHelpButton();
+			// Initialize help button replacement (desktop only)
+			if (!Platform.isMobile) {
+				this.updateHelpButton();
+			}
 		});
 
 		// Register commands
@@ -141,11 +145,13 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 					}
 					
 					// Check if file would be processed as custom content type
-					for (const customType of this.settings.customContentTypes) {
+					// Sort by pattern specificity so more specific patterns are checked first
+					const sortedCustomTypesForConflict = sortByPatternSpecificity(this.settings.customContentTypes);
+					for (const customType of sortedCustomTypesForConflict) {
 						if (customType.enabled) {
 							if (!customType.folder && isInVaultRoot) {
 								applicableContentTypes.push(customType.name || "Custom Content");
-							} else if (customType.folder && (filePath.startsWith(customType.folder + "/") || filePath === customType.folder)) {
+							} else if (customType.folder && matchesFolderPattern(filePath, customType.folder)) {
 								applicableContentTypes.push(customType.name || "Custom Content");
 							}
 						}
@@ -158,13 +164,47 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 					}
 
 					// Check custom content types first
-					for (const customType of this.settings.customContentTypes) {
+					// Sort by pattern specificity so more specific patterns (like docs/*/*) are checked before less specific ones (like docs)
+					const sortedCustomTypes = sortByPatternSpecificity(this.settings.customContentTypes);
+					for (const customType of sortedCustomTypes) {
 						if (customType.enabled) {
-							if (customType.folder && 
-								(filePath.startsWith(customType.folder + "/") || filePath === customType.folder)) {
-								customTypeId = customType.id;
-								shouldProcess = true;
-								break;
+							if (customType.folder && matchesFolderPattern(filePath, customType.folder)) {
+								// Check if ignore subfolders is enabled
+								if (customType.ignoreSubfolders) {
+									// Only automate at the exact pattern depth (not deeper)
+									// For pattern "docs/*/*", this means depth 3 (docs/anything/anything.md)
+									const pathSegments = filePath.split("/");
+									const pathDepth = pathSegments.length;
+									// Count the number of path segments in the pattern
+									// For "docs/*/*", we want depth 3 (docs + * + *)
+									const patternSegments = customType.folder.split("/");
+									const expectedDepth = patternSegments.length;
+									
+									// For folder-based content, check if the parent folder is at the pattern depth
+									// e.g., for pattern "docs/*/*" and folder-based: docs/example-a/getting-started/index.md
+									// The parent folder "docs/example-a/getting-started" has depth 3, which matches
+									if (customType.creationMode === "folder") {
+										// Remove the filename to get the folder depth
+										const folderDepth = pathDepth - 1;
+										if (folderDepth === expectedDepth) {
+											customTypeId = customType.id;
+											shouldProcess = true;
+											break;
+										}
+									} else {
+										// For file-based content, check if the file is at exactly the pattern depth
+										if (pathDepth === expectedDepth) {
+											customTypeId = customType.id;
+											shouldProcess = true;
+											break;
+										}
+									}
+								} else {
+									// Normal automation - pattern matches, process it
+									customTypeId = customType.id;
+									shouldProcess = true;
+									break;
+								}
 							} else if (!customType.folder) {
 								// Custom content type folder is blank - treat all files as this type
 								customTypeId = customType.id;
@@ -178,8 +218,22 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 						// Check if it's a page (automation is automatic when pages are enabled)
 						if (this.settings.enablePages) {
 							if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
-								isPage = true;
-								shouldProcess = true;
+								// Check if ignore subfolders is enabled
+								if (this.settings.onlyAutomateInPagesFolder) {
+									// Only automate in pages folder and one level down
+									const pathDepth = filePath.split("/").length;
+									const pagesDepth = pagesFolder.split("/").length;
+									
+									// Allow files in pages folder and exactly one level down
+									if (pathDepth <= pagesDepth + 1) {
+										isPage = true;
+										shouldProcess = true;
+									}
+								} else {
+									// Normal automation - check if file is in pages folder
+									isPage = true;
+									shouldProcess = true;
+								}
 							} else if (!pagesFolder && isInVaultRoot) {
 								// Pages folder is blank - only treat files in vault root as pages
 								isPage = true;
@@ -329,6 +383,41 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	}
 
 	public registerRibbonIcons() {
+		// Terminal and config features are desktop-only (not available on mobile)
+		if (Platform.isMobile) {
+			// Remove any existing icons on mobile
+			if (this.terminalRibbonIcon) {
+				try {
+					if (this.terminalRibbonIcon.parentNode) {
+						this.terminalRibbonIcon.remove();
+					}
+				} catch (e) {
+					// Silently handle errors
+				}
+				this.terminalRibbonIcon = null;
+			}
+			if (this.configRibbonIcon) {
+				try {
+					if (this.configRibbonIcon.parentNode) {
+						this.configRibbonIcon.remove();
+					}
+				} catch (e) {
+					// Silently handle errors
+				}
+				this.configRibbonIcon = null;
+			}
+			// Remove from DOM
+			try {
+				const terminalIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Open project terminal"]');
+				terminalIcons.forEach((icon: Element) => icon.remove());
+				const configIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit Astro config"]');
+				configIcons.forEach((icon: Element) => icon.remove());
+			} catch (e) {
+				// Silently handle errors
+			}
+			return; // Don't register icons on mobile
+		}
+
 		// Calculate what should exist FIRST (before DOM search)
 		const terminalRibbonEnabled = this.settings.enableTerminalRibbonIcon === true;
 		const terminalCommandEnabled = this.settings.enableOpenTerminalCommand === true;
@@ -612,6 +701,13 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	}
 
 	public async updateHelpButton() {
+		// Help button replacement is desktop-only (not available on mobile)
+		if (Platform.isMobile) {
+			// Clean up any existing help button replacement on mobile
+			this.restoreHelpButton();
+			return;
+		}
+
 		// Temporarily disconnect observer to prevent infinite loops
 		if (this.helpButtonObserver) {
 			this.helpButtonObserver.disconnect();
@@ -623,97 +719,113 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		// Update CSS first (this will hide the help button globally)
 		this.updateHelpButtonCSS();
 
-		try {
-			// Check if replacement is enabled
-			if (!this.settings.helpButtonReplacement?.enabled) {
-				this.restoreHelpButton();
-				return;
-			}
+		// Check if replacement is enabled
+		if (!this.settings.helpButtonReplacement?.enabled) {
+			this.restoreHelpButton();
+			// Still set up observer in case user enables it later
+			this.setupHelpButtonObserver();
+			return;
+		}
 
-			// Find the help button
-			const vaultActions = document.querySelector('.workspace-drawer-vault-actions');
-			if (!vaultActions) {
-				return;
-			}
-
-			// Find the help button - it's the first clickable-icon that contains an SVG with class "help"
-			const clickableIcons = Array.from(vaultActions.querySelectorAll('.clickable-icon'));
-			let helpButton: HTMLElement | null = null;
-			
-			for (const icon of clickableIcons) {
-				const svg = icon.querySelector('svg.help');
-				if (svg) {
-					helpButton = icon as HTMLElement;
-					break;
-				}
-			}
-			
-			if (!helpButton) {
-				return;
-			}
-
-			// Store reference to the button
-			this.helpButtonElement = helpButton;
-
-			// Remove existing custom button if it exists (always recreate to update icon/command)
-			// Check if it's actually in the DOM and has our identifier before trying to remove it
-			if (this.customHelpButton && 
-				this.customHelpButton.parentElement && 
-				document.body.contains(this.customHelpButton) &&
-				this.customHelpButton.hasAttribute('data-astro-composer-help-replacement')) {
-				this.customHelpButton.remove();
-			}
-			this.customHelpButton = undefined;
-
-			// Create a new custom button
-			const customButton = helpButton.cloneNode(true) as HTMLElement;
-			customButton.style.display = '';
-			customButton.removeAttribute('aria-label'); // Remove any existing aria-label
-			
-			// Add unique identifier to avoid conflicts with other plugins
-			customButton.setAttribute('data-astro-composer-help-replacement', 'true');
-			customButton.classList.add('astro-composer-help-replacement');
-			
-			// Clear any existing click handlers
-			customButton.onclick = null;
-			
-			// Replace the icon using Obsidian's setIcon function
-			const iconContainer = customButton.querySelector('svg')?.parentElement || customButton;
-			try {
-				setIcon(iconContainer as HTMLElement, this.settings.helpButtonReplacement.iconId);
-			} catch (error) {
-				console.warn('[Astro Composer] Error setting icon:', error);
-			}
-
-			// Add our custom click handler
-			customButton.addEventListener('click', async (evt: MouseEvent) => {
-				evt.preventDefault();
-				evt.stopPropagation();
-				
-				const commandId = this.settings.helpButtonReplacement?.commandId;
-				if (commandId) {
-					try {
-						await (this.app as any).commands.executeCommandById(commandId);
-					} catch (error) {
-						console.warn('[Astro Composer] Error executing command:', error);
-						new Notice(`Failed to execute command: ${commandId}`);
-					}
-				}
-			}, true); // Use capture phase to ensure we handle it first
-
-			// Insert the custom button right after the original (hidden) button
-			helpButton.parentElement?.insertBefore(customButton, helpButton.nextSibling);
-			
-			// Store reference to custom button
-			this.customHelpButton = customButton;
-		} finally {
-			// Reconnect observer after a delay
+		// Find the help button
+		const vaultActions = document.querySelector('.workspace-drawer-vault-actions');
+		if (!vaultActions) {
+			// Vault actions not found yet - set up observer to catch it when it appears
+			this.setupHelpButtonObserver();
+			// Also retry after a short delay
 			setTimeout(() => {
 				if (this.settings.helpButtonReplacement?.enabled) {
-					this.setupHelpButtonObserver();
+					this.updateHelpButton();
 				}
-			}, 1000);
+			}, 500);
+			return;
 		}
+
+		// Find the help button - it's the first clickable-icon that contains an SVG with class "help"
+		const clickableIcons = Array.from(vaultActions.querySelectorAll('.clickable-icon'));
+		let helpButton: HTMLElement | null = null;
+		
+		for (const icon of clickableIcons) {
+			const svg = icon.querySelector('svg.help');
+			if (svg) {
+				helpButton = icon as HTMLElement;
+				break;
+			}
+		}
+		
+		if (!helpButton) {
+			// Help button not found yet - set up observer to catch it when it appears
+			this.setupHelpButtonObserver();
+			// Also retry after a short delay
+			setTimeout(() => {
+				if (this.settings.helpButtonReplacement?.enabled) {
+					this.updateHelpButton();
+				}
+			}, 500);
+			return;
+		}
+
+		// Store reference to the button
+		this.helpButtonElement = helpButton;
+
+		// Remove existing custom button if it exists (always recreate to update icon/command)
+		// Check if it's actually in the DOM and has our identifier before trying to remove it
+		if (this.customHelpButton && 
+			this.customHelpButton.parentElement && 
+			document.body.contains(this.customHelpButton) &&
+			this.customHelpButton.hasAttribute('data-astro-composer-help-replacement')) {
+			this.customHelpButton.remove();
+		}
+		this.customHelpButton = undefined;
+
+		// Create a new custom button
+		const customButton = helpButton.cloneNode(true) as HTMLElement;
+		customButton.style.display = '';
+		customButton.removeAttribute('aria-label'); // Remove any existing aria-label
+		
+		// Add unique identifier to avoid conflicts with other plugins
+		customButton.setAttribute('data-astro-composer-help-replacement', 'true');
+		customButton.classList.add('astro-composer-help-replacement');
+		
+		// Clear any existing click handlers
+		customButton.onclick = null;
+		
+		// Replace the icon using Obsidian's setIcon function
+		const iconContainer = customButton.querySelector('svg')?.parentElement || customButton;
+		try {
+			setIcon(iconContainer as HTMLElement, this.settings.helpButtonReplacement.iconId);
+		} catch (error) {
+			console.warn('[Astro Composer] Error setting icon:', error);
+		}
+
+		// Add our custom click handler
+		customButton.addEventListener('click', async (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			
+			const commandId = this.settings.helpButtonReplacement?.commandId;
+			if (commandId) {
+				try {
+					await (this.app as any).commands.executeCommandById(commandId);
+				} catch (error) {
+					console.warn('[Astro Composer] Error executing command:', error);
+					new Notice(`Failed to execute command: ${commandId}`);
+				}
+			}
+		}, true); // Use capture phase to ensure we handle it first
+
+		// Insert the custom button right after the original (hidden) button
+		helpButton.parentElement?.insertBefore(customButton, helpButton.nextSibling);
+		
+		// Store reference to custom button
+		this.customHelpButton = customButton;
+
+		// Set up observer after a delay to watch for changes
+		setTimeout(() => {
+			if (this.settings.helpButtonReplacement?.enabled) {
+				this.setupHelpButtonObserver();
+			}
+		}, 1000);
 	}
 
 	private setupHelpButtonObserver() {
@@ -772,8 +884,26 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		if (vaultProfile) {
 			this.helpButtonObserver.observe(vaultProfile, {
 				childList: true,
-				subtree: false,
+				subtree: true, // Watch subtree to catch when vault actions are added
 			});
+		}
+
+		// Fallback: observe the workspace container if specific elements don't exist yet
+		// This ensures we catch the button when it first appears
+		if (!vaultActions && !vaultProfile) {
+			const workspace = document.querySelector('.workspace-split');
+			if (workspace) {
+				this.helpButtonObserver.observe(workspace, {
+					childList: true,
+					subtree: true,
+				});
+			} else {
+				// Last resort: observe document body (but with more specific checks)
+				this.helpButtonObserver.observe(document.body, {
+					childList: true,
+					subtree: true,
+				});
+			}
 		}
 	}
 
