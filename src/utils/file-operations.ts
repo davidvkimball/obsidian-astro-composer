@@ -205,6 +205,13 @@ export class FileOperations {
 			return null;
 		}
 
+		// Track that this file will be created by the plugin BEFORE renaming
+		// This prevents the create event from triggering another modal
+		if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
+			const pluginWithFiles = this.plugin as { pluginCreatedFiles?: Set<string> };
+			pluginWithFiles.pluginCreatedFiles?.add(newPath);
+		}
+
 		try {
 			await this.app.fileManager.renameFile(file, newPath);
 			const newFile = this.app.vault.getAbstractFileByPath(newPath);
@@ -260,6 +267,13 @@ export class FileOperations {
 			return null;
 		}
 
+		// Track that this file will be created by the plugin BEFORE renaming
+		// This prevents the create event from triggering another modal
+		if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
+			const pluginWithFiles = this.plugin as { pluginCreatedFiles?: Set<string> };
+			pluginWithFiles.pluginCreatedFiles?.add(newPath);
+		}
+
 		try {
 			// Use fileManager.renameFile() which respects user settings and handles all link formats
 			await this.app.fileManager.renameFile(file, newPath);
@@ -268,12 +282,6 @@ export class FileOperations {
 			if (!(newFile instanceof TFile)) {
 				new Notice("Failed to locate renamed file.");
 				return null;
-			}
-
-			// Track that this file was created by the plugin to avoid triggering the create event
-			if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
-				const pluginWithFiles = this.plugin as { pluginCreatedFiles?: Set<string> };
-				pluginWithFiles.pluginCreatedFiles?.add(newPath);
 			}
 
 			const leaf = this.app.workspace.getLeaf(false);

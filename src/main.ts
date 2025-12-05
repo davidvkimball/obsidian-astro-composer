@@ -297,14 +297,17 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 						}
 					}
 
+					// Mark the original file as handled to prevent it from triggering the create event again
+					this.pluginCreatedFiles.add(file.path);
+					
 					// Show the appropriate modal
 					if (customTypeId) {
-						new TitleModal(this.app, file, this, customTypeId).open();
+						new TitleModal(this.app, file, this, customTypeId, false, true).open();
 					} else if (isPage) {
-						new TitleModal(this.app, file, this, "page").open();
+						new TitleModal(this.app, file, this, "page", false, true).open();
 					} else {
 						// This is a post
-						new TitleModal(this.app, file, this, "post").open();
+						new TitleModal(this.app, file, this, "post", false, true).open();
 					}
 				}
 				})();

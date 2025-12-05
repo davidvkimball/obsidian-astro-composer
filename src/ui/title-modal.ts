@@ -147,13 +147,7 @@ export class TitleModal extends Modal {
 				placeholder: `My Awesome ${typeName}`,
 				cls: "astro-composer-title-input"
 			});
-			// Pre-populate with suggested title from basename if available
-			if (this.file) {
-				const suggestedTitle = this.getSuggestedTitleFromBasename();
-				if (suggestedTitle) {
-					this.titleInput.value = suggestedTitle;
-				}
-			}
+			// Leave input empty for new notes - user can type directly
 		} else {
 			const typeName = this.getTypeDisplayName();
 			const isCustomType = this.fileOps.isCustomContentType(this.type);
@@ -181,6 +175,12 @@ export class TitleModal extends Modal {
 			}
 		}
 		this.titleInput.focus();
+		// For new notes, ensure cursor is at the start (position 0)
+		if (this.isNewNote) {
+			setTimeout(() => {
+				this.titleInput.setSelectionRange(0, 0);
+			}, 0);
+		}
 
 		const buttonContainer = contentEl.createDiv({ cls: "astro-composer-button-container" });
 
@@ -216,8 +216,20 @@ export class TitleModal extends Modal {
 					return;
 				}
 			} else if (this.isNewNote) {
-				// Create a new file from scratch
-				newFile = await this.createNewFile(title);
+				// Process the "Untitled" file - rename it and add properties
+				// This respects creationMode (folder vs file) and doesn't require deletion
+				if (this.file) {
+					newFile = await this.fileOps.createFile({ file: this.file, title, type: this.type });
+					// Always insert properties for custom content types and pages when automation is enabled
+					// For posts, check the autoInsertProperties setting
+					const shouldInsertProperties = this.fileOps.isCustomContentType(this.type) || 
+						this.type === "page" || 
+						this.plugin.settings.autoInsertProperties;
+					
+					if (newFile && shouldInsertProperties) {
+						await this.addPropertiesToFile(newFile, title, this.type);
+					}
+				}
 			} else if (this.file) {
 				// We have an existing file, process it
 				newFile = await this.fileOps.createFile({ file: this.file, title, type: this.type });
@@ -287,6 +299,12 @@ export class TitleModal extends Modal {
 		const filename = this.fileOps.generateFilename(title);
 		const filePath = targetFolder ? `${targetFolder}/${filename}.md` : `${filename}.md`;
 
+		// Track that this file will be created by the plugin BEFORE creating it
+		// This prevents the create event from triggering another modal
+		if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
+			(this.plugin as { pluginCreatedFiles?: Set<string> }).pluginCreatedFiles?.add(filePath);
+		}
+
 		// Create the file with initial content
 		let initialContent = "";
 		// Always insert properties for custom content types and pages when automation is enabled
@@ -301,11 +319,6 @@ export class TitleModal extends Modal {
 
 		try {
 			const newFile = await this.app.vault.create(filePath, initialContent);
-			
-			// Track that this file was created by the plugin to avoid triggering the create event
-			if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
-				(this.plugin as { pluginCreatedFiles?: Set<string> }).pluginCreatedFiles?.add(filePath);
-			}
 			
 			// Open the new file
 			await this.app.workspace.getLeaf().openFile(newFile);
