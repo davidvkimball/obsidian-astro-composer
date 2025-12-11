@@ -1,5 +1,5 @@
 import { App, TFile, TFolder, Notice } from "obsidian";
-import { AstroComposerSettings, FileCreationOptions, RenameOptions, CustomContentType, AstroComposerPluginInterface, ContentType } from "../types";
+import { AstroComposerSettings, FileCreationOptions, RenameOptions, ContentType, ContentTypeId, AstroComposerPluginInterface } from "../types";
 import { matchesFolderPattern, sortByPatternSpecificity } from "./path-matching";
 
 export class FileOperations {
@@ -18,80 +18,73 @@ export class FileOperations {
 			.replace(/^-|-$/g, "");
 	}
 
-	generateFilename(title: string): string {
+	generateFilename(title: string, enableUnderscorePrefix: boolean = false): string {
 		const kebabTitle = this.toKebabCase(title);
 		// If kebab case results in empty string, use a fallback
 		const safeKebabTitle = kebabTitle || "untitled";
-		const prefix = this.settings.enableUnderscorePrefix ? "_" : "";
+		const prefix = enableUnderscorePrefix ? "_" : "";
 		return `${prefix}${safeKebabTitle}`;
 	}
 
-	determineType(file: TFile): ContentType {
+	determineType(file: TFile): ContentTypeId {
 		const filePath = file.path;
 		
-		// Check custom content types first
-		// Sort by pattern specificity so more specific patterns are checked first
-		const sortedCustomTypes = sortByPatternSpecificity(this.settings.customContentTypes);
-		for (const customType of sortedCustomTypes) {
-			if (customType.enabled && customType.folder && matchesFolderPattern(filePath, customType.folder)) {
-				return customType.id;
+		// Check all content types, sorted by pattern specificity (more specific first)
+		const contentTypes = this.settings.contentTypes || [];
+		const sortedTypes = sortByPatternSpecificity(contentTypes);
+		
+		for (const contentType of sortedTypes) {
+			if (!contentType.enabled) continue;
+			
+			// Handle blank folder (root) - matches files in vault root only
+			if (!contentType.folder || contentType.folder.trim() === "") {
+				if (!filePath.includes("/") || filePath.split("/").length === 1) {
+					return contentType.id;
+				}
+			} else if (matchesFolderPattern(filePath, contentType.folder)) {
+				// Check ignoreSubfolders if folder is specified
+				if (contentType.ignoreSubfolders) {
+					const pathSegments = filePath.split("/");
+					const pathDepth = pathSegments.length;
+					const patternSegments = contentType.folder.split("/");
+					const expectedDepth = patternSegments.length;
+					
+					if (contentType.creationMode === "folder") {
+						// For folder-based creation, files are one level deeper (e.g., test/my-file/index.md)
+						// So we need to allow one extra level beyond the pattern depth
+						const folderDepth = pathDepth - 1; // Subtract 1 for the index.md file
+						if (folderDepth === expectedDepth || folderDepth === expectedDepth + 1) {
+							return contentType.id;
+						}
+					} else {
+						// For file-based creation, files are at the same depth as the pattern
+						if (pathDepth === expectedDepth) {
+							return contentType.id;
+						}
+					}
+				} else {
+					return contentType.id;
+				}
 			}
 		}
 		
-		// Check pages
-		const pagesFolder = this.settings.pagesFolder || "";
-		let isPage = false;
-		if (this.settings.enablePages) {
-			if (pagesFolder) {
-				// If pagesFolder is specified, check if file is in that folder
-				isPage = filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder;
-			} else {
-				// If pagesFolder is blank, only treat files in vault root as pages
-				isPage = !filePath.includes("/");
-			}
-		}
-		if (isPage) return "page";
-		
-		// Check posts
-		const postsFolder = this.settings.postsFolder || "";
-		let isPost = false;
-		if (this.settings.automatePostCreation) {
-			if (postsFolder) {
-				// If postsFolder is specified, check if file is in that folder
-				isPost = filePath.startsWith(postsFolder + "/") || filePath === postsFolder;
-			} else {
-				// If postsFolder is blank, only treat files in vault root as posts
-				isPost = !filePath.includes("/");
-			}
-		}
-		if (isPost) return "post";
-		
-		// If no folder structure matches, return "note" as fallback
+		// If no content type matches, return "note" as fallback
 		return "note";
 	}
 
-	getCustomContentType(typeId: string): CustomContentType | null {
-		return this.settings.customContentTypes.find(ct => ct.id === typeId) || null;
+	getContentType(typeId: ContentTypeId): ContentType | null {
+		const contentTypes = this.settings.contentTypes || [];
+		return contentTypes.find(ct => ct.id === typeId) || null;
 	}
 
-	isCustomContentType(type: ContentType): boolean {
-		return type !== "post" && type !== "page";
-	}
-
-	getTitleKey(type: ContentType): string {
+	getTitleKey(type: ContentTypeId): string {
 		// For generic notes, always use "title"
 		if (type === "note") return "title";
 		
-		let template: string;
+		const contentType = this.getContentType(type);
+		if (!contentType) return "title";
 		
-		if (this.isCustomContentType(type)) {
-			const customType = this.getCustomContentType(type);
-			if (!customType) return "title";
-			template = customType.template;
-		} else {
-			template = type === "post" ? this.settings.defaultTemplate : this.settings.pageTemplate;
-		}
-		
+		const template = contentType.template;
 		const lines = template.split("\n");
 		let inProperties = false;
 		for (const line of lines) {
@@ -122,33 +115,29 @@ export class FileOperations {
 			return null;
 		}
 
+		// Get content type settings
+		const contentType = this.getContentType(type);
+		if (!contentType && type !== "note") {
+			new Notice(`Content type ${type} not found.`);
+			return null;
+		}
+
 		const kebabTitle = this.toKebabCase(title);
-		const prefix = this.settings.enableUnderscorePrefix ? "_" : "";
+		const enableUnderscorePrefix = contentType?.enableUnderscorePrefix || false;
+		const prefix = enableUnderscorePrefix ? "_" : "";
 
 		let targetFolder = "";
 		if (type === "note") {
 			// For generic notes, keep them in their current location
 			targetFolder = "";
-		} else if (this.isCustomContentType(type)) {
-			const customType = this.getCustomContentType(type);
+		} else if (contentType) {
 			// Get the directory where the user created the file
 			const originalDir = file.parent?.path || "";
 			
-			// For custom content types, respect the user's chosen location (subfolder)
+			// Respect the user's chosen location (subfolder)
 			// Only use the configured folder if the user created the file in the vault root
 			if (originalDir === "" || originalDir === "/") {
-				targetFolder = customType ? customType.folder : "";
-			} else {
-				targetFolder = originalDir;
-			}
-		} else {
-			// For posts and pages, respect where the user created the file
-			// Get the directory where the user created the file
-			const originalDir = file.parent?.path || "";
-			
-			// If the file is in vault root, don't set a target folder (keep it in root)
-			if (originalDir === "" || originalDir === "/") {
-				targetFolder = "";
+				targetFolder = contentType.folder || "";
 			} else {
 				targetFolder = originalDir;
 			}
@@ -161,14 +150,15 @@ export class FileOperations {
 			}
 		}
 
-		if (this.settings.creationMode === "folder") {
-			return this.createFolderStructure(file, kebabTitle, prefix, targetFolder, type);
+		const creationMode = contentType?.creationMode || "file";
+		if (creationMode === "folder") {
+			return this.createFolderStructure(file, kebabTitle, prefix, targetFolder, type, contentType);
 		} else {
 			return this.createFileStructure(file, kebabTitle, prefix, targetFolder);
 		}
 	}
 
-	private async createFolderStructure(file: TFile, kebabTitle: string, prefix: string, targetFolder: string, type: ContentType): Promise<TFile | null> {
+	private async createFolderStructure(file: TFile, kebabTitle: string, prefix: string, targetFolder: string, type: ContentTypeId, contentType: ContentType | null): Promise<TFile | null> {
 		const folderName = `${prefix}${kebabTitle}`;
 		let folderPath: string;
 		
@@ -195,7 +185,7 @@ export class FileOperations {
 			// Folder might already exist, proceed
 		}
 
-		const indexFileName = this.settings.indexFileName || "index";
+		const indexFileName = contentType?.indexFileName || "index";
 		const fileName = `${indexFileName}.md`;
 		const newPath = `${folderPath}/${fileName}`;
 
@@ -304,20 +294,27 @@ export class FileOperations {
 			return null;
 		}
 
+		const contentType = this.getContentType(type);
+		if (!contentType && type !== "note") {
+			new Notice(`Content type ${type} not found.`);
+			return null;
+		}
+
 		const kebabTitle = this.toKebabCase(title);
 		const prefix = "";
 
-		if (this.settings.creationMode === "folder") {
-			return this.renameFolderStructure(file, kebabTitle, prefix, type);
+		const creationMode = contentType?.creationMode || "file";
+		if (creationMode === "folder") {
+			return this.renameFolderStructure(file, kebabTitle, prefix, type, contentType);
 		} else {
-			return this.renameFileStructure(file, kebabTitle, prefix);
+			return this.renameFileStructure(file, kebabTitle, prefix, contentType);
 		}
 	}
 
-	private async renameFolderStructure(file: TFile, kebabTitle: string, prefix: string, type: ContentType): Promise<TFile | null> {
+	private async renameFolderStructure(file: TFile, kebabTitle: string, prefix: string, type: ContentTypeId, contentType: ContentType | null): Promise<TFile | null> {
 		// Smart detection: treat as index if filename matches the index file name
 		// Default to "index" when indexFileName is blank
-		const indexFileName = this.settings.indexFileName || "index";
+		const indexFileName = contentType?.indexFileName || "index";
 		const isIndex = file.basename === indexFileName;
 		if (isIndex) {
 			if (!file.parent) {
@@ -392,7 +389,7 @@ export class FileOperations {
 		}
 	}
 
-	private async renameFileStructure(file: TFile, kebabTitle: string, prefix: string): Promise<TFile | null> {
+	private async renameFileStructure(file: TFile, kebabTitle: string, prefix: string, contentType: ContentType | null): Promise<TFile | null> {
 		if (!file.parent) {
 			new Notice("Cannot rename: file has no parent folder.");
 			return null;
@@ -400,9 +397,10 @@ export class FileOperations {
 		
 		// Check if this is an index file - if so, rename the parent folder instead
 		// Smart detection: only treat as index if indexFileName is specified and matches
-		const isIndex = this.settings.indexFileName && 
-			this.settings.indexFileName.trim() !== "" && 
-			file.basename === this.settings.indexFileName;
+		const indexFileName = contentType?.indexFileName || "";
+		const isIndex = indexFileName && 
+			indexFileName.trim() !== "" && 
+			file.basename === indexFileName;
 		
 		if (isIndex) {
 			prefix = file.parent.name.startsWith("_") ? "_" : "";

@@ -1,8 +1,10 @@
-import { App, PluginSettingTab, Setting, Platform } from "obsidian";
+import { App, PluginSettingTab, Setting, Platform, Notice } from "obsidian";
 import { Plugin } from "obsidian";
-import { CustomContentType, AstroComposerPluginInterface } from "../types";
+import { ContentType, AstroComposerPluginInterface } from "../types";
 import { CommandPickerModal } from "./components/CommandPickerModal";
 import { IconPickerModal } from "./components/IconPickerModal";
+import { ConfirmModal } from "./components/ConfirmModal";
+import { matchesFolderPattern } from "../utils/path-matching";
 
 export class AstroComposerSettingTab extends PluginSettingTab {
 	plugin: AstroComposerPluginInterface;
@@ -29,6 +31,16 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	constructor(app: App, plugin: Plugin) {
 		super(app, plugin);
 		this.plugin = plugin as unknown as AstroComposerPluginInterface;
+	}
+
+	/**
+	 * Refresh just the content types section
+	 * More efficient than refreshing the entire settings tab
+	 */
+	public refreshContentTypes(): void {
+		if (this.customContentTypesContainer) {
+			this.renderCustomContentTypes();
+		}
 	}
 
 	display(): void {
@@ -94,294 +106,22 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// Post settings
+		// Auto-insert properties (global setting)
 		new Setting(containerEl)
-			.setName("Posts")
-			.setDesc("")
-			.setHeading();
-
-		new Setting(containerEl)
-			.setName("Automate post creation")
-			.setDesc("Automatically show title dialog for new .md files in the posts folder, rename them based on the title, and insert properties if enabled. This setting only applies to posts, not custom content types or pages.")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(settings.automatePostCreation)
-					.onChange(async (value: boolean) => {
-						settings.automatePostCreation = value;
-						settings.autoInsertProperties = value;
-						await this.plugin.saveSettings();
-						this.plugin.registerCreateEvent();
-						this.updateConditionalFields();
-					})
-			);
-
-		this.autoRenameContainer = containerEl.createDiv({ cls: "auto-rename-fields" });
-		this.autoRenameContainer.classList.toggle("astro-composer-setting-container-visible", settings.automatePostCreation);
-		this.autoRenameContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.automatePostCreation);
-
-		this.autoInsertContainer = this.autoRenameContainer.createDiv();
-		new Setting(this.autoInsertContainer)
 			.setName("Auto-insert properties")
-			.setDesc("Automatically insert the properties template when creating new files (requires 'Automate post creation' to be enabled).")
+			.setDesc("Automatically insert the properties template when creating new files for any content type.")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(settings.autoInsertProperties)
-					.setDisabled(!settings.automatePostCreation)
 					.onChange(async (value: boolean) => {
 						settings.autoInsertProperties = value;
 						await this.plugin.saveSettings();
 					})
 			);
 
-		this.postsFolderContainer = this.autoRenameContainer.createDiv();
-		new Setting(this.postsFolderContainer)
-			.setName("Posts folder")
-			.setDesc("Folder name for blog posts (leave blank to use the vault folder). You can specify the default location for new notes in Obsidian's 'Files and links' settings. Supports wildcards like directory/* or directory/*/* to match specific folder depths.")
-			.addText((text) =>
-				text
-					.setPlaceholder("Enter folder path")
-					.setValue(settings.postsFolder)
-					.onChange(async (value: string) => {
-						settings.postsFolder = value;
-						await this.plugin.saveSettings();
-						this.updateOnlyAutomateField();
-						this.updateExcludedDirsField();
-					})
-			);
-
-
-		this.onlyAutomateContainer = this.autoRenameContainer.createDiv();
-		new Setting(this.onlyAutomateContainer)
-			.setName("Ignore subfolders")
-			.setDesc("When enabled, automation will only trigger for new .md files within the Posts folder and one level down (for folder-based posts). Files in deeper subfolders will be ignored.")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(settings.onlyAutomateInPostsFolder)
-					.onChange(async (value: boolean) => {
-						settings.onlyAutomateInPostsFolder = value;
-						await this.plugin.saveSettings();
-						this.updateExcludedDirsField();
-					})
-			);
-
-		this.excludedDirsContainer = this.autoRenameContainer.createDiv({ cls: "excluded-dirs-field" });
-		this.excludedDirsContainer.classList.toggle("astro-composer-setting-container-visible", !settings.onlyAutomateInPostsFolder);
-		this.excludedDirsContainer.classList.toggle("astro-composer-setting-container-hidden", settings.onlyAutomateInPostsFolder);
-
-		new Setting(this.excludedDirsContainer)
-			.setName("Excluded directories")
-			.setDesc("Directories to exclude from automatic post creation (e.g., pages|posts/example). Excluded directories and their child folders will be ignored. Use '|' to separate multiple directories.")
-			.addText((text) =>
-				text
-					.setPlaceholder("pages|posts/example")
-					.setValue(settings.excludedDirectories)
-					.onChange(async (value: string) => {
-						settings.excludedDirectories = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(this.autoRenameContainer)
-			.setName("Posts link base path")
-			.setDesc("Base path for converted links in posts (e.g., /blog/, leave blank for root /).")
-			.addText((text) =>
-				text
-					.setPlaceholder("/blog/")
-					.setValue(settings.postsLinkBasePath)
-					.onChange(async (value: string) => {
-						settings.postsLinkBasePath = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		this.creationModeContainer = this.autoRenameContainer.createDiv();
-		new Setting(this.creationModeContainer)
-			.setName("Creation mode")
-			.setDesc("How to create new entries: file-based or folder-based with an index file.")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("file", "File-based (post-title.md)")
-					.addOption("folder", "Folder-based (post-title/index.md)")
-					.setValue(settings.creationMode)
-					.onChange(async (value: string) => {
-						settings.creationMode = value as "file" | "folder";
-						await this.plugin.saveSettings();
-						this.updateIndexFileField();
-					})
-			);
-
-		this.indexFileContainer = this.autoRenameContainer.createDiv({ cls: "index-file-field" });
-		this.indexFileContainer.classList.toggle("astro-composer-setting-container-visible", settings.creationMode === "folder");
-		this.indexFileContainer.classList.toggle("astro-composer-setting-container-hidden", settings.creationMode !== "folder");
-
-		new Setting(this.indexFileContainer)
-			.setName("Index file name")
-			.setDesc("Name for index files in folder-based content (without .md extension). Defaults to 'index' if left blank.")
-			.addText((text) =>
-				text
-					.setPlaceholder("index")
-					.setValue(settings.indexFileName)
-					.onChange(async (value: string) => {
-						settings.indexFileName = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		this.underscorePrefixContainer = this.autoRenameContainer.createDiv();
-		new Setting(this.underscorePrefixContainer)
-			.setName("Use underscore prefix for drafts")
-			.setDesc("Add an underscore prefix (_post-title) to new notes by default when enabled. This hides them from Astro, which can be helpful for post drafts. Disable to skip prefixing.")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(settings.enableUnderscorePrefix)
-					.onChange(async (value: boolean) => {
-						settings.enableUnderscorePrefix = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-
-
-
-
+		// Content types
 		new Setting(containerEl)
-			.setName("Post properties template")
-			.addTextArea((text) => {
-				text
-					.setPlaceholder(
-						'---\ntitle: "{{title}}"\ndate: {{date}}\ntags: []\n---\n',
-					)
-					.setValue(settings.defaultTemplate)
-					.onChange(async (value: string) => {
-						settings.defaultTemplate = value;
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.classList.add("astro-composer-template-textarea");
-				return text;
-			})
-			.then((setting) => {
-			setting.descEl.empty();
-			const descDiv = setting.descEl.createEl("div");
-			descDiv.createEl("div", { text: "Used for new posts and when standardizing properties." });
-			descDiv.createEl("div", { text: "Variables include {{title}} and {{date}}." });
-			descDiv.createEl("div", { text: "Do not wrap {{date}} in quotes as it represents a datetime value, not a string." });
-			descDiv.createEl("div", { text: "The 'standardize properties' command ignores anything below the second '---' line." });
-			});
-
-		// Pages settings
-		new Setting(containerEl)
-			.setName("Pages")
-			.setDesc("")
-			.setHeading();
-
-		new Setting(containerEl)
-			.setName("Enable pages")
-			.setDesc("Enable page content type for static pages.")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(settings.enablePages)
-					.onChange(async (value: boolean) => {
-						settings.enablePages = value;
-						await this.plugin.saveSettings();
-						this.plugin.registerCreateEvent();
-						this.updatePagesFields();
-					})
-			);
-
-		this.pagesFieldsContainer = containerEl.createDiv({ cls: "pages-fields" });
-		this.pagesFieldsContainer.classList.toggle("astro-composer-setting-container-visible", settings.enablePages);
-		this.pagesFieldsContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enablePages);
-
-		new Setting(this.pagesFieldsContainer)
-			.setName("Pages folder")
-			.setDesc("Folder name for pages (leave blank to use the vault folder). Supports wildcards like directory/* or directory/*/* to match specific folder depths.")
-			.addText((text) =>
-				text
-					.setPlaceholder("Enter folder path")
-					.setValue(settings.pagesFolder)
-					.onChange(async (value: string) => {
-						settings.pagesFolder = value;
-						await this.plugin.saveSettings();
-						this.updatePagesOnlyAutomateField();
-					})
-			);
-
-		this.pagesOnlyAutomateContainer = this.pagesFieldsContainer.createDiv();
-		new Setting(this.pagesOnlyAutomateContainer)
-			.setName("Ignore subfolders")
-			.setDesc("When enabled, automation will only trigger for new .md files within the Pages folder and one level down (for folder-based pages). Files in deeper subfolders will be ignored.")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(settings.onlyAutomateInPagesFolder)
-					.onChange(async (value: boolean) => {
-						settings.onlyAutomateInPagesFolder = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(this.pagesFieldsContainer)
-			.setName("Pages link base path")
-			.setDesc("Base path for converted links in pages (e.g., /about/, leave blank for root /).")
-			.addText((text) =>
-				text
-					.setPlaceholder("/")
-					.setValue(settings.pagesLinkBasePath)
-					.onChange(async (value: string) => {
-						settings.pagesLinkBasePath = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(this.pagesFieldsContainer)
-			.setName("Creation mode")
-			.setDesc("How to create new entries: file-based or folder-based with an index file.")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("file", "File-based (page-title.md)")
-					.addOption("folder", "Folder-based (page-title/index.md)")
-					.setValue(settings.pagesCreationMode || "file")
-					.onChange(async (value: string) => {
-						settings.pagesCreationMode = value as "file" | "folder";
-						await this.plugin.saveSettings();
-						this.updatePagesIndexFileField();
-					})
-			);
-
-		this.pagesIndexFileContainer = this.pagesFieldsContainer.createDiv({ cls: "pages-index-file-field" });
-		this.pagesIndexFileContainer.classList.toggle("astro-composer-setting-container-visible", (settings.pagesCreationMode || "file") === "folder");
-		this.pagesIndexFileContainer.classList.toggle("astro-composer-setting-container-hidden", (settings.pagesCreationMode || "file") !== "folder");
-
-		new Setting(this.pagesIndexFileContainer)
-			.setName("Index file name")
-			.setDesc("Name for index files in folder-based content (without .md extension). Defaults to 'index' if left blank.")
-			.addText((text) =>
-				text
-					.setPlaceholder("index")
-					.setValue(settings.pagesIndexFileName || "")
-					.onChange(async (value: string) => {
-						settings.pagesIndexFileName = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(this.pagesFieldsContainer)
-			.setName("Page properties template")
-			.setDesc("Template for new page files. Variables include {{title}} and {{date}}.")
-			.addTextArea((text) => {
-				text
-					.setPlaceholder('---\ntitle: "{{title}}"\ndescription: ""\n---\n')
-					.setValue(settings.pageTemplate)
-					.onChange(async (value: string) => {
-						settings.pageTemplate = value;
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.classList.add("astro-composer-template-textarea");
-				return text;
-			});
-
-		// Custom content types
-		new Setting(containerEl)
-			.setName("Custom content types")
+			.setName("Content types")
 			.setDesc("")
 			.setHeading();
 
@@ -601,11 +341,6 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			}
 		}
 
-		this.updateConditionalFields();
-		this.updateIndexFileField();
-		this.updateExcludedDirsField();
-		this.updateOnlyAutomateField();
-		this.updatePagesFields();
 		this.updateCopyHeadingFields();
 		// Only update terminal/config fields if not on mobile
 		if (!Platform.isMobile) {
@@ -614,57 +349,6 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		}
 	}
 
-	updateConditionalFields() {
-		if (this.autoRenameContainer) {
-			const settings = this.plugin.settings;
-			this.autoRenameContainer.classList.toggle("astro-composer-setting-container-visible", settings.automatePostCreation);
-		this.autoRenameContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.automatePostCreation);
-		}
-	}
-
-	updateIndexFileField() {
-		if (this.indexFileContainer) {
-			const settings = this.plugin.settings;
-			this.indexFileContainer.classList.toggle("astro-composer-setting-container-visible", settings.creationMode === "folder");
-		this.indexFileContainer.classList.toggle("astro-composer-setting-container-hidden", settings.creationMode !== "folder");
-		}
-	}
-
-	updateOnlyAutomateField() {
-		if (this.onlyAutomateContainer) {
-			const settings = this.plugin.settings;
-			// Hide "Ignore subfolders" when Posts folder is blank
-			this.onlyAutomateContainer.classList.toggle("astro-composer-setting-container-visible", !!settings.postsFolder);
-			this.onlyAutomateContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.postsFolder);
-		}
-	}
-
-	updateExcludedDirsField() {
-		if (this.excludedDirsContainer) {
-			const settings = this.plugin.settings;
-			// Hide "Excluded directories" when Posts folder is blank OR when "Ignore subfolders" is enabled
-			this.excludedDirsContainer.classList.toggle("astro-composer-setting-container-visible", !!settings.postsFolder && !settings.onlyAutomateInPostsFolder);
-			this.excludedDirsContainer.classList.toggle("astro-composer-setting-container-hidden", !(!!settings.postsFolder && !settings.onlyAutomateInPostsFolder));
-		}
-	}
-
-	updatePagesFields() {
-		if (this.pagesFieldsContainer) {
-			const settings = this.plugin.settings;
-			this.pagesFieldsContainer.classList.toggle("astro-composer-setting-container-visible", settings.enablePages);
-		this.pagesFieldsContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enablePages);
-		}
-		this.updatePagesOnlyAutomateField();
-	}
-
-	updatePagesOnlyAutomateField() {
-		if (this.pagesOnlyAutomateContainer) {
-			const settings = this.plugin.settings;
-			// Hide "Ignore subfolders" when Pages folder is blank
-			this.pagesOnlyAutomateContainer.classList.toggle("astro-composer-setting-container-visible", !!settings.pagesFolder);
-			this.pagesOnlyAutomateContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.pagesFolder);
-		}
-	}
 
 	updateCopyHeadingFields() {
 		if (this.copyHeadingContainer) {
@@ -703,36 +387,17 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		const blankFolders: string[] = [];
 		const folderConflicts: { [folder: string]: string[] } = {};
 		
-		// Check posts folder
-		if (!settings.postsFolder && settings.automatePostCreation) {
-			blankFolders.push("Posts");
-		} else if (settings.postsFolder && settings.automatePostCreation) {
-			if (!folderConflicts[settings.postsFolder]) {
-				folderConflicts[settings.postsFolder] = [];
-			}
-			folderConflicts[settings.postsFolder].push("Posts");
-		}
-		
-		// Check pages folder
-		if (!settings.pagesFolder && settings.enablePages) {
-			blankFolders.push("Pages");
-		} else if (settings.pagesFolder && settings.enablePages) {
-			if (!folderConflicts[settings.pagesFolder]) {
-				folderConflicts[settings.pagesFolder] = [];
-			}
-			folderConflicts[settings.pagesFolder].push("Pages");
-		}
-		
-		// Check custom content types
-		for (const customType of settings.customContentTypes) {
-			if (customType.enabled) {
-				if (!customType.folder) {
-					blankFolders.push(customType.name || "Custom Content");
+		// Check content types
+		const contentTypes = settings.contentTypes || [];
+		for (const contentType of contentTypes) {
+			if (contentType.enabled) {
+				if (!contentType.folder || contentType.folder.trim() === "") {
+					blankFolders.push(contentType.name || "Content");
 				} else {
-					if (!folderConflicts[customType.folder]) {
-						folderConflicts[customType.folder] = [];
+					if (!folderConflicts[contentType.folder]) {
+						folderConflicts[contentType.folder] = [];
 					}
-					folderConflicts[customType.folder].push(customType.name || "Custom Content");
+					folderConflicts[contentType.folder].push(contentType.name || "Content");
 				}
 			}
 		}
@@ -743,9 +408,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 	private addCustomContentType() {
 		const settings = this.plugin.settings;
-		const newType: CustomContentType = {
-			id: `custom-${Date.now()}`,
-			name: `Custom ${settings.customContentTypes.length + 1}`,
+		const contentTypes = settings.contentTypes || [];
+		const newType: ContentType = {
+			id: `content-${Date.now()}`,
+			name: `Content ${contentTypes.length + 1}`,
 			folder: "",
 			linkBasePath: "",
 			template: '---\ntitle: "{{title}}"\ndate: {{date}}\n---\n',
@@ -753,8 +419,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			creationMode: "file",
 			indexFileName: "",
 			ignoreSubfolders: false,
+			enableUnderscorePrefix: false,
 		};
-		settings.customContentTypes.push(newType);
+		contentTypes.push(newType);
+		settings.contentTypes = contentTypes;
 		void this.plugin.saveSettings();
 		this.renderCustomContentTypes();
 		this.plugin.registerCreateEvent();
@@ -766,7 +434,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		this.customContentTypesContainer.empty();
 		const settings = this.plugin.settings;
 
-		settings.customContentTypes.forEach((customType: CustomContentType, index: number) => {
+		const contentTypes = settings.contentTypes || [];
+		contentTypes.forEach((customType: ContentType, index: number) => {
 			if (!this.customContentTypesContainer) return;
 			const typeContainer = this.customContentTypesContainer.createDiv({ 
 				cls: "custom-content-type-item",
@@ -779,7 +448,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			
 			// Left side - just the name
 			const headerName = header.createDiv();
-			headerName.createEl("div", { text: `Custom ${index + 1}`, cls: "setting-item-name" });
+			headerName.createEl("div", { text: customType.name || `Content ${index + 1}`, cls: "setting-item-name" });
 			
 			// Right side - toggle
 			const toggleContainer = header.createDiv({ cls: "checkbox-container" });
@@ -858,20 +527,30 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 			// Folder location
 			const folderContainer = settingsContainer.createDiv();
-			new Setting(folderContainer)
+			const folderSetting = new Setting(folderContainer)
 				.setName("Folder location")
-				.setDesc("Folder path where this content type will be created. Supports wildcards like directory/* or directory/*/* to match specific folder depths.")
+				.setDesc("Folder path where this content type will be created. Leave blank to use the vault folder. Supports wildcards like directory/* or directory/*/* to match specific folder depths.")
 				.addText((text) => {
 					text
-						.setPlaceholder("Enter folder path (e.g., 'docs', 'docs/*', 'docs/*/*')")
+						.setPlaceholder("Enter folder path (e.g., 'docs', 'docs/*', 'docs/*/*') or leave blank for vault root")
 						.setValue(customType.folder)
 						.onChange(async (value: string) => {
 							customType.folder = value;
 							await this.plugin.saveSettings();
 							this.plugin.registerCreateEvent();
 							this.updateCustomContentTypeIgnoreSubfoldersField(customType.id);
+							// Update conflict warnings for all content types (folder change may affect others)
+							const allContentTypes = this.plugin.settings.contentTypes || [];
+							for (const ct of allContentTypes) {
+								this.updateFolderConflictWarning(ct.id, null);
+							}
 						});
 				});
+			
+			// Add conflict warning element
+			const conflictWarningEl = folderContainer.createDiv({ cls: "astro-composer-conflict-warning", attr: { "data-type-id": customType.id } });
+			conflictWarningEl.style.display = "none";
+			this.updateFolderConflictWarning(customType.id, folderSetting);
 
 			// Ignore subfolders (only show when folder is set)
 			const ignoreSubfoldersContainer = settingsContainer.createDiv({ cls: "custom-ignore-subfolders-field" });
@@ -886,6 +565,20 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						.setValue(customType.ignoreSubfolders || false)
 						.onChange(async (value: boolean) => {
 							customType.ignoreSubfolders = value;
+							await this.plugin.saveSettings();
+						})
+				);
+
+			// Underscore prefix
+			const underscorePrefixContainer = settingsContainer.createDiv();
+			new Setting(underscorePrefixContainer)
+				.setName("Use underscore prefix for drafts")
+				.setDesc("Add an underscore prefix (_content-title) to new notes by default when enabled. This hides them from Astro, which can be helpful for drafts.")
+				.addToggle((toggle) =>
+					toggle
+						.setValue(customType.enableUnderscorePrefix || false)
+						.onChange(async (value: boolean) => {
+							customType.enableUnderscorePrefix = value;
 							await this.plugin.saveSettings();
 						})
 				);
@@ -970,8 +663,19 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					button
 						.setButtonText("Remove")
 						.setWarning()
-						.onClick(() => {
-							this.removeCustomContentType(customType.id);
+						.onClick(async () => {
+							const contentType = this.plugin.settings.contentTypes.find(ct => ct.id === customType.id);
+							const typeName = contentType?.name || "content type";
+							const modal = new ConfirmModal(
+								this.app,
+								`Are you sure you want to remove "${typeName}"? This action cannot be undone.`,
+								"Remove",
+								"Cancel"
+							);
+							const confirmed = await modal.waitForResult();
+							if (confirmed) {
+								this.removeCustomContentType(customType.id);
+							}
 						});
 				});
 			
@@ -981,6 +685,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			// Set initial visibility
 			this.updateCustomContentTypeVisibility(customType.id, customType.enabled);
 		});
+		
+		// Update conflict warnings for all types after rendering (folder changes may affect others)
+		contentTypes.forEach((customType: ContentType) => {
+			this.updateFolderConflictWarning(customType.id, null);
+		});
 
 		// Add button for creating new custom content types
 		const addButtonContainer = this.customContentTypesContainer.createDiv();
@@ -988,7 +697,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			.setName("")
 			.addButton((button) => {
 				button
-					.setButtonText("Add custom content type")
+					.setButtonText("Add content type")
 					.setCta()
 					.onClick(() => {
 						this.addCustomContentType();
@@ -1008,7 +717,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	}
 
 	private updateCustomContentTypeIndexFileField(typeId: string) {
-		const customType = this.plugin.settings.customContentTypes.find(type => type.id === typeId);
+		const contentTypes = this.plugin.settings.contentTypes || [];
+		const customType = contentTypes.find(type => type.id === typeId);
 		if (!customType) return;
 
 		const indexFileContainer = this.customContentTypesContainer?.querySelector(`[data-type-id="${typeId}"] .custom-index-file-field`) as HTMLElement;
@@ -1019,26 +729,61 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	}
 
 	private updateCustomContentTypeIgnoreSubfoldersField(typeId: string) {
-		const customType = this.plugin.settings.customContentTypes.find(type => type.id === typeId);
+		const contentTypes = this.plugin.settings.contentTypes || [];
+		const customType = contentTypes.find(type => type.id === typeId);
 		if (!customType) return;
 
 		const ignoreSubfoldersContainer = this.customContentTypesContainer?.querySelector(`[data-type-id="${typeId}"].custom-ignore-subfolders-field`) as HTMLElement;
 		if (ignoreSubfoldersContainer) {
-			ignoreSubfoldersContainer.classList.toggle("astro-composer-setting-container-visible", !!customType.folder);
-			ignoreSubfoldersContainer.classList.toggle("astro-composer-setting-container-hidden", !customType.folder);
+			ignoreSubfoldersContainer.classList.toggle("astro-composer-setting-container-visible", !!customType.folder && customType.folder.trim() !== "");
+			ignoreSubfoldersContainer.classList.toggle("astro-composer-setting-container-hidden", !customType.folder || customType.folder.trim() === "");
 		}
 	}
 
-	private updatePagesIndexFileField() {
-		if (this.pagesIndexFileContainer) {
-			this.pagesIndexFileContainer.classList.toggle("astro-composer-setting-container-visible", this.plugin.settings.pagesCreationMode === "folder");
-			this.pagesIndexFileContainer.classList.toggle("astro-composer-setting-container-hidden", this.plugin.settings.pagesCreationMode !== "folder");
+	private updateFolderConflictWarning(typeId: string, setting: Setting | null) {
+		const contentTypes = this.plugin.settings.contentTypes || [];
+		const currentType = contentTypes.find(type => type.id === typeId);
+		if (!currentType) return;
+
+		const conflictWarningEl = this.customContentTypesContainer?.querySelector(`[data-type-id="${typeId}"].astro-composer-conflict-warning`) as HTMLElement;
+		if (!conflictWarningEl) return;
+
+		// Find conflicts - other content types with the same folder pattern
+		const currentFolder = (currentType.folder || "").trim();
+		const conflictingTypes: string[] = [];
+		
+		for (const otherType of contentTypes) {
+			if (otherType.id === typeId || !otherType.enabled) continue;
+			
+			const otherFolder = (otherType.folder || "").trim();
+			
+			// Check if folders conflict
+			// Both blank = conflict (both match vault root)
+			if (currentFolder === "" && otherFolder === "") {
+				conflictingTypes.push(otherType.name || "Unnamed");
+			}
+			// Same folder = conflict
+			else if (currentFolder === otherFolder && currentFolder !== "") {
+				conflictingTypes.push(otherType.name || "Unnamed");
+			}
+		}
+
+		if (conflictingTypes.length > 0) {
+			conflictWarningEl.style.display = "block";
+			conflictWarningEl.textContent = `⚠️ Conflict: ${conflictingTypes.join(", ")} also use${conflictingTypes.length === 1 ? "s" : ""} this folder. More specific patterns will take priority.`;
+			conflictWarningEl.style.color = "var(--text-warning)";
+			conflictWarningEl.style.fontSize = "0.9em";
+			conflictWarningEl.style.marginTop = "0.5em";
+		} else {
+			conflictWarningEl.style.display = "none";
 		}
 	}
+
 
 	private removeCustomContentType(typeId: string) {
 		const settings = this.plugin.settings;
-		settings.customContentTypes = settings.customContentTypes.filter((ct: CustomContentType) => ct.id !== typeId);
+		const contentTypes = settings.contentTypes || [];
+		settings.contentTypes = contentTypes.filter((ct: ContentType) => ct.id !== typeId);
 		void this.plugin.saveSettings();
 		this.renderCustomContentTypes();
 		this.plugin.registerCreateEvent();

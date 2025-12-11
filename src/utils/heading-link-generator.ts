@@ -34,41 +34,31 @@ export class HeadingLinkGenerator {
 		let creationMode: "file" | "folder" = "file";
 		let indexFileName = "";
 
-		// Check custom content types first (highest priority)
-		// Sort by pattern specificity so more specific patterns are checked first
-		let foundCustomType = false;
-		const sortedCustomTypes = sortByPatternSpecificity(this.settings.customContentTypes);
-		for (const customType of sortedCustomTypes) {
-			if (customType.enabled && customType.folder && matchesFolderPattern(path, customType.folder)) {
-				contentFolder = customType.folder;
-				basePath = customType.linkBasePath || "";
-				creationMode = customType.creationMode;
-				indexFileName = customType.indexFileName;
-				foundCustomType = true;
-				break;
-			}
-		}
+		// Check all content types, sorted by pattern specificity (more specific first)
+		const contentTypes = this.settings.contentTypes || [];
+		const sortedTypes = sortByPatternSpecificity(contentTypes);
 		
-		// Check pages folder (second priority)
-		if (!foundCustomType && this.settings.enablePages && this.settings.pagesFolder && path.startsWith(this.settings.pagesFolder + '/')) {
-			contentFolder = this.settings.pagesFolder;
-			basePath = this.settings.pagesLinkBasePath;
-			creationMode = this.settings.pagesCreationMode || "file";
-			indexFileName = this.settings.pagesIndexFileName || "";
-		}
-		// Check posts folder (third priority)
-		else if (!foundCustomType && this.settings.postsFolder && path.startsWith(this.settings.postsFolder + '/')) {
-			contentFolder = this.settings.postsFolder;
-			basePath = this.settings.postsLinkBasePath;
-			creationMode = this.settings.creationMode;
-			indexFileName = this.settings.indexFileName || "index";
-		}
-		// Check if posts folder is blank - treat ALL files as posts
-		else if (!foundCustomType && !this.settings.postsFolder && this.settings.automatePostCreation && !this.settings.onlyAutomateInPostsFolder) {
-			// When posts folder is blank, treat ALL files as posts
-			basePath = this.settings.postsLinkBasePath;
-			creationMode = this.settings.creationMode;
-			indexFileName = this.settings.indexFileName || "index";
+		for (const contentType of sortedTypes) {
+			if (!contentType.enabled) continue;
+			
+			let matches = false;
+			
+			// Handle blank folder (root) - matches files in vault root only
+			if (!contentType.folder || contentType.folder.trim() === "") {
+				if (!path.includes("/") || path.split("/").length === 1) {
+					matches = true;
+				}
+			} else if (matchesFolderPattern(path, contentType.folder)) {
+				matches = true;
+			}
+			
+			if (matches) {
+				contentFolder = contentType.folder || "";
+				basePath = contentType.linkBasePath || "";
+				creationMode = contentType.creationMode;
+				indexFileName = contentType.indexFileName || "";
+				break; // Most specific pattern wins
+			}
 		}
 
 		// Strip content folder if present

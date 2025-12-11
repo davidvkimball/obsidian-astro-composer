@@ -4,6 +4,7 @@ import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
 import { LinkConverter } from "../utils/link-conversion";
 import { TitleModal } from "../ui/title-modal";
+import { matchesFolderPattern } from "../utils/path-matching";
 
 export function registerCommands(plugin: Plugin, settings: AstroComposerSettings): void {
 	// Terminal and config commands are desktop-only - NEVER register on mobile
@@ -42,41 +43,17 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 			},
 		});
 
-		// Helper function for rename command
+		// Helper function for rename command (mobile version)
+		// Uses the same logic as FileOperations.determineType() to ensure consistency
 		function hasMatchingContentType(file: TFile, settings: AstroComposerSettings): boolean {
-			const filePath = file.path;
-			const postsFolder = settings.postsFolder || "";
-			const pagesFolder = settings.enablePages ? (settings.pagesFolder || "") : "";
-			
-			if (settings.automatePostCreation) {
-				if (postsFolder) {
-					if (filePath.startsWith(postsFolder + "/") || filePath === postsFolder) {
-						return true;
-					}
-				} else {
-					if (!filePath.includes("/") || (filePath.includes("/") && !filePath.startsWith("/") && filePath.split("/").length === 2)) {
-						return true;
-					}
-				}
-			}
-			
-			if (settings.enablePages) {
-				if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
-					return true;
-				} else if (!pagesFolder && !filePath.includes("/")) {
-					return true;
-				}
-			}
-			
 			const type = fileOps.determineType(file);
-			if (fileOps.isCustomContentType(type)) {
-				const customType = fileOps.getCustomContentType(type);
-				if (customType && customType.enabled) {
-					return true;
-				}
+			// If determineType returns "note", it means no content type matched
+			if (type === "note") {
+				return false;
 			}
-			
-			return false;
+			// Check if the matched content type is enabled
+			const contentType = fileOps.getContentType(type);
+			return contentType !== null && contentType.enabled;
 		}
 
 		plugin.addCommand({
@@ -115,47 +92,16 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 
 
 	// Helper function to check if a file matches any configured content type
+	// Uses the same logic as FileOperations.determineType() to ensure consistency
 	function hasMatchingContentType(file: TFile, settings: AstroComposerSettings): boolean {
-		const filePath = file.path;
-		const postsFolder = settings.postsFolder || "";
-		const pagesFolder = settings.enablePages ? (settings.pagesFolder || "") : "";
-		
-		// Check if it's a post (only if automation is enabled)
-		if (settings.automatePostCreation) {
-			if (postsFolder) {
-				// If postsFolder is specified, check if file is in that folder
-				if (filePath.startsWith(postsFolder + "/") || filePath === postsFolder) {
-					return true;
-				}
-			} else {
-				// If postsFolder is blank, only treat files in vault root as posts
-				// This includes both direct files and folder-based posts in vault root
-				if (!filePath.includes("/") || (filePath.includes("/") && !filePath.startsWith("/") && filePath.split("/").length === 2)) {
-					return true;
-				}
-			}
-		}
-		
-		// Check if it's a page (automation is automatic when pages are enabled)
-		if (settings.enablePages) {
-			if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
-				return true;
-			} else if (!pagesFolder && !filePath.includes("/")) {
-				// If pagesFolder is blank, only treat files in vault root as pages
-				return true;
-			}
-		}
-		
-		// Check if it's a custom content type
 		const type = fileOps.determineType(file);
-		if (fileOps.isCustomContentType(type)) {
-			const customType = fileOps.getCustomContentType(type);
-			if (customType && customType.enabled) {
-				return true;
-			}
+		// If determineType returns "note", it means no content type matched
+		if (type === "note") {
+			return false;
 		}
-		
-		return false;
+		// Check if the matched content type is enabled
+		const contentType = fileOps.getContentType(type);
+		return contentType !== null && contentType.enabled;
 	}
 
 	// Standardize Properties command
@@ -267,13 +213,18 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 	let templateString: string;
 	
 	// Determine template based on content type
-	if (fileOps.isCustomContentType(type)) {
-		const customType = fileOps.getCustomContentType(type);
-		templateString = customType ? customType.template : settings.defaultTemplate;
-	} else {
-		const isPage = type === "page";
-		templateString = isPage ? settings.pageTemplate : settings.defaultTemplate;
+	if (type === "note") {
+		new Notice("No properties template specified for this content. This file doesn't match any configured content type folders.");
+		return;
 	}
+	
+	const contentType = fileOps.getContentType(type);
+	if (!contentType) {
+		new Notice("Content type not found.");
+		return;
+	}
+	
+	templateString = contentType.template;
 
 	// Wait briefly to allow editor state to stabilize
 	await new Promise(resolve => setTimeout(resolve, 100));
@@ -346,41 +297,17 @@ export async function renameContentByPath(
 
 	const fileOps = new FileOperations(app, settings, plugin as unknown as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
 
-	// Helper function to check if file matches content type (copy from registerCommands)
+	// Helper function to check if file matches content type
+	// Uses the same logic as FileOperations.determineType() to ensure consistency
 	function hasMatchingContentType(file: TFile, settings: AstroComposerSettings): boolean {
-		const filePath = file.path;
-		const postsFolder = settings.postsFolder || "";
-		const pagesFolder = settings.enablePages ? (settings.pagesFolder || "") : "";
-
-		if (settings.automatePostCreation) {
-			if (postsFolder) {
-				if (filePath.startsWith(postsFolder + "/") || filePath === postsFolder) {
-					return true;
-				}
-			} else {
-				if (!filePath.includes("/") || (filePath.includes("/") && !filePath.startsWith("/") && filePath.split("/").length === 2)) {
-					return true;
-				}
-			}
-		}
-
-		if (settings.enablePages) {
-			if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
-				return true;
-			} else if (!pagesFolder && !filePath.includes("/")) {
-				return true;
-			}
-		}
-
 		const type = fileOps.determineType(file);
-		if (fileOps.isCustomContentType(type)) {
-			const customType = fileOps.getCustomContentType(type);
-			if (customType && customType.enabled) {
-				return true;
-			}
+		// If determineType returns "note", it means no content type matched
+		if (type === "note") {
+			return false;
 		}
-
-		return false;
+		// Check if the matched content type is enabled
+		const contentType = fileOps.getContentType(type);
+		return contentType !== null && contentType.enabled;
 	}
 
 	if (!hasMatchingContentType(file, settings)) {

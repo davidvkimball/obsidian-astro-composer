@@ -1,5 +1,5 @@
 import { App, TFile, Notice } from "obsidian";
-import { AstroComposerSettings, ParsedFrontmatter, TemplateValues, KNOWN_ARRAY_KEYS, CustomContentType, ContentType } from "../types";
+import { AstroComposerSettings, ParsedFrontmatter, TemplateValues, KNOWN_ARRAY_KEYS, ContentType, ContentTypeId } from "../types";
 
 export class TemplateParser {
 	constructor(private app: App, private settings: AstroComposerSettings) {}
@@ -174,7 +174,7 @@ export class TemplateParser {
 		return newContent;
 	}
 
-	async updateTitleInFrontmatter(file: TFile, newTitle: string, type: ContentType): Promise<void> {
+	async updateTitleInFrontmatter(file: TFile, newTitle: string, type: ContentTypeId): Promise<void> {
 		const titleKey = this.getTitleKey(type);
 		const content = await this.app.vault.read(file);
 		let propertiesEnd = 0;
@@ -285,17 +285,14 @@ export class TemplateParser {
 		await this.app.vault.modify(file, newContent);
 	}
 
-	private getTitleKey(type: ContentType): string {
-		let template: string;
+	private getTitleKey(type: ContentTypeId): string {
+		if (type === "note") return "title";
 		
-		if (this.isCustomContentType(type)) {
-			const customType = this.getCustomContentType(type);
-			if (!customType) return "title";
-			template = customType.template;
-		} else {
-			template = type === "post" ? this.settings.defaultTemplate : this.settings.pageTemplate;
-		}
+		const contentTypes = this.settings.contentTypes || [];
+		const contentType = contentTypes.find(ct => ct.id === type);
+		if (!contentType) return "title";
 		
+		const template = contentType.template;
 		const lines = template.split("\n");
 		let inProperties = false;
 		for (const line of lines) {
@@ -316,13 +313,5 @@ export class TemplateParser {
 			}
 		}
 		return "title";
-	}
-
-	private isCustomContentType(type: ContentType): boolean {
-		return type !== "post" && type !== "page";
-	}
-
-	private getCustomContentType(typeId: string): CustomContentType | null {
-		return this.settings.customContentTypes.find(ct => ct.id === typeId) || null;
 	}
 }

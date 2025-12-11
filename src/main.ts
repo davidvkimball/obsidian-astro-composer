@@ -7,10 +7,11 @@ import {
 } from "obsidian";
 
 import { AstroComposerSettings, DEFAULT_SETTINGS, CONSTANTS } from "./settings";
-import { AstroComposerPluginInterface } from "./types";
+import { AstroComposerPluginInterface, ContentType } from "./types";
 import { registerCommands, renameContentByPath as renameContentByPathFunction, openTerminalInProjectRoot, openConfigFile } from "./commands";
 import { AstroComposerSettingTab } from "./ui/settings-tab";
 import { TitleModal } from "./ui/title-modal";
+import { MigrationModal, MigrationConflictResult } from "./ui/components/MigrationModal";
 import { FileOperations } from "./utils/file-operations";
 import { TemplateParser } from "./utils/template-parsing";
 import { HeadingLinkGenerator } from "./utils/heading-link-generator";
@@ -31,11 +32,178 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	private helpButtonElement?: HTMLElement;
 	private customHelpButton?: HTMLElement;
 	private helpButtonStyleEl?: HTMLStyleElement;
+	private settingsTab?: AstroComposerSettingTab;
+
+	/**
+	 * Migrate old posts/pages settings to unified content types
+	 */
+	private async migrateSettingsIfNeeded(): Promise<void> {
+		// Check if migration is already completed
+		if (this.settings.migrationCompleted) {
+			return;
+		}
+
+		// Check if there are old settings to migrate
+		const hasPostsSettings = this.settings.automatePostCreation !== undefined && this.settings.automatePostCreation;
+		const hasPagesSettings = this.settings.enablePages !== undefined && this.settings.enablePages;
+
+		if (!hasPostsSettings && !hasPagesSettings) {
+			// No old settings to migrate, mark as completed
+			this.settings.migrationCompleted = true;
+			await this.saveSettings();
+			return;
+		}
+
+		// Check for naming conflicts
+		// Handle both new contentTypes and legacy customContentTypes
+		const existingContentTypes = this.settings.contentTypes || (this.settings as any).customContentTypes || [];
+		const conflicts: string[] = [];
+		if (existingContentTypes.some((ct: ContentType) => ct.name === "Posts")) {
+			conflicts.push("Posts");
+		}
+		if (existingContentTypes.some((ct: ContentType) => ct.name === "Pages")) {
+			conflicts.push("Pages");
+		}
+
+		let shouldMigrate = true;
+		let useRenamedTypes = false;
+
+		// If conflicts exist, prompt user (but don't block - use setTimeout to show modal after UI is ready)
+		if (conflicts.length > 0) {
+			// Show modal asynchronously to avoid blocking plugin load
+			await new Promise<void>((resolve) => {
+				setTimeout(async () => {
+					try {
+						const modal = new MigrationModal(this.app, conflicts);
+						// Add timeout fallback - if user doesn't respond in 30 seconds, default to skip
+						const timeoutPromise = new Promise<MigrationConflictResult>((timeoutResolve) => {
+							setTimeout(() => {
+								timeoutResolve({ action: "skip" });
+							}, 30000); // 30 second timeout
+						});
+						
+						const result = await Promise.race([
+							modal.waitForResult(),
+							timeoutPromise
+						]);
+						
+						if (result.action === "skip") {
+							shouldMigrate = false;
+							new Notice("Migration skipped. Old Posts/Pages settings will be ignored.");
+						} else {
+							useRenamedTypes = true;
+						}
+					} catch (error) {
+						// If modal fails for any reason, default to skip to prevent blocking
+						console.error("Migration modal error:", error);
+						shouldMigrate = false;
+						new Notice("Migration skipped due to error. You can migrate manually in settings.");
+					}
+					resolve();
+				}, 500); // Small delay to ensure UI is ready
+			});
+		}
+
+		if (!shouldMigrate) {
+			this.settings.migrationCompleted = true;
+			await this.saveSettings();
+			return;
+		}
+
+		// Perform migration
+		const migratedTypes: ContentType[] = [];
+
+		// Migrate Posts - skip if it already exists (don't overwrite user's existing config)
+		if (hasPostsSettings && !conflicts.includes("Posts")) {
+			const postsType: ContentType = {
+				id: `posts-${Date.now()}`,
+				name: "Posts",
+				folder: this.settings.postsFolder || "",
+				linkBasePath: this.settings.postsLinkBasePath || "",
+				template: this.settings.defaultTemplate || '---\ntitle: "{{title}}"\ndate: {{date}}\ntags: []\n---\n',
+				enabled: this.settings.automatePostCreation || false,
+				creationMode: this.settings.creationMode || "file",
+				indexFileName: this.settings.indexFileName || "",
+				ignoreSubfolders: this.settings.onlyAutomateInPostsFolder || false,
+				enableUnderscorePrefix: this.settings.enableUnderscorePrefix || false,
+			};
+			migratedTypes.push(postsType);
+		}
+
+		// Migrate Pages - skip if it already exists (don't overwrite user's existing config)
+		if (hasPagesSettings && !conflicts.includes("Pages")) {
+			const pagesType: ContentType = {
+				id: `pages-${Date.now()}`,
+				name: "Pages",
+				folder: this.settings.pagesFolder || "",
+				linkBasePath: this.settings.pagesLinkBasePath || "",
+				template: this.settings.pageTemplate || '---\ntitle: "{{title}}"\ndescription: ""\n---\n',
+				enabled: this.settings.enablePages || false,
+				creationMode: this.settings.pagesCreationMode || "file",
+				indexFileName: this.settings.pagesIndexFileName || "",
+				ignoreSubfolders: this.settings.onlyAutomateInPagesFolder || false,
+				enableUnderscorePrefix: false, // Pages didn't have this option before
+			};
+			migratedTypes.push(pagesType);
+		}
+
+		// Add migrated types to content types array
+		// CRITICAL: Preserve ALL existing content types, don't overwrite them
+		// Get existing types from both possible sources
+		const existingFromNew = this.settings.contentTypes && Array.isArray(this.settings.contentTypes) 
+			? this.settings.contentTypes 
+			: [];
+		const existingFromLegacy = (this.settings as any).customContentTypes && Array.isArray((this.settings as any).customContentTypes)
+			? (this.settings as any).customContentTypes
+			: [];
+		
+		// Merge existing types, prioritizing new format but including legacy if new is empty
+		// If both exist, use new format (it's more recent)
+		let existingTypes: ContentType[] = [];
+		if (existingFromNew.length > 0) {
+			existingTypes = existingFromNew;
+		} else if (existingFromLegacy.length > 0) {
+			existingTypes = existingFromLegacy;
+		}
+		
+		// Only add migrated types if we have any
+		// Don't filter out existing types - if they already exist, we skipped migration for them
+		let finalTypes: ContentType[] = [...existingTypes];
+		if (migratedTypes.length > 0) {
+			// Add migrated types to the end
+			finalTypes = [...existingTypes, ...migratedTypes];
+		}
+		
+		// Set the final content types array
+		this.settings.contentTypes = finalTypes;
+		
+		// Clean up legacy customContentTypes reference if it exists
+		if ((this.settings as any).customContentTypes) {
+			delete (this.settings as any).customContentTypes;
+		}
+
+		// Mark migration as completed
+		this.settings.migrationCompleted = true;
+		await this.saveSettings();
+
+		if (migratedTypes.length > 0) {
+			new Notice(`Migration completed: ${migratedTypes.length} content type(s) migrated.`);
+		}
+		
+		new Notice(`Migration completed: ${migratedTypes.length} content type(s) migrated.`);
+		
+		// Refresh settings tab if it exists and has been displayed
+		// This ensures migrated content types appear immediately without needing to reload
+		if (this.settingsTab && this.settingsTab.customContentTypesContainer) {
+			// Refresh just the content types section for efficiency
+			this.settingsTab.refreshContentTypes();
+		}
+	}
 
 	async onload() {
 		await this.loadSettings();
 
-		// Initialize utilities
+		// Initialize utilities first (don't block on migration)
 		this.fileOps = new FileOperations(this.app, this.settings, this as unknown as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
 		this.templateParser = new TemplateParser(this.app, this.settings);
 		this.headingLinkGenerator = new HeadingLinkGenerator(this.settings);
@@ -47,13 +215,18 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			if (!Platform.isMobile) {
 				this.updateHelpButton();
 			}
+			
+			// Run migration after plugin is fully loaded (non-blocking)
+			// This prevents the modal from blocking plugin initialization
+			void this.migrateSettingsIfNeeded();
 		});
 
 		// Register commands
 		registerCommands(this, this.settings);
 
-		// Add settings tab
-		this.addSettingTab(new AstroComposerSettingTab(this.app, this));
+		// Add settings tab and store reference for refresh after migration
+		this.settingsTab = new AstroComposerSettingTab(this.app, this);
+		this.addSettingTab(this.settingsTab);
 
 		// Register context menu for copy heading links
 		this.registerContextMenu();
@@ -68,11 +241,11 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 	public registerCreateEvent() {
 
-		// Register create event for automation
-		const hasCustomContentTypes = this.settings.customContentTypes.some(ct => ct.enabled);
-		const shouldUseCreateEvent = this.settings.automatePostCreation || this.settings.enablePages || hasCustomContentTypes;
+		// Register create event for automation if any content types are enabled
+		const contentTypes = this.settings.contentTypes || [];
+		const hasEnabledContentTypes = contentTypes.some(ct => ct.enabled);
 		
-		if (shouldUseCreateEvent) {
+		if (hasEnabledContentTypes) {
 			// Debounce to prevent multiple modals from rapid file creations
 			let lastProcessedTime = 0;
 
@@ -93,186 +266,65 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 						return;
 					}
 
-					// Check folder restrictions FIRST - only proceed if file is in a relevant folder
-					const postsFolder = this.settings.postsFolder || "";
-					const pagesFolder = this.settings.enablePages ? (this.settings.pagesFolder || "") : "";
-					let isPage = false;
-					let customTypeId: string | null = null;
-					let shouldProcess = false;
-
-					// Check exclusions FIRST - before any content type matching
-					// Only check exclusions when Posts folder is specified (when exclusions make sense)
-					let isExcluded = false;
-					if (postsFolder && this.settings.excludedDirectories) {
-						const excludedDirs = this.settings.excludedDirectories.split("|").map(dir => dir.trim()).filter(dir => dir);
-						for (const excludedDir of excludedDirs) {
-							// Check if the file is in the excluded directory (exact path match only)
-							if (filePath === excludedDir || filePath.startsWith(excludedDir + "/")) {
-								isExcluded = true;
-								break;
-							}
-						}
-					}
-
-					// If file is excluded, skip entirely
-					if (isExcluded) {
-						return;
-					}
-
-					// Check for folder conflicts only if the file is in a conflicting location
-					const fileDir = file.parent?.path || "";
-					const isInVaultRoot = fileDir === "" || fileDir === "/";
-					
-					// Find which content types would process this file
-					const applicableContentTypes: string[] = [];
-					
-					// Check if file would be processed as post
-					if (this.settings.automatePostCreation) {
-						if (!postsFolder && isInVaultRoot) {
-							applicableContentTypes.push("Posts");
-						} else if (postsFolder && (filePath.startsWith(postsFolder + "/") || filePath === postsFolder)) {
-							applicableContentTypes.push("Posts");
-						}
-					}
-					
-					// Check if file would be processed as page
-					if (this.settings.enablePages) {
-						if (!pagesFolder && isInVaultRoot) {
-							applicableContentTypes.push("Pages");
-						} else if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
-							applicableContentTypes.push("Pages");
-						}
-					}
-					
-					// Check if file would be processed as custom content type
+					// Find matching content type using pattern specificity (most specific wins)
 					// Sort by pattern specificity so more specific patterns are checked first
-					const sortedCustomTypesForConflict = sortByPatternSpecificity(this.settings.customContentTypes);
-					for (const customType of sortedCustomTypesForConflict) {
-						if (customType.enabled) {
-							if (!customType.folder && isInVaultRoot) {
-								applicableContentTypes.push(customType.name || "Custom Content");
-							} else if (customType.folder && matchesFolderPattern(filePath, customType.folder)) {
-								applicableContentTypes.push(customType.name || "Custom Content");
-							}
-						}
-					}
+					const sortedContentTypes = sortByPatternSpecificity(contentTypes);
+					let matchedContentTypeId: string | null = null;
+					const matchingTypes: ContentType[] = []; // Track all matching types for conflict detection
 					
-					// Only show conflict if multiple content types would process this specific file
-					if (applicableContentTypes.length > 1) {
-						new Notice(`⚠️ Folder conflict detected! Multiple content types (${applicableContentTypes.join(", ")}) would process this file. Please specify different folders in settings.`);
-						return;
-					}
-
-					// Check custom content types first
-					// Sort by pattern specificity so more specific patterns (like docs/*/*) are checked before less specific ones (like docs)
-					const sortedCustomTypes = sortByPatternSpecificity(this.settings.customContentTypes);
-					for (const customType of sortedCustomTypes) {
-						if (customType.enabled) {
-							if (customType.folder && matchesFolderPattern(filePath, customType.folder)) {
-								// Check if ignore subfolders is enabled
-								if (customType.ignoreSubfolders) {
-									// Only automate at the exact pattern depth (not deeper)
-									// For pattern "docs/*/*", this means depth 3 (docs/anything/anything.md)
-									const pathSegments = filePath.split("/");
-									const pathDepth = pathSegments.length;
-									// Count the number of path segments in the pattern
-									// For "docs/*/*", we want depth 3 (docs + * + *)
-									const patternSegments = customType.folder.split("/");
-									const expectedDepth = patternSegments.length;
-									
-									// For folder-based content, check if the parent folder is at the pattern depth
-									// e.g., for pattern "docs/*/*" and folder-based: docs/example-a/getting-started/index.md
-									// The parent folder "docs/example-a/getting-started" has depth 3, which matches
-									if (customType.creationMode === "folder") {
-										// Remove the filename to get the folder depth
-										const folderDepth = pathDepth - 1;
-										if (folderDepth === expectedDepth) {
-											customTypeId = customType.id;
-											shouldProcess = true;
-											break;
-										}
-									} else {
-										// For file-based content, check if the file is at exactly the pattern depth
-										if (pathDepth === expectedDepth) {
-											customTypeId = customType.id;
-											shouldProcess = true;
-											break;
-										}
-									}
-								} else {
-									// Normal automation - pattern matches, process it
-									customTypeId = customType.id;
-									shouldProcess = true;
-									break;
-								}
-							} else if (!customType.folder) {
-								// Custom content type folder is blank - treat all files as this type
-								customTypeId = customType.id;
-								shouldProcess = true;
-								break;
+					for (const contentType of sortedContentTypes) {
+						if (!contentType.enabled) continue;
+						
+						let matches = false;
+						
+						// Handle blank folder (root) - matches files in vault root only
+						if (!contentType.folder || contentType.folder.trim() === "") {
+							if (!filePath.includes("/") || filePath.split("/").length === 1) {
+								matches = true;
 							}
-						}
-					}
-
-					if (!customTypeId) {
-						// Check if it's a page (automation is automatic when pages are enabled)
-						if (this.settings.enablePages) {
-							if (pagesFolder && (filePath.startsWith(pagesFolder + "/") || filePath === pagesFolder)) {
-								// Check if ignore subfolders is enabled
-								if (this.settings.onlyAutomateInPagesFolder) {
-									// Only automate in pages folder and one level down
-									const pathDepth = filePath.split("/").length;
-									const pagesDepth = pagesFolder.split("/").length;
-									
-									// Allow files in pages folder and exactly one level down
-									if (pathDepth <= pagesDepth + 1) {
-										isPage = true;
-										shouldProcess = true;
-									}
-								} else {
-									// Normal automation - check if file is in pages folder
-									isPage = true;
-									shouldProcess = true;
-								}
-							} else if (!pagesFolder && isInVaultRoot) {
-								// Pages folder is blank - only treat files in vault root as pages
-								isPage = true;
-								shouldProcess = true;
-							}
-						}
-					}
-
-					// Check posts folder - but only if not already matched as page or custom content type
-					if (!shouldProcess && this.settings.automatePostCreation) {
-						// Only process as post if meets posts folder criteria
-						if (postsFolder) {
-							// Posts folder is specified
-							if (this.settings.onlyAutomateInPostsFolder) {
-								// Only automate in posts folder and one level down
-								const pathDepth = filePath.split("/").length;
-								const postsDepth = postsFolder.split("/").length;
+						} else if (matchesFolderPattern(filePath, contentType.folder)) {
+							// Check if ignore subfolders is enabled
+							if (contentType.ignoreSubfolders) {
+								const pathSegments = filePath.split("/");
+								const pathDepth = pathSegments.length;
+								const patternSegments = contentType.folder.split("/");
+								const expectedDepth = patternSegments.length;
 								
-								if (filePath.startsWith(postsFolder + "/") || filePath === postsFolder) {
-									// Allow files in posts folder and exactly one level down
-									if (pathDepth <= postsDepth + 1) {
-										shouldProcess = true;
+								if (contentType.creationMode === "folder") {
+									// For folder-based creation, files are one level deeper (e.g., test/my-file/index.md)
+									// So we need to allow one extra level beyond the pattern depth
+									const folderDepth = pathDepth - 1; // Subtract 1 for the index.md file
+									if (folderDepth === expectedDepth || folderDepth === expectedDepth + 1) {
+										matches = true;
+									}
+								} else {
+									// For file-based creation, files are at the same depth as the pattern
+									if (pathDepth === expectedDepth) {
+										matches = true;
 									}
 								}
 							} else {
-								// Normal automation - check if file is in posts folder
-								if (filePath.startsWith(postsFolder + "/") || filePath === postsFolder) {
-									shouldProcess = true;
-								}
+								matches = true;
 							}
-						} else {
-							// Posts folder is blank - treat all files as posts (like pages)
-							shouldProcess = true;
+						}
+						
+						if (matches) {
+							matchingTypes.push(contentType);
+							// Use the first matching type (most specific due to sorting)
+							if (!matchedContentTypeId) {
+								matchedContentTypeId = contentType.id;
+							}
 						}
 					}
+					
+					// Show conflict warning if multiple content types match
+					if (matchingTypes.length > 1) {
+						const typeNames = matchingTypes.map(ct => ct.name || "Unnamed").join(", ");
+						new Notice(`⚠️ Multiple content types (${typeNames}) match this file. Using most specific: ${matchingTypes[0].name || "Unnamed"}`);
+					}
 
-
-					// If not in any relevant folder, skip entirely
-					if (!shouldProcess) {
+					// If no content type matches, skip entirely
+					if (!matchedContentTypeId) {
 						return;
 					}
 
@@ -300,15 +352,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 					// Mark the original file as handled to prevent it from triggering the create event again
 					this.pluginCreatedFiles.add(file.path);
 					
-					// Show the appropriate modal
-					if (customTypeId) {
-						new TitleModal(this.app, file, this, customTypeId, false, true).open();
-					} else if (isPage) {
-						new TitleModal(this.app, file, this, "page", false, true).open();
-					} else {
-						// This is a post
-						new TitleModal(this.app, file, this, "post", false, true).open();
-					}
+					// Show the modal with the matched content type
+					new TitleModal(this.app, file, this, matchedContentTypeId, false, true).open();
 				}
 				})();
 			};
@@ -322,7 +367,23 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const loadedData = await this.loadData();
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
+		
+		// Ensure contentTypes is always an array (never undefined or null)
+		if (!this.settings.contentTypes || !Array.isArray(this.settings.contentTypes)) {
+			this.settings.contentTypes = [];
+		}
+		
+		// Migrate legacy customContentTypes to contentTypes if needed (before migration runs)
+		// Check if contentTypes is empty/undefined and customContentTypes exists
+		const hasLegacyTypes = (this.settings as any).customContentTypes && Array.isArray((this.settings as any).customContentTypes) && (this.settings as any).customContentTypes.length > 0;
+		const hasNewTypes = this.settings.contentTypes && Array.isArray(this.settings.contentTypes) && this.settings.contentTypes.length > 0;
+		
+		if (hasLegacyTypes && !hasNewTypes) {
+			// Preserve existing custom content types
+			this.settings.contentTypes = (this.settings as any).customContentTypes;
+		}
 	}
 
 	async saveSettings() {

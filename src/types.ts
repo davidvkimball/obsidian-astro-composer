@@ -1,24 +1,9 @@
 import { TFile } from "obsidian";
 
 export interface AstroComposerSettings {
-	enableUnderscorePrefix: boolean;
-	defaultTemplate: string;
-	postsFolder: string;
-	postsLinkBasePath: string;
-	automatePostCreation: boolean;
+	defaultTemplate: string; // Kept temporarily for migration
 	autoInsertProperties: boolean;
-	creationMode: "file" | "folder";
-	indexFileName: string;
 	dateFormat: string;
-	excludedDirectories: string;
-	onlyAutomateInPostsFolder: boolean;
-	enablePages: boolean;
-	pagesFolder: string;
-	pagesLinkBasePath: string;
-	pagesCreationMode: "file" | "folder";
-	pagesIndexFileName: string;
-	pageTemplate: string;
-	onlyAutomateInPagesFolder: boolean;
 	enableCopyHeadingLink: boolean;
 	copyHeadingLinkFormat: "obsidian" | "astro";
 	addTrailingSlashToLinks: boolean;
@@ -28,8 +13,26 @@ export interface AstroComposerSettings {
 	enableOpenConfigFileCommand: boolean;
 	configFilePath: string;
 	enableConfigRibbonIcon: boolean;
-	customContentTypes: CustomContentType[];
+	contentTypes: ContentType[];
 	helpButtonReplacement: HelpButtonReplacementSettings;
+	migrationCompleted: boolean;
+	// Legacy fields (kept for migration, ignored after migration)
+	enableUnderscorePrefix?: boolean;
+	postsFolder?: string;
+	postsLinkBasePath?: string;
+	automatePostCreation?: boolean;
+	creationMode?: "file" | "folder";
+	indexFileName?: string;
+	excludedDirectories?: string;
+	onlyAutomateInPostsFolder?: boolean;
+	enablePages?: boolean;
+	pagesFolder?: string;
+	pagesLinkBasePath?: string;
+	pagesCreationMode?: "file" | "folder";
+	pagesIndexFileName?: string;
+	pageTemplate?: string;
+	onlyAutomateInPagesFolder?: boolean;
+	customContentTypes?: ContentType[]; // Legacy name
 }
 
 export interface HelpButtonReplacementSettings {
@@ -49,13 +52,10 @@ export interface TemplateValues {
 	[key: string]: string[] | string;
 }
 
-export type PostType = "post" | "page";
+// ContentType is now just a string ID - no distinction between built-in and custom types
+export type ContentTypeId = string;
 
-// ContentType represents either a built-in PostType or a custom content type ID (string)
-// Using a helper type to prevent TypeScript from simplifying PostType | string to just string
-export type ContentType = PostType | (string & {});
-
-export interface CustomContentType {
+export interface ContentType {
 	id: string;
 	name: string;
 	folder: string;
@@ -65,18 +65,19 @@ export interface CustomContentType {
 	creationMode: "file" | "folder";
 	indexFileName: string;
 	ignoreSubfolders: boolean;
+	enableUnderscorePrefix: boolean;
 }
 
 export interface FileCreationOptions {
 	file: TFile;
 	title: string;
-	type: ContentType; // PostType for posts/pages, string for custom content types
+	type: ContentTypeId; // Content type ID (string)
 }
 
 export interface RenameOptions {
 	file: TFile;
 	title: string;
-	type: ContentType; // PostType for posts/pages, string for custom content types
+	type: ContentTypeId; // Content type ID (string)
 }
 
 export const KNOWN_ARRAY_KEYS = ['tags', 'aliases', 'cssclasses'] as const;

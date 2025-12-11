@@ -17,9 +17,11 @@
  * @returns true if the file path matches the pattern
  */
 export function matchesFolderPattern(filePath: string, folderPattern: string): boolean {
-	// Handle empty folder pattern
-	if (!folderPattern) {
-		return false;
+	// Handle empty folder pattern (root folder) - matches files in vault root only
+	if (!folderPattern || folderPattern.trim() === "") {
+		// Root folder matches files that don't have any path separators
+		// or are in vault root (no leading slash, single segment)
+		return !filePath.includes("/") || (filePath.split("/").length === 1);
 	}
 
 	// If pattern doesn't contain wildcards, use simple prefix matching
@@ -42,23 +44,26 @@ export function matchesFolderPattern(filePath: string, folderPattern: string): b
 /**
  * Gets the depth of a folder pattern (number of segments)
  * Used for prioritizing more specific patterns
+ * Blank/root folder has depth 0 (least specific)
  * @param folderPattern The folder pattern
- * @returns The number of path segments in the pattern
+ * @returns The number of path segments in the pattern (0 for root/blank)
  */
 export function getPatternDepth(folderPattern: string): number {
-	if (!folderPattern) return 0;
+	if (!folderPattern || folderPattern.trim() === "") return 0;
 	return folderPattern.split("/").length;
 }
 
 /**
- * Sorts custom content types by pattern specificity (more specific patterns first)
+ * Sorts content types by pattern specificity (more specific patterns first)
  * This ensures that more specific patterns are checked before less specific ones
+ * Blank/root folder patterns (depth 0) are sorted last (least specific)
  */
 export function sortByPatternSpecificity<T extends { folder: string }>(types: T[]): T[] {
 	return [...types].sort((a, b) => {
 		const depthA = getPatternDepth(a.folder);
 		const depthB = getPatternDepth(b.folder);
 		// More specific (deeper) patterns first
+		// Blank patterns (depth 0) will be sorted last
 		return depthB - depthA;
 	});
 }

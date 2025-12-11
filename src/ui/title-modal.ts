@@ -1,19 +1,19 @@
 import { App, Modal, TFile, Notice, Platform } from "obsidian";
-import { AstroComposerPluginInterface, ContentType } from "../types";
+import { AstroComposerPluginInterface, ContentTypeId } from "../types";
 import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
 
 export class TitleModal extends Modal {
 	file: TFile | null;
 	plugin: AstroComposerPluginInterface;
-	type: ContentType;
+	type: ContentTypeId;
 	isRename: boolean;
 	isNewNote: boolean;
 	titleInput!: HTMLInputElement;
 	private fileOps: FileOperations;
 	private templateParser: TemplateParser;
 
-	constructor(app: App, file: TFile | null, plugin: AstroComposerPluginInterface, type: ContentType = "post", isRename = false, isNewNote = false) {
+	constructor(app: App, file: TFile | null, plugin: AstroComposerPluginInterface, type: ContentTypeId, isRename = false, isNewNote = false) {
 		super(app);
 		this.file = file;
 		this.plugin = plugin;
@@ -35,11 +35,12 @@ export class TitleModal extends Modal {
 		const titleKey = this.fileOps.getTitleKey(this.type);
 		const cache = this.app.metadataCache.getFileCache(this.file);
 		let basename = this.file.basename;
-		if (this.file.parent && 
-			this.plugin.settings.indexFileName && 
-			this.plugin.settings.indexFileName.trim() !== "" && 
-			basename === this.plugin.settings.indexFileName) {
-			basename = this.file.parent.name;
+		if (this.file.parent && this.type !== "note") {
+			const contentType = this.fileOps.getContentType(this.type);
+			const indexFileName = contentType?.indexFileName || "";
+			if (indexFileName.trim() !== "" && basename === indexFileName) {
+				basename = this.file.parent.name;
+			}
 		}
 		if (basename.startsWith("_")) {
 			basename = basename.slice(1);
@@ -65,26 +66,11 @@ export class TitleModal extends Modal {
 		let basename = this.file.basename;
 
 		// Handle index file names - use parent folder name instead
-		if (this.file.parent) {
-			// Check custom content type index file names
-			if (this.fileOps.isCustomContentType(this.type)) {
-				const customType = this.fileOps.getCustomContentType(this.type);
-				if (customType?.indexFileName && customType.indexFileName.trim() !== "" && 
-					basename === customType.indexFileName) {
-					basename = this.file.parent.name;
-				}
-			} else if (this.type === "page") {
-				// Check pages index file name
-				const pagesIndexFileName = this.plugin.settings.pagesIndexFileName || "";
-				if (pagesIndexFileName.trim() !== "" && basename === pagesIndexFileName) {
-					basename = this.file.parent.name;
-				}
-			} else {
-				// Check posts index file name
-				const postsIndexFileName = this.plugin.settings.indexFileName || "";
-				if (postsIndexFileName.trim() !== "" && basename === postsIndexFileName) {
-					basename = this.file.parent.name;
-				}
+		if (this.file.parent && this.type !== "note") {
+			const contentType = this.fileOps.getContentType(this.type);
+			const indexFileName = contentType?.indexFileName || "";
+			if (indexFileName.trim() !== "" && basename === indexFileName) {
+				basename = this.file.parent.name;
 			}
 		}
 
@@ -110,59 +96,53 @@ export class TitleModal extends Modal {
 
 		if (this.isRename) {
 			const typeName = this.getTypeDisplayName();
-			const isCustomType = this.fileOps.isCustomContentType(this.type);
 			
-			if (isCustomType) {
-				contentEl.createEl("h2", { text: `Rename custom type: ${typeName}` });
-				contentEl.createEl("p", { text: "Enter a new title for this content type:" });
-			} else if (this.type === "note") {
+			if (this.type === "note") {
 				// For generic notes outside of any known content type
-				contentEl.createEl("h2", { text: "Rename custom content type" });
-				contentEl.createEl("p", { text: "Enter a title for this content type:" });
+				contentEl.createEl("h2", { text: "Rename content" });
+				contentEl.createEl("p", { text: "Enter a title for this content:" });
 			} else {
-				contentEl.createEl("h2", { text: `Rename ${typeName.toLowerCase()}` });
-				contentEl.createEl("p", { text: `Enter new title for your ${typeName.toLowerCase()}:` });
+				contentEl.createEl("h2", { text: `Rename ${typeName} content` });
+				contentEl.createEl("p", { text: `Enter new title for your ${typeName} content:` });
 			}
 			
 			this.titleInput = contentEl.createEl("input", {
 				type: "text",
-				placeholder: `My Renamed ${typeName}`,
+				placeholder: "New Title",
 				cls: "astro-composer-title-input"
 			});
 			this.titleInput.value = this.getCurrentTitle();
 		} else if (this.isNewNote) {
 			const typeName = this.getTypeDisplayName();
-			const isCustomType = this.fileOps.isCustomContentType(this.type);
 			
-			if (isCustomType) {
-				contentEl.createEl("h2", { text: `New custom type: ${typeName}` });
-				contentEl.createEl("p", { text: "Enter a title for this content type:" });
+			if (this.type === "note") {
+				contentEl.createEl("h2", { text: "New content" });
+				contentEl.createEl("p", { text: "Enter a title for this content:" });
 			} else {
-				contentEl.createEl("h2", { text: `Create new ${typeName.toLowerCase()}` });
-				contentEl.createEl("p", { text: `Enter a title for your new ${typeName.toLowerCase()}:` });
+				contentEl.createEl("h2", { text: `Create new ${typeName} content` });
+				contentEl.createEl("p", { text: `Enter a title for your new ${typeName} content:` });
 			}
 			
 			this.titleInput = contentEl.createEl("input", {
 				type: "text",
-				placeholder: `My Awesome ${typeName}`,
+				placeholder: "New Title",
 				cls: "astro-composer-title-input"
 			});
 			// Leave input empty for new notes - user can type directly
 		} else {
 			const typeName = this.getTypeDisplayName();
-			const isCustomType = this.fileOps.isCustomContentType(this.type);
 			
-			if (isCustomType) {
-				contentEl.createEl("h2", { text: `New custom type: ${typeName}` });
-				contentEl.createEl("p", { text: "Enter a title for this content type:" });
+			if (this.type === "note") {
+				contentEl.createEl("h2", { text: "New content" });
+				contentEl.createEl("p", { text: "Enter a title for this content:" });
 			} else {
-				contentEl.createEl("h2", { text: `New ${typeName.toLowerCase()}` });
-				contentEl.createEl("p", { text: `Enter a title for your ${typeName.toLowerCase()}:` });
+				contentEl.createEl("h2", { text: `Create new ${typeName} content` });
+				contentEl.createEl("p", { text: `Enter a title for your new ${typeName} content:` });
 			}
 			
 			this.titleInput = contentEl.createEl("input", {
 				type: "text",
-				placeholder: `My Awesome ${typeName}`,
+				placeholder: "New Title",
 				cls: "astro-composer-title-input"
 			});
 			// Pre-populate with suggested title from basename if available
@@ -220,11 +200,8 @@ export class TitleModal extends Modal {
 				// This respects creationMode (folder vs file) and doesn't require deletion
 				if (this.file) {
 					newFile = await this.fileOps.createFile({ file: this.file, title, type: this.type });
-					// Always insert properties for custom content types and pages when automation is enabled
-					// For posts, check the autoInsertProperties setting
-					const shouldInsertProperties = this.fileOps.isCustomContentType(this.type) || 
-						this.type === "page" || 
-						this.plugin.settings.autoInsertProperties;
+					// Always insert properties when autoInsertProperties is enabled
+					const shouldInsertProperties = this.plugin.settings.autoInsertProperties;
 					
 					if (newFile && shouldInsertProperties) {
 						await this.addPropertiesToFile(newFile, title, this.type);
@@ -233,11 +210,8 @@ export class TitleModal extends Modal {
 			} else if (this.file) {
 				// We have an existing file, process it
 				newFile = await this.fileOps.createFile({ file: this.file, title, type: this.type });
-				// Always insert properties for custom content types and pages when automation is enabled
-				// For posts, check the autoInsertProperties setting
-				const shouldInsertProperties = this.fileOps.isCustomContentType(this.type) || 
-					this.type === "page" || 
-					this.plugin.settings.autoInsertProperties;
+				// Always insert properties when autoInsertProperties is enabled
+				const shouldInsertProperties = this.plugin.settings.autoInsertProperties;
 				
 				if (newFile && shouldInsertProperties) {
 					await this.addPropertiesToFile(newFile, title, this.type);
@@ -264,11 +238,11 @@ export class TitleModal extends Modal {
 	}
 
 	private getTypeDisplayName(): string {
-		if (this.fileOps.isCustomContentType(this.type)) {
-			const customType = this.fileOps.getCustomContentType(this.type);
-			return customType ? customType.name : "Content";
+		if (this.type === "note") {
+			return "Content";
 		}
-		return this.type === "post" ? "Blog Post" : "Page";
+		const contentType = this.fileOps.getContentType(this.type);
+		return contentType ? contentType.name : "Content";
 	}
 
 	private async createNewFile(title: string): Promise<TFile | null> {
@@ -278,21 +252,18 @@ export class TitleModal extends Modal {
 		// Get the directory where the user created the file
 		const originalDir = this.file?.parent?.path || "";
 		
-		if (this.fileOps.isCustomContentType(this.type)) {
-			const customType = this.fileOps.getCustomContentType(this.type);
-			// For custom content types, respect the user's chosen location (subfolder)
+		if (this.type !== "note") {
+			const contentType = this.fileOps.getContentType(this.type);
+			// For content types, respect the user's chosen location (subfolder)
 			// Only use the configured folder if the user created the file in the vault root
 			if (originalDir === "" || originalDir === "/") {
-				targetFolder = customType?.folder || "";
+				targetFolder = contentType?.folder || "";
 			} else {
 				targetFolder = originalDir;
 			}
-		} else if (this.type === "page") {
-			// For pages, use the configured pages folder if it exists, otherwise respect user's choice
-			targetFolder = this.plugin.settings.pagesFolder || originalDir;
 		} else {
-			// For posts, use the configured posts folder if it exists, otherwise respect user's choice
-			targetFolder = this.plugin.settings.postsFolder || originalDir;
+			// For notes, use the original directory
+			targetFolder = originalDir;
 		}
 
 		// Create the filename from the title
@@ -307,13 +278,8 @@ export class TitleModal extends Modal {
 
 		// Create the file with initial content
 		let initialContent = "";
-		// Always insert properties for custom content types and pages when automation is enabled
-		// For posts, check the autoInsertProperties setting
-		const shouldInsertProperties = this.fileOps.isCustomContentType(this.type) || 
-			this.type === "page" || 
-			this.plugin.settings.autoInsertProperties;
-		
-		if (shouldInsertProperties) {
+		// Always insert properties when autoInsertProperties is enabled
+		if (this.plugin.settings.autoInsertProperties) {
 			initialContent = this.generateInitialContent(title);
 		}
 
@@ -340,11 +306,14 @@ export class TitleModal extends Modal {
 			// Properly escape the title for YAML
 			const escapedTitle = this.escapeYamlString(title);
 			template = `---\ntitle: ${escapedTitle}\ndate: ${dateString}\n---\n`;
-		} else if (this.fileOps.isCustomContentType(this.type)) {
-			const customType = this.fileOps.getCustomContentType(this.type);
-			template = customType ? customType.template : this.plugin.settings.defaultTemplate;
 		} else {
-			template = this.type === "post" ? this.plugin.settings.defaultTemplate : this.plugin.settings.pageTemplate;
+			const contentType = this.fileOps.getContentType(this.type);
+			if (!contentType) {
+				const escapedTitle = this.escapeYamlString(title);
+				template = `---\ntitle: ${escapedTitle}\ndate: ${dateString}\n---\n`;
+			} else {
+				template = contentType.template;
+			}
 		}
 		
 		template = template.replace(/\{\{title\}\}/g, title);
@@ -353,7 +322,7 @@ export class TitleModal extends Modal {
 		return template;
 	}
 
-	private async addPropertiesToFile(file: TFile, title: string, type: ContentType = "post") {
+	private async addPropertiesToFile(file: TFile, title: string, type: ContentTypeId) {
 		const now = new Date();
 		const dateString = window.moment(now).format(this.plugin.settings.dateFormat);
 
@@ -363,11 +332,14 @@ export class TitleModal extends Modal {
 			// Properly escape the title for YAML
 			const escapedTitle = this.escapeYamlString(title);
 			template = `---\ntitle: ${escapedTitle}\ndate: ${dateString}\n---\n`;
-		} else if (this.fileOps.isCustomContentType(type)) {
-			const customType = this.fileOps.getCustomContentType(type);
-			template = customType ? customType.template : this.plugin.settings.defaultTemplate;
 		} else {
-			template = type === "post" ? this.plugin.settings.defaultTemplate : this.plugin.settings.pageTemplate;
+			const contentType = this.fileOps.getContentType(type);
+			if (!contentType) {
+				const escapedTitle = this.escapeYamlString(title);
+				template = `---\ntitle: ${escapedTitle}\ndate: ${dateString}\n---\n`;
+			} else {
+				template = contentType.template;
+			}
 		}
 		
 		template = template.replace(/\{\{title\}\}/g, title);

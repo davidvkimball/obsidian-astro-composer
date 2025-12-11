@@ -1,5 +1,5 @@
 import { Editor, TFile, Notice } from "obsidian";
-import { AstroComposerSettings } from "../types";
+import { AstroComposerSettings, ContentType } from "../types";
 
 import { matchesFolderPattern, sortByPatternSpecificity } from "./path-matching";
 
@@ -25,66 +25,11 @@ export class LinkConverter {
 		path = decodeURIComponent(path);
 		path = path.replace(/\.md$/, "");
 
-		// Determine content type and appropriate base path
-		let basePath = "";
-		let contentFolder = "";
-		let indexFileName = "";
-
-		// Check custom content types first (highest priority)
-		let foundCustomType = false;
-		for (const customType of this.settings.customContentTypes) {
-			if (customType.enabled && customType.folder && path.startsWith(customType.folder + '/')) {
-				contentFolder = customType.folder;
-				basePath = customType.linkBasePath || "";
-				indexFileName = customType.indexFileName;
-				foundCustomType = true;
-				break;
-			}
-		}
-		
-		// Check pages folder (second priority)
-		if (!foundCustomType && this.settings.enablePages && this.settings.pagesFolder && path.startsWith(this.settings.pagesFolder + '/')) {
-			contentFolder = this.settings.pagesFolder;
-			basePath = this.settings.pagesLinkBasePath;
-			indexFileName = this.settings.pagesIndexFileName || "";
-		}
-		// Check posts folder (third priority)
-		else if (!foundCustomType && this.settings.postsFolder && path.startsWith(this.settings.postsFolder + '/')) {
-			contentFolder = this.settings.postsFolder;
-			basePath = this.settings.postsLinkBasePath;
-			indexFileName = this.settings.indexFileName || "index";
-		}
-		// If posts folder is blank and "Ignore subfolders" is NOT checked, treat as post unless excluded
-		else if (!foundCustomType && !this.settings.postsFolder && !this.settings.onlyAutomateInPostsFolder) {
-			// Only treat files in vault root as posts when posts folder is blank
-			// This includes both direct files and folder-based posts in vault root
-			if (!path.includes('/') || (path.includes('/') && !path.startsWith('/') && path.split('/').length === 2)) {
-				// Check if file should be excluded from post processing
-				let shouldExcludeFromPosts = false;
-				
-				// Exclude if in pages folder
-				if (this.settings.enablePages && this.settings.pagesFolder && path.startsWith(this.settings.pagesFolder + '/')) {
-					shouldExcludeFromPosts = true;
-				}
-				
-				// Exclude if in excluded directories
-				if (this.settings.excludedDirectories) {
-					const excludedDirs = this.settings.excludedDirectories.split("|").map(dir => dir.trim()).filter(dir => dir);
-					for (const excludedDir of excludedDirs) {
-						if (path.startsWith(excludedDir + '/') || path === excludedDir) {
-							shouldExcludeFromPosts = true;
-							break;
-						}
-					}
-				}
-				
-				// If not excluded, treat as post
-				if (!shouldExcludeFromPosts) {
-					basePath = this.settings.postsLinkBasePath;
-					indexFileName = this.settings.indexFileName || "index";
-				}
-			}
-		}
+		// Determine content type and appropriate base path using pattern specificity
+		const contentTypeInfo = this.getContentTypeForPath(path + '.md');
+		let basePath = contentTypeInfo.basePath || "";
+		let contentFolder = contentTypeInfo.contentFolder || "";
+		let indexFileName = contentTypeInfo.indexFileName || "";
 
 
 		// Strip content folder if present
@@ -140,7 +85,7 @@ export class LinkConverter {
 		return `${basePath}${slug}${shouldAddTrailingSlash ? '/' : ''}${anchor}`;
 	}
 
-	private getAstroUrlFromInternalLinkWithContext(link: string, currentFilePath: string, currentFileContentType: { basePath: string; creationMode: "file" | "folder"; indexFileName: string }): string {
+	private getAstroUrlFromInternalLinkWithContext(link: string, currentFilePath: string, currentFileContentType: { basePath: string; creationMode: "file" | "folder"; indexFileName: string; contentFolder: string }): string {
 		
 		const hashIndex = link.indexOf('#');
 		let path = hashIndex >= 0 ? link.slice(0, hashIndex) : link;
@@ -163,24 +108,11 @@ export class LinkConverter {
 		if (!targetContentType.basePath && currentFileContentType.basePath) {
 			basePath = currentFileContentType.basePath;
 			indexFileName = currentFileContentType.indexFileName;
+			contentFolder = currentFileContentType.contentFolder;
 		} else {
 			basePath = targetContentType.basePath;
 			indexFileName = targetContentType.indexFileName;
-		}
-		
-		// Determine content folder from the target path
-		const targetPath = path + '.md';
-		for (const customType of this.settings.customContentTypes) {
-			if (customType.enabled && customType.folder && targetPath.startsWith(customType.folder + '/')) {
-				contentFolder = customType.folder;
-				break;
-			}
-		}
-		if (!contentFolder && this.settings.enablePages && this.settings.pagesFolder && targetPath.startsWith(this.settings.pagesFolder + '/')) {
-			contentFolder = this.settings.pagesFolder;
-		}
-		if (!contentFolder && this.settings.postsFolder && targetPath.startsWith(this.settings.postsFolder + '/')) {
-			contentFolder = this.settings.postsFolder;
+			contentFolder = targetContentType.contentFolder;
 		}
 
 		// Strip content folder if present
@@ -237,90 +169,114 @@ export class LinkConverter {
 	}
 
 	private isInConfiguredContentDirectory(filePath: string): boolean {
-		// Check custom content types
-		// Sort by pattern specificity so more specific patterns are checked first
-		const sortedCustomTypes = sortByPatternSpecificity(this.settings.customContentTypes);
-		for (const customType of sortedCustomTypes) {
-			if (customType.enabled && customType.folder && matchesFolderPattern(filePath, customType.folder)) {
-				return true;
-			}
-		}
+		// Check all content types, sorted by pattern specificity (more specific first)
+		const contentTypes = this.settings.contentTypes || [];
+		const sortedTypes = sortByPatternSpecificity(contentTypes);
 		
-		// Check pages folder
-		if (this.settings.enablePages) {
-			if (this.settings.pagesFolder && filePath.startsWith(this.settings.pagesFolder + '/')) {
-				return true;
-			} else if (!this.settings.pagesFolder && !filePath.includes('/')) {
-				return true; // Files in vault root when pages folder is blank
+		for (const contentType of sortedTypes) {
+			if (!contentType.enabled) continue;
+			
+			// Handle blank folder (root) - matches files in vault root only
+			if (!contentType.folder || contentType.folder.trim() === "") {
+				if (!filePath.includes("/") || filePath.split("/").length === 1) {
+					return true;
+				}
+			} else if (matchesFolderPattern(filePath, contentType.folder)) {
+				// Check ignoreSubfolders if folder is specified
+				if (contentType.ignoreSubfolders) {
+					const pathSegments = filePath.split("/");
+					const pathDepth = pathSegments.length;
+					const patternSegments = contentType.folder.split("/");
+					const expectedDepth = patternSegments.length;
+					
+					if (contentType.creationMode === "folder") {
+						// For folder-based creation, files are one level deeper (e.g., test/my-file/index.md)
+						// So we need to allow one extra level beyond the pattern depth
+						const folderDepth = pathDepth - 1; // Subtract 1 for the index.md file
+						if (folderDepth === expectedDepth || folderDepth === expectedDepth + 1) {
+							return true;
+						}
+					} else {
+						// For file-based creation, files are at the same depth as the pattern
+						if (pathDepth === expectedDepth) {
+							return true;
+						}
+					}
+				} else {
+					return true;
+				}
 			}
-		}
-		
-		// Check posts folder
-		if (this.settings.postsFolder && filePath.startsWith(this.settings.postsFolder + '/')) {
-			return true;
-		} else if (!this.settings.postsFolder && this.settings.automatePostCreation && !filePath.includes('/')) {
-			return true; // Files in vault root when posts folder is blank
 		}
 		
 		return false;
 	}
 
-	private getContentTypeForPath(filePath: string): { basePath: string; creationMode: "file" | "folder"; indexFileName: string } {
+	private getContentTypeForPath(filePath: string): { basePath: string; creationMode: "file" | "folder"; indexFileName: string; contentFolder: string } {
+		// Check all content types, sorted by pattern specificity (more specific first)
+		const contentTypes = this.settings.contentTypes || [];
+		const sortedTypes = sortByPatternSpecificity(contentTypes);
 		
-		// Check custom content types FIRST (highest priority)
-		// Sort by pattern specificity so more specific patterns are checked first
-		const sortedCustomTypes = sortByPatternSpecificity(this.settings.customContentTypes);
-		for (const customType of sortedCustomTypes) {
-			if (customType.enabled && customType.folder && matchesFolderPattern(filePath, customType.folder)) {
-				return {
-					basePath: customType.linkBasePath || "",
-					creationMode: customType.creationMode,
-					indexFileName: customType.indexFileName
-				};
+		for (const contentType of sortedTypes) {
+			if (!contentType.enabled) continue;
+			
+			// Handle blank folder (root) - matches files in vault root only
+			if (!contentType.folder || contentType.folder.trim() === "") {
+				if (!filePath.includes("/") || filePath.split("/").length === 1) {
+					return {
+						basePath: contentType.linkBasePath || "",
+						creationMode: contentType.creationMode,
+						indexFileName: contentType.indexFileName || "",
+						contentFolder: ""
+					};
+				}
+			} else if (matchesFolderPattern(filePath, contentType.folder)) {
+				// Check ignoreSubfolders if folder is specified
+				if (contentType.ignoreSubfolders) {
+					const pathSegments = filePath.split("/");
+					const pathDepth = pathSegments.length;
+					const patternSegments = contentType.folder.split("/");
+					const expectedDepth = patternSegments.length;
+					
+					if (contentType.creationMode === "folder") {
+						// For folder-based creation, files are one level deeper (e.g., test/my-file/index.md)
+						// So we need to allow one extra level beyond the pattern depth
+						const folderDepth = pathDepth - 1; // Subtract 1 for the index.md file
+						if (folderDepth === expectedDepth || folderDepth === expectedDepth + 1) {
+							return {
+								basePath: contentType.linkBasePath || "",
+								creationMode: contentType.creationMode,
+								indexFileName: contentType.indexFileName || "",
+								contentFolder: contentType.folder
+							};
+						}
+					} else {
+						// For file-based creation, files are at the same depth as the pattern
+						if (pathDepth === expectedDepth) {
+							return {
+								basePath: contentType.linkBasePath || "",
+								creationMode: contentType.creationMode,
+								indexFileName: contentType.indexFileName || "",
+								contentFolder: contentType.folder
+							};
+						}
+					}
+				} else {
+					return {
+						basePath: contentType.linkBasePath || "",
+						creationMode: contentType.creationMode,
+						indexFileName: contentType.indexFileName || "",
+						contentFolder: contentType.folder
+					};
+				}
 			}
-		}
-		
-		// Check pages folder
-		if (this.settings.enablePages) {
-			if (this.settings.pagesFolder && filePath.startsWith(this.settings.pagesFolder + '/')) {
-				return {
-					basePath: this.settings.pagesLinkBasePath,
-					creationMode: this.settings.pagesCreationMode || "file",
-					indexFileName: this.settings.pagesIndexFileName || ""
-				};
-			} else if (!this.settings.pagesFolder && !filePath.includes('/')) {
-				// If pagesFolder is blank, only treat files in vault root as pages
-				return {
-					basePath: this.settings.pagesLinkBasePath,
-					creationMode: this.settings.pagesCreationMode || "file",
-					indexFileName: this.settings.pagesIndexFileName || ""
-				};
-			}
-		}
-		
-		// Check posts folder
-		if (this.settings.postsFolder && filePath.startsWith(this.settings.postsFolder + '/')) {
-			return {
-				basePath: this.settings.postsLinkBasePath,
-				creationMode: this.settings.creationMode,
-				indexFileName: this.settings.indexFileName || "index"
-			};
-		}
-		
-		// Check if posts folder is blank - treat files in vault root as posts (only if automation is enabled)
-		if (!this.settings.postsFolder && this.settings.automatePostCreation && !filePath.includes('/')) {
-			return {
-				basePath: this.settings.postsLinkBasePath,
-				creationMode: this.settings.creationMode,
-				indexFileName: this.settings.indexFileName || "index"
-			};
 		}
 		
 		// Default fallback
 		return {
 			basePath: "",
 			creationMode: "file",
-			indexFileName: ""
+			indexFileName: "",
+			contentFolder: ""
 		};
 	}
 
