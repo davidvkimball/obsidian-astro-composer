@@ -188,15 +188,17 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 		if (migratedTypes.length > 0) {
 			new Notice(`Migration completed: ${migratedTypes.length} content type(s) migrated.`);
-		}
-		
-		new Notice(`Migration completed: ${migratedTypes.length} content type(s) migrated.`);
-		
-		// Refresh settings tab if it exists and has been displayed
-		// This ensures migrated content types appear immediately without needing to reload
-		if (this.settingsTab && this.settingsTab.customContentTypesContainer) {
-			// Refresh just the content types section for efficiency
-			this.settingsTab.refreshContentTypes();
+			
+			// Refresh settings tab if it exists and has been displayed
+			// Use a small delay to ensure save is complete and UI is ready
+			setTimeout(() => {
+				if (this.settingsTab && this.settingsTab.customContentTypesContainer) {
+					// Force a full re-read of settings to ensure we have latest data
+					// The settings tab will automatically refresh when opened due to the
+					// check in display() method, but also refresh now if it's already open
+					this.settingsTab.refreshContentTypes();
+				}
+			}, 150);
 		}
 	}
 
@@ -242,10 +244,14 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	public registerCreateEvent() {
 
 		// Register create event for automation if any content types are enabled
-		const contentTypes = this.settings.contentTypes || [];
-		const hasEnabledContentTypes = contentTypes.some(ct => ct.enabled);
+		// CRITICAL: Always read contentTypes from this.settings at runtime, not at registration time
+		// This ensures new content types added after plugin load are included
+		const hasEnabledContentTypes = () => {
+			const contentTypes = this.settings.contentTypes || [];
+			return contentTypes.some(ct => ct.enabled);
+		};
 		
-		if (hasEnabledContentTypes) {
+		if (hasEnabledContentTypes()) {
 			// Debounce to prevent multiple modals from rapid file creations
 			let lastProcessedTime = 0;
 
@@ -266,6 +272,14 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 						return;
 					}
 
+					// CRITICAL: Reload settings from disk to ensure we have the latest data
+					// This is necessary because other plugins might have modified data.json
+					await this.loadSettings();
+
+					// CRITICAL: Always read contentTypes from settings at runtime, not from closure
+					// This ensures newly added content types are included
+					const contentTypes = this.settings.contentTypes || [];
+					
 					// Find matching content type using pattern specificity (most specific wins)
 					// Sort by pattern specificity so more specific patterns are checked first
 					const sortedContentTypes = sortByPatternSpecificity(contentTypes);
@@ -320,7 +334,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 					// Show conflict warning if multiple content types match
 					if (matchingTypes.length > 1) {
 						const typeNames = matchingTypes.map(ct => ct.name || "Unnamed").join(", ");
-						new Notice(`⚠️ Multiple content types (${typeNames}) match this file. Using most specific: ${matchingTypes[0].name || "Unnamed"}`);
+						new Notice(`Multiple content types (${typeNames}) match this file. Using most specific: ${matchingTypes[0].name || "Unnamed"}`);
 					}
 
 					// If no content type matches, skip entirely
@@ -360,9 +374,16 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			// Use vault.create event to detect new file creation
 			this.registerEvent(this.app.vault.on("create", (file) => {
 				if (file instanceof TFile) {
-					this.createEvent(file);
+					// Check if we still have enabled content types before processing
+					// This handles the case where all content types are disabled
+					if (hasEnabledContentTypes()) {
+						this.createEvent(file);
+					}
 				}
 			}));
+		} else {
+			// No enabled content types - unregister/create event if it exists
+			this.createEvent = () => {};
 		}
 	}
 

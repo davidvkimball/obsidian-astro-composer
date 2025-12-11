@@ -47,7 +47,27 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		const settings = this.plugin.settings;
+		// CRITICAL: Always read fresh settings from plugin
+		// If migration just completed, reload settings from disk to ensure we have migrated content types
+		let settings = this.plugin.settings;
+		
+		// If migration completed, reload settings from disk to get the latest migrated content types
+		// This ensures the settings tab shows migrated types immediately when opened
+		if (settings.migrationCompleted && (this.plugin as any).loadSettings) {
+			// Reload settings asynchronously, then refresh content types once reload completes
+			void (this.plugin as any).loadSettings().then(() => {
+				// After reload, refresh the content types section with the updated settings
+				if (this.customContentTypesContainer) {
+					this.renderCustomContentTypes();
+				}
+			});
+		}
+		
+		// Render the settings tab with current settings (will be updated after reload if migration completed)
+		this.renderSettingsTab(containerEl, settings);
+	}
+
+	private renderSettingsTab(containerEl: HTMLElement, settings: any): void {
 
 		// Global settings
 		new Setting(containerEl)
@@ -432,8 +452,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		if (!this.customContentTypesContainer) return;
 		
 		this.customContentTypesContainer.empty();
+		
+		// Always read fresh settings from plugin to ensure we have latest data
+		// This is critical after migration
 		const settings = this.plugin.settings;
-
 		const contentTypes = settings.contentTypes || [];
 		contentTypes.forEach((customType: ContentType, index: number) => {
 			if (!this.customContentTypesContainer) return;
@@ -770,7 +792,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		if (conflictingTypes.length > 0) {
 			conflictWarningEl.style.display = "block";
-			conflictWarningEl.textContent = `⚠️ Conflict: ${conflictingTypes.join(", ")} also use${conflictingTypes.length === 1 ? "s" : ""} this folder. More specific patterns will take priority.`;
+			conflictWarningEl.textContent = `Conflict: ${conflictingTypes.join(", ")} also use${conflictingTypes.length === 1 ? "s" : ""} this folder. More specific patterns will take priority.`;
 			conflictWarningEl.style.color = "var(--text-warning)";
 			conflictWarningEl.style.fontSize = "0.9em";
 			conflictWarningEl.style.marginTop = "0.5em";
