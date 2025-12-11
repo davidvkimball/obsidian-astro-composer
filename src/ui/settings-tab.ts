@@ -47,23 +47,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		// CRITICAL: Always read fresh settings from plugin
-		// If migration just completed, reload settings from disk to ensure we have migrated content types
-		let settings = this.plugin.settings;
+		// Use current plugin settings (already loaded and up-to-date)
+		const settings = this.plugin.settings;
 		
-		// If migration completed, reload settings from disk to get the latest migrated content types
-		// This ensures the settings tab shows migrated types immediately when opened
-		if (settings.migrationCompleted && (this.plugin as any).loadSettings) {
-			// Reload settings asynchronously, then refresh content types once reload completes
-			void (this.plugin as any).loadSettings().then(() => {
-				// After reload, refresh the content types section with the updated settings
-				if (this.customContentTypesContainer) {
-					this.renderCustomContentTypes();
-				}
-			});
-		}
-		
-		// Render the settings tab with current settings (will be updated after reload if migration completed)
+		// Render the settings tab with current settings
 		this.renderSettingsTab(containerEl, settings);
 	}
 
@@ -180,7 +167,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 			const projectPathSetting = new Setting(this.terminalCommandContainer)
 				.setName("Project root directory path")
-				.setDesc("Path relative to the Obsidian vault root folder. Use ../.. for two levels up. Leave blank to use the vault folder. This is where the terminal will open.")
+				.setDesc("Path relative to the Obsidian vault root folder. Use ../.. for two levels up. Leave blank to use the vault folder. This is where the terminal will open. Absolute paths work also.")
 				.addText((text) =>
 					text
 						.setPlaceholder("../..")
@@ -240,7 +227,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 			const configPathSetting = new Setting(this.configCommandContainer)
 				.setName("Config file path")
-				.setDesc("Path to the config file relative to the vault root. Use ../config.ts or ../../astro.config.mjs. This setting is required.")
+				.setDesc("Path to the config file relative to the vault root. Use ../config.ts or ../../astro.config.mjs. This setting is required. Absolute paths work also.")
 				.addText((text) =>
 					text
 						.setPlaceholder("../config.ts")
@@ -696,7 +683,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 							);
 							const confirmed = await modal.waitForResult();
 							if (confirmed) {
-								this.removeCustomContentType(customType.id);
+								await this.removeCustomContentType(customType.id);
 							}
 						});
 				});
@@ -802,11 +789,12 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	}
 
 
-	private removeCustomContentType(typeId: string) {
+	private async removeCustomContentType(typeId: string) {
 		const settings = this.plugin.settings;
 		const contentTypes = settings.contentTypes || [];
 		settings.contentTypes = contentTypes.filter((ct: ContentType) => ct.id !== typeId);
-		void this.plugin.saveSettings();
+		// CRITICAL: Await the save to ensure deletion is persisted before any reloads happen
+		await this.plugin.saveSettings();
 		this.renderCustomContentTypes();
 		this.plugin.registerCreateEvent();
 	}

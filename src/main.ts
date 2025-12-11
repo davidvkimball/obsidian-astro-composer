@@ -167,23 +167,54 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		}
 		
 		// Only add migrated types if we have any
-		// Don't filter out existing types - if they already exist, we skipped migration for them
+		// CRITICAL: Check if migrated types already exist by name before adding them
+		// This prevents re-adding content types that were deleted by the user
 		let finalTypes: ContentType[] = [...existingTypes];
 		if (migratedTypes.length > 0) {
-			// Add migrated types to the end
-			finalTypes = [...existingTypes, ...migratedTypes];
+			// Filter out any migrated types that already exist by name
+			const existingNames = new Set(existingTypes.map(ct => ct.name));
+			const newMigratedTypes = migratedTypes.filter(mt => !existingNames.has(mt.name));
+			
+			// Only add migrated types that don't already exist
+			if (newMigratedTypes.length > 0) {
+				finalTypes = [...existingTypes, ...newMigratedTypes];
+			}
 		}
 		
 		// Set the final content types array
 		this.settings.contentTypes = finalTypes;
 		
-		// Clean up legacy customContentTypes reference if it exists
-		if ((this.settings as any).customContentTypes) {
-			delete (this.settings as any).customContentTypes;
+		// CRITICAL: Clean up all old legacy fields after migration to prevent them from causing issues
+		// These fields are no longer needed and could cause content types to be recreated
+		const legacyFields = [
+			'customContentTypes', // Old name for contentTypes - must be removed
+			'enableUnderscorePrefix',
+			'postsFolder',
+			'postsLinkBasePath',
+			'automatePostCreation',
+			'creationMode',
+			'indexFileName',
+			'excludedDirectories',
+			'onlyAutomateInPostsFolder',
+			'enablePages',
+			'pagesFolder',
+			'pagesLinkBasePath',
+			'pagesCreationMode',
+			'pagesIndexFileName',
+			'pageTemplate',
+			'onlyAutomateInPagesFolder',
+		];
+		let cleanedUpLegacyFields = false;
+		for (const field of legacyFields) {
+			if ((this.settings as any)[field] !== undefined) {
+				delete (this.settings as any)[field];
+				cleanedUpLegacyFields = true;
+			}
 		}
 
 		// Mark migration as completed
 		this.settings.migrationCompleted = true;
+		// Save settings to ensure all legacy fields are permanently removed from disk
 		await this.saveSettings();
 
 		if (migratedTypes.length > 0) {
@@ -193,9 +224,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			// Use a small delay to ensure save is complete and UI is ready
 			setTimeout(() => {
 				if (this.settingsTab && this.settingsTab.customContentTypesContainer) {
-					// Force a full re-read of settings to ensure we have latest data
-					// The settings tab will automatically refresh when opened due to the
-					// check in display() method, but also refresh now if it's already open
+					// Refresh the content types section to show migrated types
 					this.settingsTab.refreshContentTypes();
 				}
 			}, 150);
@@ -396,14 +425,52 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			this.settings.contentTypes = [];
 		}
 		
-		// Migrate legacy customContentTypes to contentTypes if needed (before migration runs)
-		// Check if contentTypes is empty/undefined and customContentTypes exists
-		const hasLegacyTypes = (this.settings as any).customContentTypes && Array.isArray((this.settings as any).customContentTypes) && (this.settings as any).customContentTypes.length > 0;
-		const hasNewTypes = this.settings.contentTypes && Array.isArray(this.settings.contentTypes) && this.settings.contentTypes.length > 0;
-		
-		if (hasLegacyTypes && !hasNewTypes) {
-			// Preserve existing custom content types
-			this.settings.contentTypes = (this.settings as any).customContentTypes;
+		// CRITICAL: Only migrate legacy customContentTypes to contentTypes if migration hasn't completed yet
+		// After migration, all legacy fields should be deleted and we should never restore them
+		if (!this.settings.migrationCompleted) {
+			// Migrate legacy customContentTypes to contentTypes if needed (before migration runs)
+			// Check if contentTypes is empty/undefined and customContentTypes exists
+			const hasLegacyTypes = (this.settings as any).customContentTypes && Array.isArray((this.settings as any).customContentTypes) && (this.settings as any).customContentTypes.length > 0;
+			const hasNewTypes = this.settings.contentTypes && Array.isArray(this.settings.contentTypes) && this.settings.contentTypes.length > 0;
+			
+			if (hasLegacyTypes && !hasNewTypes) {
+				// Preserve existing custom content types
+				this.settings.contentTypes = (this.settings as any).customContentTypes;
+			}
+		} else {
+			// After migration, clean up ALL legacy fields if they still exist
+			// This is a one-time cleanup to remove any lingering legacy data from disk
+			const legacyFields = [
+				'customContentTypes', // Old name for contentTypes
+				'enableUnderscorePrefix',
+				'postsFolder',
+				'postsLinkBasePath',
+				'automatePostCreation',
+				'creationMode',
+				'indexFileName',
+				'excludedDirectories',
+				'onlyAutomateInPostsFolder',
+				'enablePages',
+				'pagesFolder',
+				'pagesLinkBasePath',
+				'pagesCreationMode',
+				'pagesIndexFileName',
+				'pageTemplate',
+				'onlyAutomateInPagesFolder',
+			];
+			
+			let foundLegacyFields = false;
+			for (const field of legacyFields) {
+				if ((this.settings as any)[field] !== undefined) {
+					delete (this.settings as any)[field];
+					foundLegacyFields = true;
+				}
+			}
+			
+			// If we found and deleted any legacy fields, save immediately to remove them from disk
+			if (foundLegacyFields) {
+				await this.saveSettings();
+			}
 		}
 	}
 
