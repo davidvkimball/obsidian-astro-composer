@@ -175,12 +175,22 @@ export class TemplateParser {
 	}
 
 	async updateTitleInFrontmatter(file: TFile, newTitle: string, type: ContentTypeId): Promise<void> {
+		// Check if template has {{title}} - if not, don't update frontmatter at all
 		const titleKey = this.getTitleKey(type);
+		const hasTitleInTemplate = this.templateHasTitle(type);
+		
+		// If template doesn't have {{title}}, don't modify frontmatter
+		if (!hasTitleInTemplate) {
+			return;
+		}
+		
 		const content = await this.app.vault.read(file);
 		let propertiesEnd = 0;
 		let propertiesText = "";
+		let hasFrontmatter = false;
 
 		if (content.startsWith("---")) {
+			hasFrontmatter = true;
 			propertiesEnd = content.indexOf("\n---", 3);
 			if (propertiesEnd === -1) {
 				propertiesEnd = content.length;
@@ -263,6 +273,15 @@ export class TemplateParser {
 		}
 		// If titleKeyPosition >= 0, the title key is already in propOrder at the correct position
 
+		// Only create/update frontmatter if it already exists
+		// Don't create frontmatter from scratch if file had none
+		if (!hasFrontmatter) {
+			// File had no frontmatter - don't create it, just return
+			// The rename already happened, we just don't update frontmatter
+			return;
+		}
+
+		// Build new content with frontmatter
 		let newContent = "---\n";
 		for (const key of propOrder) {
 			const val = existing[key];
@@ -277,8 +296,9 @@ export class TemplateParser {
 				newContent += `${key}: ${val || ""}\n`;
 			}
 		}
-		newContent += "---";
+		newContent += "---\n";
 
+		// Get body content (frontmatter already existed, so we know propertiesEnd is set)
 		const bodyContent = content.slice(propertiesEnd);
 		newContent += bodyContent;
 
@@ -313,5 +333,17 @@ export class TemplateParser {
 			}
 		}
 		return "title";
+	}
+	
+	// Check if the template for this content type has {{title}}
+	private templateHasTitle(type: ContentTypeId): boolean {
+		if (type === "note") return true; // Notes always have title
+		
+		const contentTypes = this.settings.contentTypes || [];
+		const contentType = contentTypes.find(ct => ct.id === type);
+		if (!contentType) return true; // Default to true for safety
+		
+		const template = contentType.template;
+		return template.includes("{{title}}");
 	}
 }

@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting, Platform, Notice } from "obsidian";
+import { App, PluginSettingTab, Setting, Platform, Notice, setIcon } from "obsidian";
 import { Plugin } from "obsidian";
 import { ContentType, AstroComposerPluginInterface } from "../types";
 import { CommandPickerModal } from "./components/CommandPickerModal";
@@ -48,9 +48,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		// Use current plugin settings (already loaded and up-to-date)
+		// Always read fresh settings to ensure we show migrated content types immediately
 		const settings = this.plugin.settings;
 		
 		// Render the settings tab with current settings
+		// This will show all content types including newly migrated ones
 		this.renderSettingsTab(containerEl, settings);
 	}
 
@@ -451,13 +453,59 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				attr: { "data-type-id": customType.id }
 			});
 
-			// Header with name and toggle on the far right
+			// Header with controls
 			const header = typeContainer.createDiv({ cls: "custom-content-type-header" });
 			header.classList.add("astro-composer-custom-type-header");
 			
-			// Left side - just the name
-			const headerName = header.createDiv();
+			// Left side - collapse/expand button
+			const collapseButton = header.createEl("button", { 
+				cls: "astro-composer-collapse-button",
+				attr: { "aria-label": "Collapse/expand" }
+			});
+			const isCollapsed = customType.collapsed ?? false;
+			// Always use chevron-down, rotate it when collapsed to point right
+			setIcon(collapseButton, "chevron-down");
+			if (isCollapsed) {
+				collapseButton.classList.add("is-collapsed");
+			}
+			collapseButton.addEventListener("click", () => {
+				void this.toggleContentTypeCollapse(customType.id);
+				// Update class after toggle (icon stays the same, just rotates)
+				const updatedType = this.plugin.settings.contentTypes.find((ct: ContentType) => ct.id === customType.id);
+				if (updatedType) {
+					if (updatedType.collapsed) {
+						collapseButton.classList.add("is-collapsed");
+					} else {
+						collapseButton.classList.remove("is-collapsed");
+					}
+				}
+			});
+			
+			// Middle left - content type name
+			const headerName = header.createDiv({ cls: "astro-composer-header-name" });
 			headerName.createEl("div", { text: customType.name || `Content ${index + 1}`, cls: "setting-item-name" });
+			
+			// Middle right - up/down buttons (side-by-side)
+			const reorderContainer = header.createDiv({ cls: "astro-composer-reorder-buttons" });
+			const upButton = reorderContainer.createEl("button", {
+				cls: "astro-composer-reorder-button",
+				attr: { "aria-label": "Move up" }
+			});
+			setIcon(upButton, "chevron-up");
+			upButton.disabled = index === 0;
+			upButton.addEventListener("click", () => {
+				void this.moveContentTypeUp(customType.id);
+			});
+			
+			const downButton = reorderContainer.createEl("button", {
+				cls: "astro-composer-reorder-button",
+				attr: { "aria-label": "Move down" }
+			});
+			setIcon(downButton, "chevron-down");
+			downButton.disabled = index === contentTypes.length - 1;
+			downButton.addEventListener("click", () => {
+				void this.moveContentTypeDown(customType.id);
+			});
 			
 			// Right side - toggle
 			const toggleContainer = header.createDiv({ cls: "checkbox-container" });
@@ -691,7 +739,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			// Hide the divider line for the remove button
 			removeSetting.settingEl.classList.add("astro-composer-remove-setting");
 
-			// Set initial visibility
+			// Set initial visibility (checks both enabled and collapsed state)
 			this.updateCustomContentTypeVisibility(customType.id, customType.enabled);
 		});
 		
@@ -720,8 +768,13 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	private updateCustomContentTypeVisibility(typeId: string, enabled: boolean) {
 		const settingsContainer = this.customContentTypesContainer?.querySelector(`[data-type-id="${typeId}"].custom-content-type-settings`) as HTMLElement;
 		if (settingsContainer) {
-			settingsContainer.classList.toggle("astro-composer-setting-container-visible", enabled);
-			settingsContainer.classList.toggle("astro-composer-setting-container-hidden", !enabled);
+			const contentTypes = this.plugin.settings.contentTypes || [];
+			const contentType = contentTypes.find((ct: ContentType) => ct.id === typeId);
+			const isCollapsed = contentType?.collapsed ?? false;
+			const shouldBeVisible = enabled && !isCollapsed;
+			
+			settingsContainer.classList.toggle("astro-composer-setting-container-visible", shouldBeVisible);
+			settingsContainer.classList.toggle("astro-composer-setting-container-hidden", !shouldBeVisible);
 		}
 	}
 
@@ -788,6 +841,46 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		}
 	}
 
+
+	private async moveContentTypeUp(typeId: string) {
+		const settings = this.plugin.settings;
+		const contentTypes = settings.contentTypes || [];
+		const currentIndex = contentTypes.findIndex((ct: ContentType) => ct.id === typeId);
+		
+		if (currentIndex <= 0) return; // Already at the top
+		
+		// Swap with previous item
+		[contentTypes[currentIndex], contentTypes[currentIndex - 1]] = [contentTypes[currentIndex - 1], contentTypes[currentIndex]];
+		settings.contentTypes = contentTypes;
+		await this.plugin.saveSettings();
+		this.renderCustomContentTypes();
+	}
+
+	private async moveContentTypeDown(typeId: string) {
+		const settings = this.plugin.settings;
+		const contentTypes = settings.contentTypes || [];
+		const currentIndex = contentTypes.findIndex((ct: ContentType) => ct.id === typeId);
+		
+		if (currentIndex < 0 || currentIndex >= contentTypes.length - 1) return; // Already at the bottom
+		
+		// Swap with next item
+		[contentTypes[currentIndex], contentTypes[currentIndex + 1]] = [contentTypes[currentIndex + 1], contentTypes[currentIndex]];
+		settings.contentTypes = contentTypes;
+		await this.plugin.saveSettings();
+		this.renderCustomContentTypes();
+	}
+
+	private async toggleContentTypeCollapse(typeId: string) {
+		const settings = this.plugin.settings;
+		const contentTypes = settings.contentTypes || [];
+		const contentType = contentTypes.find((ct: ContentType) => ct.id === typeId);
+		
+		if (!contentType) return;
+		
+		contentType.collapsed = !contentType.collapsed;
+		await this.plugin.saveSettings();
+		this.updateCustomContentTypeVisibility(typeId, contentType.enabled);
+	}
 
 	private async removeCustomContentType(typeId: string) {
 		const settings = this.plugin.settings;

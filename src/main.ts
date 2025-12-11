@@ -39,6 +39,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	 */
 	private async migrateSettingsIfNeeded(): Promise<void> {
 		// Check if migration is already completed
+		// If true, return immediately - no reload/refresh needed, this only runs once per user
 		if (this.settings.migrationCompleted) {
 			return;
 		}
@@ -216,18 +217,38 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		this.settings.migrationCompleted = true;
 		// Save settings to ensure all legacy fields are permanently removed from disk
 		await this.saveSettings();
+		
+		// NOTE: The reload and refresh below ONLY happen when migration actually runs
+		// If migrationCompleted was already true, this function returns early (line 43)
+		// So this code path only executes once per user during their first migration
+		
+		// Reload settings to ensure everything is in sync
+		await this.loadSettings();
 
 		if (migratedTypes.length > 0) {
 			new Notice(`Migration completed: ${migratedTypes.length} content type(s) migrated.`);
 			
-			// Refresh settings tab if it exists and has been displayed
-			// Use a small delay to ensure save is complete and UI is ready
+			// Refresh settings tab if it exists - only runs when migration actually happened
+			// Use a delay to ensure everything is synced and UI is ready
 			setTimeout(() => {
-				if (this.settingsTab && this.settingsTab.customContentTypesContainer) {
-					// Refresh the content types section to show migrated types
-					this.settingsTab.refreshContentTypes();
+				if (this.settingsTab) {
+					// Always try to refresh the settings tab if it exists
+					// If it's currently displayed, this will update it immediately
+					// If it's not displayed yet, this is safe and won't cause issues
+					try {
+						// Check if settings tab container exists (means it's been displayed at least once)
+						if (this.settingsTab.customContentTypesContainer || this.settingsTab.containerEl) {
+							// Settings tab has been displayed - refresh it to show migrated types
+							this.settingsTab.display();
+						}
+						// If container doesn't exist, settings tab hasn't been opened yet
+						// It will show migrated types when user opens it (display() reads fresh settings)
+					} catch (e) {
+						// If refresh fails, that's okay - settings will show when user opens them
+						console.log("Could not refresh settings tab after migration:", e);
+					}
 				}
-			}, 150);
+			}, 300);
 		}
 	}
 
@@ -271,43 +292,42 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 
 	public registerCreateEvent() {
-
-		// Register create event for automation if any content types are enabled
-		// CRITICAL: Always read contentTypes from this.settings at runtime, not at registration time
-		// This ensures new content types added after plugin load are included
-		const hasEnabledContentTypes = () => {
-			const contentTypes = this.settings.contentTypes || [];
-			return contentTypes.some(ct => ct.enabled);
-		};
+		// Always register the event listener, but check enabled content types dynamically
+		// This ensures automation works even if content types are enabled after plugin load
 		
-		if (hasEnabledContentTypes()) {
-			// Debounce to prevent multiple modals from rapid file creations
-			let lastProcessedTime = 0;
+		// Debounce to prevent multiple modals from rapid file creations
+		let lastProcessedTime = 0;
 
-			this.createEvent = (file: TFile) => {
-				void (async () => {
-				const now = Date.now();
-				if (now - lastProcessedTime < CONSTANTS.DEBOUNCE_MS) {
-					return; // Skip if within debounce period
+		this.createEvent = (file: TFile) => {
+			void (async () => {
+			const now = Date.now();
+			if (now - lastProcessedTime < CONSTANTS.DEBOUNCE_MS) {
+				return; // Skip if within debounce period
+			}
+			lastProcessedTime = now;
+
+			if (file instanceof TFile && file.extension === "md") {
+				const filePath = file.path;
+
+				// Skip if this file was created by the plugin itself
+				if (this.pluginCreatedFiles.has(filePath)) {
+					this.pluginCreatedFiles.delete(filePath); // Clean up
+					return;
 				}
-				lastProcessedTime = now;
 
-				if (file instanceof TFile && file.extension === "md") {
-					const filePath = file.path;
+				// CRITICAL: Reload settings from disk to ensure we have the latest data
+				// This is necessary because other plugins might have modified data.json
+				await this.loadSettings();
 
-					// Skip if this file was created by the plugin itself
-					if (this.pluginCreatedFiles.has(filePath)) {
-						this.pluginCreatedFiles.delete(filePath); // Clean up
-						return;
-					}
-
-					// CRITICAL: Reload settings from disk to ensure we have the latest data
-					// This is necessary because other plugins might have modified data.json
-					await this.loadSettings();
-
-					// CRITICAL: Always read contentTypes from settings at runtime, not from closure
-					// This ensures newly added content types are included
-					const contentTypes = this.settings.contentTypes || [];
+				// CRITICAL: Check if any content types are enabled AFTER reloading settings
+				// This ensures automation works when content types are enabled by another plugin
+				const contentTypes = this.settings.contentTypes || [];
+				const hasEnabledContentTypes = contentTypes.some(ct => ct.enabled);
+				
+				// If no content types are enabled, skip processing
+				if (!hasEnabledContentTypes) {
+					return;
+				}
 					
 					// Find matching content type using pattern specificity (most specific wins)
 					// Sort by pattern specificity so more specific patterns are checked first
@@ -400,20 +420,15 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				}
 				})();
 			};
-			// Use vault.create event to detect new file creation
-			this.registerEvent(this.app.vault.on("create", (file) => {
-				if (file instanceof TFile) {
-					// Check if we still have enabled content types before processing
-					// This handles the case where all content types are disabled
-					if (hasEnabledContentTypes()) {
-						this.createEvent(file);
-					}
-				}
-			}));
-		} else {
-			// No enabled content types - unregister/create event if it exists
-			this.createEvent = () => {};
-		}
+		
+		// Always register the event listener - it will check enabled content types dynamically
+		// Use vault.create event to detect new file creation
+		this.registerEvent(this.app.vault.on("create", (file) => {
+			if (file instanceof TFile) {
+				// Always call createEvent - it will check for enabled content types after reloading settings
+				this.createEvent(file);
+			}
+		}));
 	}
 
 	async loadSettings() {
@@ -440,8 +455,9 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		} else {
 			// After migration, clean up ALL legacy fields if they still exist
 			// This is a one-time cleanup to remove any lingering legacy data from disk
+			// CRITICAL: Always delete customContentTypes after migration to prevent deleted content types from being restored
 			const legacyFields = [
-				'customContentTypes', // Old name for contentTypes
+				'customContentTypes', // Old name for contentTypes - MUST be removed to prevent restoring deleted types
 				'enableUnderscorePrefix',
 				'postsFolder',
 				'postsLinkBasePath',
@@ -468,6 +484,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			}
 			
 			// If we found and deleted any legacy fields, save immediately to remove them from disk
+			// This ensures deleted content types don't come back from legacy fields
 			if (foundLegacyFields) {
 				await this.saveSettings();
 			}

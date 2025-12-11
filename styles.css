@@ -78,9 +78,6 @@
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	margin-bottom: 16px;
-	padding-bottom: 8px;
-	border-bottom: 1px solid var(--background-modifier-border);
 }
 
 .custom-content-type-header .setting-item {
@@ -185,8 +182,93 @@
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	padding: 8px 0;
+	gap: 8px;
 }
+
+.astro-composer-header-name {
+	flex: 1;
+	min-width: 0;
+}
+
+/* Collapse button */
+.astro-composer-collapse-button {
+	background: transparent !important;
+	border: none !important;
+	padding: 4px;
+	margin-right: 4px;
+	cursor: default;
+	color: var(--text-muted);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 4px;
+	transition: background-color 0.2s ease, color 0.2s ease;
+	box-shadow: none !important;
+}
+
+.astro-composer-collapse-button:hover {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.astro-composer-collapse-button:active {
+	background-color: var(--background-modifier-active);
+}
+
+.astro-composer-collapse-button svg {
+	transition: transform 0.2s ease;
+}
+
+.astro-composer-collapse-button.is-collapsed svg {
+	transform: rotate(-90deg);
+}
+
+/* Reorder buttons container */
+.astro-composer-reorder-buttons {
+	display: flex;
+	flex-direction: row;
+	gap: 4px;
+	margin-right: 8px;
+	align-items: center;
+}
+
+/* Reorder buttons - minimal icon-only style */
+.astro-composer-reorder-button {
+	background: transparent !important;
+	border: none !important;
+	padding: 4px;
+	cursor: default;
+	color: var(--text-muted);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 4px;
+	transition: background-color 0.2s ease, color 0.2s ease;
+	line-height: 1;
+	opacity: 0.6;
+	box-shadow: none !important;
+}
+
+.astro-composer-reorder-button:hover:not(:disabled) {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
+	opacity: 1;
+}
+
+.astro-composer-reorder-button:active:not(:disabled) {
+	background-color: var(--background-modifier-active);
+}
+
+.astro-composer-reorder-button:disabled {
+	opacity: 0.2;
+	cursor: default;
+}
+
+.astro-composer-reorder-button svg {
+	width: 16px;
+	height: 16px;
+}
+
 .astro-composer-remove-setting {
 	border-top: none;
 }

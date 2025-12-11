@@ -15,8 +15,9 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 	// They use Node.js/Electron APIs that don't exist on mobile
 	if (isMobile) {
 		// On mobile, only register the safe commands that work on mobile
-		const fileOps = new FileOperations(plugin.app, settings, plugin as unknown as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
-		const linkConverter = new LinkConverter(settings);
+		const pluginInterface = plugin as unknown as AstroComposerPluginInterface;
+		const fileOps = new FileOperations(plugin.app, settings, pluginInterface as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
+		const linkConverter = new LinkConverter(settings, pluginInterface);
 		
 		// Register only mobile-safe commands
 		plugin.addCommand({
@@ -26,7 +27,9 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 				const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
 				if (file instanceof TFile) {
-					void standardizeProperties(plugin.app, settings, file, plugin as unknown as AstroComposerPluginInterface);
+					// Get fresh settings from plugin
+					const currentSettings = pluginInterface.settings || settings;
+					void standardizeProperties(plugin.app, currentSettings, file, pluginInterface);
 				}
 			},
 		});
@@ -87,20 +90,26 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 	}
 	
 	// Desktop: register all commands including terminal and config
-	const fileOps = new FileOperations(plugin.app, settings, plugin as unknown as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
-	const linkConverter = new LinkConverter(settings);
+	const pluginInterface = plugin as unknown as AstroComposerPluginInterface;
+	const fileOps = new FileOperations(plugin.app, settings, pluginInterface as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
+	const linkConverter = new LinkConverter(settings, pluginInterface);
 
 
 	// Helper function to check if a file matches any configured content type
 	// Uses the same logic as FileOperations.determineType() to ensure consistency
+	// Gets fresh settings from plugin to ensure we check against current content types
 	function hasMatchingContentType(file: TFile, settings: AstroComposerSettings): boolean {
-		const type = fileOps.determineType(file);
+		// Get fresh settings from plugin if available
+		const currentSettings = (plugin as unknown as AstroComposerPluginInterface)?.settings || settings;
+		// Create a temporary FileOperations with fresh settings
+		const tempFileOps = new FileOperations(plugin.app, currentSettings, plugin as unknown as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
+		const type = tempFileOps.determineType(file);
 		// If determineType returns "note", it means no content type matched
 		if (type === "note") {
 			return false;
 		}
 		// Check if the matched content type is enabled
-		const contentType = fileOps.getContentType(type);
+		const contentType = tempFileOps.getContentType(type);
 		return contentType !== null && contentType.enabled;
 	}
 
@@ -125,42 +134,43 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 			const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
 			if (file instanceof TFile) {
-				linkConverter.convertWikilinksForAstro(editor, file);
+				// Get fresh settings from plugin and create LinkConverter with it
+				const currentSettings = pluginInterface.settings || settings;
+				const currentLinkConverter = new LinkConverter(currentSettings, pluginInterface);
+				currentLinkConverter.convertWikilinksForAstro(editor, file);
 			}
 		},
 	});
 
-	// Rename Content command
-	plugin.addCommand({
-		id: "rename-content",
-		name: "Rename current content",
-		icon: "pencil",
-		editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
-			const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
-			if (file instanceof TFile) {
-				// Check if this file matches any configured content type
-				if (!hasMatchingContentType(file, settings)) {
-					new Notice("Cannot rename: this file is not part of a configured content type folder.");
-					return;
+		// Rename Content command
+		plugin.addCommand({
+			id: "rename-content",
+			name: "Rename current content",
+			icon: "pencil",
+			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
+				const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
+				if (file instanceof TFile) {
+					// Get fresh settings from plugin
+					const currentSettings = pluginInterface.settings || settings;
+					// Create FileOperations with fresh settings
+					const currentFileOps = new FileOperations(plugin.app, currentSettings, pluginInterface as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
+					
+					// Check if this file matches any configured content type
+					if (!hasMatchingContentType(file, currentSettings)) {
+						new Notice("Cannot rename: this file is not part of a configured content type folder.");
+						return;
+					}
+					
+					// Determine content type from folder structure
+					const type = currentFileOps.determineType(file);
+					
+					// Always open the modal - it will handle files without frontmatter or title key
+					// If there's no title in frontmatter, the modal will use the filename as fallback
+					// and the rename will proceed with kebab-case version of what user types
+					new TitleModal(plugin.app, file, pluginInterface, type, true).open();
 				}
-				
-				// Determine content type from folder structure
-				const type = fileOps.determineType(file);
-				const cache = plugin.app.metadataCache.getFileCache(file);
-				
-				// Get the appropriate title key for this content type
-				const titleKey = fileOps.getTitleKey(type);
-				
-				// Check if the file has the required title property
-				if (!cache?.frontmatter || !(titleKey in cache.frontmatter)) {
-					new Notice(`Cannot rename: No ${titleKey} found in properties`);
-					return;
-				}
-				
-				new TitleModal(plugin.app, file, plugin as unknown as AstroComposerPluginInterface, type, true).open();
-			}
-		},
-	});
+			},
+		});
 
 	// Open Terminal command (desktop only - not available on mobile)
 	if (!isMobile) {
@@ -198,8 +208,10 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 }
 
 async function standardizeProperties(app: App, settings: AstroComposerSettings, file: TFile, plugin?: AstroComposerPluginInterface): Promise<void> {
-	const templateParser = new TemplateParser(app, settings);
-	const fileOps = new FileOperations(app, settings, plugin);
+	// Get fresh settings from plugin if available
+	const currentSettings = plugin?.settings || settings;
+	const templateParser = new TemplateParser(app, currentSettings);
+	const fileOps = new FileOperations(app, currentSettings, plugin);
 	
 	// Determine content type using the existing logic
 	const type = fileOps.determineType(file);
@@ -316,14 +328,10 @@ export async function renameContentByPath(
 	}
 
 	const type = fileOps.determineType(file);
-	const cache = app.metadataCache.getFileCache(file);
-	const titleKey = fileOps.getTitleKey(type);
-
-	if (!cache?.frontmatter || !(titleKey in cache.frontmatter)) {
-		new Notice(`Cannot rename: No ${titleKey} found in properties`);
-		return;
-	}
-
+	
+	// Always open the modal - it will handle files without frontmatter or title key
+	// If there's no title in frontmatter, the modal will use the filename as fallback
+	// and the rename will proceed with kebab-case version of what user types
 	new TitleModal(app, file, plugin, type, true).open();
 }
 

@@ -22,8 +22,9 @@ export class TitleModal extends Modal {
 		this.isNewNote = isNewNote;
 		
 		// Initialize utilities with current settings
+		// FileOperations will get fresh settings from plugin dynamically
 		const settings = plugin.settings;
-		this.fileOps = new FileOperations(app, settings);
+		this.fileOps = new FileOperations(app, settings, plugin);
 		this.templateParser = new TemplateParser(app, settings);
 	}
 

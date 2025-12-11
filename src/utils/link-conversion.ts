@@ -4,7 +4,16 @@ import { AstroComposerSettings, ContentType } from "../types";
 import { matchesFolderPattern, sortByPatternSpecificity } from "./path-matching";
 
 export class LinkConverter {
-	constructor(private settings: AstroComposerSettings) {}
+	constructor(private settings: AstroComposerSettings, private plugin?: { settings?: AstroComposerSettings }) {}
+	
+	// Get fresh settings from plugin if available, otherwise use stored settings
+	private getSettings(): AstroComposerSettings {
+		// Always prefer plugin settings (they're kept up to date)
+		if (this.plugin?.settings) {
+			return this.plugin.settings;
+		}
+		return this.settings;
+	}
 
 	toKebabCase(str: string): string {
 		return str
@@ -80,7 +89,8 @@ export class LinkConverter {
 		// CRITICAL: Never add trailing slash before an anchor (e.g., /about#heading not /about/#heading)
 		// This is especially important for anchor links from copy heading URL functionality
 		// Anchor links should NEVER have trailing slashes, regardless of settings
-		const shouldAddTrailingSlash = (this.settings.addTrailingSlashToLinks || addTrailingSlash) && !anchor;
+		const settings = this.getSettings();
+		const shouldAddTrailingSlash = (settings.addTrailingSlashToLinks || addTrailingSlash) && !anchor;
 
 		return `${basePath}${slug}${shouldAddTrailingSlash ? '/' : ''}${anchor}`;
 	}
@@ -163,14 +173,16 @@ export class LinkConverter {
 		// CRITICAL: Never add trailing slash before an anchor (e.g., /about#heading not /about/#heading)
 		// This is especially important for anchor links from copy heading URL functionality
 		// Anchor links should NEVER have trailing slashes, regardless of settings
-		const shouldAddTrailingSlash = (this.settings.addTrailingSlashToLinks || addTrailingSlash) && !anchor;
+		const settings = this.getSettings();
+		const shouldAddTrailingSlash = (settings.addTrailingSlashToLinks || addTrailingSlash) && !anchor;
 
 		return `${basePath}${slug}${shouldAddTrailingSlash ? '/' : ''}${anchor}`;
 	}
 
 	private isInConfiguredContentDirectory(filePath: string): boolean {
 		// Check all content types, sorted by pattern specificity (more specific first)
-		const contentTypes = this.settings.contentTypes || [];
+		const settings = this.getSettings();
+		const contentTypes = settings.contentTypes || [];
 		const sortedTypes = sortByPatternSpecificity(contentTypes);
 		
 		for (const contentType of sortedTypes) {
@@ -213,7 +225,8 @@ export class LinkConverter {
 
 	private getContentTypeForPath(filePath: string): { basePath: string; creationMode: "file" | "folder"; indexFileName: string; contentFolder: string } {
 		// Check all content types, sorted by pattern specificity (more specific first)
-		const contentTypes = this.settings.contentTypes || [];
+		const settings = this.getSettings();
+		const contentTypes = settings.contentTypes || [];
 		const sortedTypes = sortByPatternSpecificity(contentTypes);
 		
 		for (const contentType of sortedTypes) {

@@ -4,6 +4,15 @@ import { matchesFolderPattern, sortByPatternSpecificity } from "./path-matching"
 
 export class FileOperations {
 	constructor(private app: App, private settings: AstroComposerSettings, private plugin?: AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> }) {}
+	
+	// Get fresh settings from plugin if available, otherwise use stored settings
+	private getSettings(): AstroComposerSettings {
+		// Always prefer plugin settings (they're kept up to date)
+		if (this.plugin?.settings) {
+			return this.plugin.settings;
+		}
+		return this.settings;
+	}
 
 	toKebabCase(str: string): string {
 		return str
@@ -28,9 +37,10 @@ export class FileOperations {
 
 	determineType(file: TFile): ContentTypeId {
 		const filePath = file.path;
+		const settings = this.getSettings();
 		
 		// Check all content types, sorted by pattern specificity (more specific first)
-		const contentTypes = this.settings.contentTypes || [];
+		const contentTypes = settings.contentTypes || [];
 		const sortedTypes = sortByPatternSpecificity(contentTypes);
 		
 		for (const contentType of sortedTypes) {
@@ -73,7 +83,8 @@ export class FileOperations {
 	}
 
 	getContentType(typeId: ContentTypeId): ContentType | null {
-		const contentTypes = this.settings.contentTypes || [];
+		const settings = this.getSettings();
+		const contentTypes = settings.contentTypes || [];
 		return contentTypes.find(ct => ct.id === typeId) || null;
 	}
 

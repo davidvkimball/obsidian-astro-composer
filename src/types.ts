@@ -66,6 +66,7 @@ export interface ContentType {
 	indexFileName: string;
 	ignoreSubfolders: boolean;
 	enableUnderscorePrefix: boolean;
+	collapsed?: boolean;
 }
 
 export interface FileCreationOptions {
