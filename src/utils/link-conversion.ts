@@ -1,5 +1,5 @@
 import { Editor, TFile, Notice } from "obsidian";
-import { AstroComposerSettings, ContentType } from "../types";
+import { AstroComposerSettings } from "../types";
 
 import { matchesFolderPattern, sortByPatternSpecificity } from "./path-matching";
 
@@ -344,7 +344,7 @@ export class LinkConverter {
 		// Handle regular Wikilinks (non-image)
 		newContent = newContent.replace(
 			/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g,
-			(match, linkText, _pipe, displayText) => {
+			(match: string, linkText: string, _pipe: string | undefined, displayText: string | undefined) => {
 				// Check if it's an image Wikilink
 				if (imageExtensions.test(linkText)) {
 					skippedCount++;
@@ -373,7 +373,7 @@ export class LinkConverter {
 		// Only process links that contain .md to avoid processing already-converted links
 		newContent = newContent.replace(
 			/\[([^\]]+)\]\(([^)]+\.md[^)]*)\)/g,
-			(match, displayText, link) => {
+			(match: string, displayText: string, link: string) => {
 				// Check if it's an image link or external link
 				if (link.match(/^https?:\/\//) || imageExtensions.test(link)) {
 					skippedCount++;
@@ -398,14 +398,14 @@ export class LinkConverter {
 		// Handle image links in Markdown format (e.g., ![Image](mountains.png))
 		newContent = newContent.replace(
 			/!\[(.*?)\]\(([^)]+)\)/g,
-			(match) => {
+			(match: string) => {
 				skippedCount++;
 				return match; // Ignore all image links
 			}
 		);
 
 		// Handle {{embed}} syntax
-		newContent = newContent.replace(/\{\{([^}]+)\}\}/g, (match, fileName) => {
+		newContent = newContent.replace(/\{\{([^}]+)\}\}/g, (match: string, fileName: string) => {
 			if (imageExtensions.test(fileName)) {
 				skippedCount++;
 				skippedLinks.push(fileName);

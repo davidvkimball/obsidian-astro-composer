@@ -1,6 +1,7 @@
 import esbuild from "esbuild";
 import process from "process";
-import builtins from "builtin-modules";
+import { builtinModules } from "module";
+import { existsSync } from "fs";
 
 const banner =
 `/*
@@ -9,13 +10,28 @@ if you want to view the source, please visit the github repository of this plugi
 */
 `;
 
-const prod = (process.argv[2] === "production");
+// Detect entry point: prefer src/main.ts, fallback to main.ts
+const hasSrcMain = existsSync("src/main.ts");
+const hasRootMain = existsSync("main.ts");
 
+if (hasSrcMain && hasRootMain) {
+  console.warn("WARNING: Both src/main.ts and main.ts exist. Using src/main.ts as entry point.");
+  console.warn("Consider removing one to avoid confusion.");
+}
+if (!hasSrcMain && !hasRootMain) {
+  console.error("ERROR: Neither src/main.ts nor main.ts found!");
+  process.exit(1);
+}
+
+// Set entry point based on what exists
+const entryPoint = hasSrcMain ? "src/main.ts" : "main.ts";
+
+// Always build to root for simplicity
 const context = await esbuild.context({
 	banner: {
 		js: banner,
 	},
-	entryPoints: ["src/main.ts"],
+	entryPoints: [entryPoint],
 	bundle: true,
 	external: [
 		"obsidian",
@@ -31,19 +47,40 @@ const context = await esbuild.context({
 		"@lezer/common",
 		"@lezer/highlight",
 		"@lezer/lr",
-		...builtins],
+		...builtinModules],
 	format: "cjs",
 	target: "es2018",
 	logLevel: "info",
-	sourcemap: prod ? false : "inline",
+	sourcemap: "inline",
 	treeShaking: true,
 	outfile: "main.js",
-	minify: prod,
+	minify: false,
 });
 
-if (prod) {
+// Check if this is a one-time build or watch mode
+// Check for "build" or "production" argument - supports both patterns
+const args = process.argv.slice(2);
+const isOneTimeBuild = args.includes("build") || args.includes("production");
+
+if (isOneTimeBuild) {
+	// Production build: build once and exit
 	await context.rebuild();
+	console.log("\n✓ Build complete!");
+	console.log("📦 Release files:");
+	console.log("   - main.js");
+	if (existsSync("manifest.json")) {
+		console.log("   - manifest.json");
+	}
+	if (existsSync("styles.css")) {
+		console.log("   - styles.css");
+	}
+	console.log("\n💡 Upload these files to GitHub releases\n");
+	await context.dispose();
 	process.exit(0);
 } else {
+	// Development mode: watch for changes
+	console.log("\n✓ Development build running in watch mode");
+	console.log("📝 Building to main.js in root");
+	console.log("💡 For production builds, run: npm run build\n");
 	await context.watch();
 }

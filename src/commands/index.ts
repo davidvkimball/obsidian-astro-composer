@@ -4,7 +4,6 @@ import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
 import { LinkConverter } from "../utils/link-conversion";
 import { TitleModal } from "../ui/title-modal";
-import { matchesFolderPattern } from "../utils/path-matching";
 
 export function registerCommands(plugin: Plugin, settings: AstroComposerSettings): void {
 	// Terminal and config commands are desktop-only - NEVER register on mobile
@@ -36,7 +35,7 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 
 		plugin.addCommand({
 			id: "convert-wikilinks-astro",
-			name: "Convert internal links for Astro",
+			name: "Convert internal links for astro",
 			icon: "link-2",
 			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 				const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
@@ -91,8 +90,6 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 	
 	// Desktop: register all commands including terminal and config
 	const pluginInterface = plugin as unknown as AstroComposerPluginInterface;
-	const fileOps = new FileOperations(plugin.app, settings, pluginInterface as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
-	const linkConverter = new LinkConverter(settings, pluginInterface);
 
 
 	// Helper function to check if a file matches any configured content type
@@ -129,7 +126,7 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 	// Convert Wikilinks command
 	plugin.addCommand({
 		id: "convert-wikilinks-astro",
-		name: "Convert internal links for Astro",
+		name: "Convert internal links for astro",
 		icon: "link-2",
 		editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 			const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
@@ -193,7 +190,7 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 	if (!isMobile) {
 		plugin.addCommand({
 			id: "edit-astro-config",
-			name: "Edit Astro config",
+			name: "Edit astro config",
 			icon: "wrench",
 			callback: async () => {
 				const currentSettings = (plugin as unknown as AstroComposerPluginInterface).settings;
@@ -341,13 +338,17 @@ export async function renameContentByPath(
  */
 export async function openTerminalInProjectRoot(app: App, settings: AstroComposerSettings): Promise<void> {
 	try {
-		const { exec } = require('child_process');
-		const path = require('path');
-		const fs = require('fs');
+		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef
+		const { exec } = require('child_process') as { exec: (command: string, callback: (error: { message?: string } | null) => void) => void };
+		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef
+		const path = require('path') as { resolve: (...args: string[]) => string };
+		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef
+		const fs = require('fs') as { existsSync: (path: string) => boolean };
 
 		// Get the actual vault path string from the adapter
-		const vaultPath = (app.vault.adapter as any).basePath || (app.vault.adapter as any).path;
-		const vaultPathString = typeof vaultPath === 'string' ? vaultPath : vaultPath.toString();
+		const adapter = app.vault.adapter as unknown as { basePath?: string; path?: string };
+		const vaultPath = adapter.basePath || adapter.path;
+		const vaultPathString = typeof vaultPath === 'string' ? vaultPath : String(vaultPath);
 
 		// Resolve project root path
 		let projectPath: string;
@@ -365,29 +366,30 @@ export async function openTerminalInProjectRoot(app: App, settings: AstroCompose
 			return;
 		}
 
+		// eslint-disable-next-line no-undef
 		const platform = process.platform;
 		let command: string;
 
 		if (platform === 'win32') {
 			// Windows: Try Windows Terminal first, fallback to cmd
-			exec('where wt', (error: any) => {
+			exec('where wt', (error: { message?: string } | null) => {
 				if (!error) {
 					// Windows Terminal is available
-					exec(`wt -d "${projectPath}"`, (execError: any) => {
+					exec(`wt -d "${projectPath}"`, (execError: { message?: string } | null) => {
 						if (execError) {
 							// Fallback to cmd
-							exec(`cmd /k cd /d "${projectPath}"`, (cmdError: any) => {
+							exec(`cmd /k cd /d "${projectPath}"`, (cmdError: { message?: string } | null) => {
 								if (cmdError) {
-									new Notice(`Error opening terminal: ${cmdError.message}`);
+									new Notice(`Error opening terminal: ${cmdError.message || 'Unknown error'}`);
 								}
 							});
 						}
 					});
 				} else {
 					// Fallback to cmd
-					exec(`cmd /k cd /d "${projectPath}"`, (cmdError: any) => {
+					exec(`cmd /k cd /d "${projectPath}"`, (cmdError: { message?: string } | null) => {
 						if (cmdError) {
-							new Notice(`Error opening terminal: ${cmdError.message}`);
+							new Notice(`Error opening terminal: ${cmdError.message || 'Unknown error'}`);
 						}
 					});
 				}
@@ -411,13 +413,13 @@ export async function openTerminalInProjectRoot(app: App, settings: AstroCompose
 					return;
 				}
 
-				exec(`which ${terminals[index].split(' ')[0]}`, (error: any) => {
+				exec(`which ${terminals[index].split(' ')[0]}`, (error: { message?: string } | null) => {
 					if (!error) {
-						exec(terminals[index], (execError: any) => {
+						exec(terminals[index], (execError: { message?: string } | null) => {
 							if (execError && index < terminals.length - 1) {
 								tryTerminal(index + 1);
 							} else if (execError) {
-								new Notice(`Error opening terminal: ${execError.message}`);
+								new Notice(`Error opening terminal: ${execError.message || 'Unknown error'}`);
 							}
 						});
 					} else {
@@ -432,9 +434,9 @@ export async function openTerminalInProjectRoot(app: App, settings: AstroCompose
 
 		// Execute command for macOS
 		if (command) {
-			exec(command, (error: any) => {
+			exec(command, (error: { message?: string } | null) => {
 				if (error) {
-					new Notice(`Error opening terminal: ${error.message}`);
+					new Notice(`Error opening terminal: ${error.message || 'Unknown error'}`);
 				}
 			});
 		}
@@ -449,13 +451,17 @@ export async function openTerminalInProjectRoot(app: App, settings: AstroCompose
  */
 export async function openConfigFile(app: App, settings: AstroComposerSettings): Promise<void> {
 	try {
-		const fs = require('fs');
-		const path = require('path');
-		const { shell } = require('electron');
+		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef
+		const fs = require('fs') as { existsSync: (path: string) => boolean };
+		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef
+		const path = require('path') as { resolve: (...args: string[]) => string };
+		// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef
+		const { shell } = require('electron') as { shell: { openPath: (path: string) => Promise<string> } };
 
 		// Get the actual vault path string from the adapter
-		const vaultPath = (app.vault.adapter as any).basePath || (app.vault.adapter as any).path;
-		const vaultPathString = typeof vaultPath === 'string' ? vaultPath : vaultPath.toString();
+		const adapter = app.vault.adapter as unknown as { basePath?: string; path?: string };
+		const vaultPath = adapter.basePath || adapter.path;
+		const vaultPathString = typeof vaultPath === 'string' ? vaultPath : String(vaultPath);
 
 		// Resolve config file path
 		if (!settings.configFilePath || !settings.configFilePath.trim()) {

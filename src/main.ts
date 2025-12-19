@@ -26,12 +26,10 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	private pluginCreatedFiles: Set<string> = new Set();
 	private terminalRibbonIcon: HTMLElement | null = null;
 	private configRibbonIcon: HTMLElement | null = null;
-	private ribbonContextMenuStyleEl?: HTMLStyleElement;
 	private ribbonContextMenuObserver?: MutationObserver;
 	private helpButtonObserver?: MutationObserver;
 	private helpButtonElement?: HTMLElement;
 	private customHelpButton?: HTMLElement;
-	private helpButtonStyleEl?: HTMLStyleElement;
 	private settingsTab?: AstroComposerSettingTab;
 
 	/**
@@ -57,7 +55,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 		// Check for naming conflicts
 		// Handle both new contentTypes and legacy customContentTypes
-		const existingContentTypes = this.settings.contentTypes || (this.settings as any).customContentTypes || [];
+		const legacyContentTypes = (this.settings as unknown as { customContentTypes?: ContentType[] }).customContentTypes;
+		const existingContentTypes = this.settings.contentTypes || legacyContentTypes || [];
 		const conflicts: string[] = [];
 		if (existingContentTypes.some((ct: ContentType) => ct.name === "Posts")) {
 			conflicts.push("Posts");
@@ -67,40 +66,39 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		}
 
 		let shouldMigrate = true;
-		let useRenamedTypes = false;
 
 		// If conflicts exist, prompt user (but don't block - use setTimeout to show modal after UI is ready)
 		if (conflicts.length > 0) {
 			// Show modal asynchronously to avoid blocking plugin load
 			await new Promise<void>((resolve) => {
-				setTimeout(async () => {
-					try {
-						const modal = new MigrationModal(this.app, conflicts);
-						// Add timeout fallback - if user doesn't respond in 30 seconds, default to skip
-						const timeoutPromise = new Promise<MigrationConflictResult>((timeoutResolve) => {
-							setTimeout(() => {
-								timeoutResolve({ action: "skip" });
-							}, 30000); // 30 second timeout
-						});
-						
-						const result = await Promise.race([
-							modal.waitForResult(),
-							timeoutPromise
-						]);
-						
-						if (result.action === "skip") {
+				setTimeout(() => {
+					void (async () => {
+						try {
+							const modal = new MigrationModal(this.app, conflicts);
+							// Add timeout fallback - if user doesn't respond in 30 seconds, default to skip
+							const timeoutPromise = new Promise<MigrationConflictResult>((timeoutResolve) => {
+								setTimeout(() => {
+									timeoutResolve({ action: "skip" });
+								}, 30000); // 30 second timeout
+							});
+							
+							const result = await Promise.race([
+								modal.waitForResult(),
+								timeoutPromise
+							]);
+							
+							if (result.action === "skip") {
+								shouldMigrate = false;
+								new Notice("Migration skipped. Old posts/pages settings will be ignored.");
+							}
+						} catch (error) {
+							// If modal fails for any reason, default to skip to prevent blocking
+							console.warn("Migration modal error:", error);
 							shouldMigrate = false;
-							new Notice("Migration skipped. Old Posts/Pages settings will be ignored.");
-						} else {
-							useRenamedTypes = true;
+							new Notice("Migration skipped due to error. You can migrate manually in settings.");
 						}
-					} catch (error) {
-						// If modal fails for any reason, default to skip to prevent blocking
-						console.error("Migration modal error:", error);
-						shouldMigrate = false;
-						new Notice("Migration skipped due to error. You can migrate manually in settings.");
-					}
-					resolve();
+						resolve();
+					})();
 				}, 500); // Small delay to ensure UI is ready
 			});
 		}
@@ -154,8 +152,9 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		const existingFromNew = this.settings.contentTypes && Array.isArray(this.settings.contentTypes) 
 			? this.settings.contentTypes 
 			: [];
-		const existingFromLegacy = (this.settings as any).customContentTypes && Array.isArray((this.settings as any).customContentTypes)
-			? (this.settings as any).customContentTypes
+		const legacySettings = this.settings as unknown as { customContentTypes?: ContentType[] };
+		const existingFromLegacy = legacySettings.customContentTypes && Array.isArray(legacySettings.customContentTypes)
+			? legacySettings.customContentTypes
 			: [];
 		
 		// Merge existing types, prioritizing new format but including legacy if new is empty
@@ -205,11 +204,10 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			'pageTemplate',
 			'onlyAutomateInPagesFolder',
 		];
-		let cleanedUpLegacyFields = false;
+		const settingsRecord = this.settings as unknown as Record<string, unknown>;
 		for (const field of legacyFields) {
-			if ((this.settings as any)[field] !== undefined) {
-				delete (this.settings as any)[field];
-				cleanedUpLegacyFields = true;
+			if (settingsRecord[field] !== undefined) {
+				delete settingsRecord[field];
 			}
 		}
 
@@ -245,7 +243,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 						// It will show migrated types when user opens it (display() reads fresh settings)
 					} catch (e) {
 						// If refresh fails, that's okay - settings will show when user opens them
-						console.log("Could not refresh settings tab after migration:", e);
+						console.warn("Could not refresh settings tab after migration:", e);
 					}
 				}
 			}, 300);
@@ -265,7 +263,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			this.registerCreateEvent();
 			// Initialize help button replacement (desktop only)
 			if (!Platform.isMobile) {
-				this.updateHelpButton();
+				void this.updateHelpButton();
 			}
 			
 			// Run migration after plugin is fully loaded (non-blocking)
@@ -432,8 +430,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	}
 
 	async loadSettings() {
-		const loadedData = await this.loadData();
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
+		const loadedData = (await this.loadData()) as unknown;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData as Partial<AstroComposerSettings> | null | undefined);
 		
 		// Ensure contentTypes is always an array (never undefined or null)
 		if (!this.settings.contentTypes || !Array.isArray(this.settings.contentTypes)) {
@@ -445,12 +443,13 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		if (!this.settings.migrationCompleted) {
 			// Migrate legacy customContentTypes to contentTypes if needed (before migration runs)
 			// Check if contentTypes is empty/undefined and customContentTypes exists
-			const hasLegacyTypes = (this.settings as any).customContentTypes && Array.isArray((this.settings as any).customContentTypes) && (this.settings as any).customContentTypes.length > 0;
+			const legacySettings = this.settings as unknown as { customContentTypes?: ContentType[] };
+			const hasLegacyTypes = legacySettings.customContentTypes && Array.isArray(legacySettings.customContentTypes) && legacySettings.customContentTypes.length > 0;
 			const hasNewTypes = this.settings.contentTypes && Array.isArray(this.settings.contentTypes) && this.settings.contentTypes.length > 0;
 			
 			if (hasLegacyTypes && !hasNewTypes) {
 				// Preserve existing custom content types
-				this.settings.contentTypes = (this.settings as any).customContentTypes;
+				this.settings.contentTypes = legacySettings.customContentTypes || [];
 			}
 		} else {
 			// After migration, clean up ALL legacy fields if they still exist
@@ -475,19 +474,16 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				'onlyAutomateInPagesFolder',
 			];
 			
-			let foundLegacyFields = false;
+			const settingsRecord = this.settings as unknown as Record<string, unknown>;
 			for (const field of legacyFields) {
-				if ((this.settings as any)[field] !== undefined) {
-					delete (this.settings as any)[field];
-					foundLegacyFields = true;
+				if (settingsRecord[field] !== undefined) {
+					delete settingsRecord[field];
 				}
 			}
 			
-			// If we found and deleted any legacy fields, save immediately to remove them from disk
+			// Save immediately to remove any legacy fields from disk
 			// This ensures deleted content types don't come back from legacy fields
-			if (foundLegacyFields) {
-				await this.saveSettings();
-			}
+			await this.saveSettings();
 		}
 	}
 
@@ -560,7 +556,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 					if (this.terminalRibbonIcon.parentNode) {
 						this.terminalRibbonIcon.remove();
 					}
-				} catch (e) {
+				} catch {
 					// Silently handle errors
 				}
 				this.terminalRibbonIcon = null;
@@ -570,7 +566,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 					if (this.configRibbonIcon.parentNode) {
 						this.configRibbonIcon.remove();
 					}
-				} catch (e) {
+				} catch {
 					// Silently handle errors
 				}
 				this.configRibbonIcon = null;
@@ -579,9 +575,9 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			try {
 				const terminalIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Open project terminal"]');
 				terminalIcons.forEach((icon: Element) => icon.remove());
-				const configIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit Astro config"]');
+				const configIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit astro config"]');
 				configIcons.forEach((icon: Element) => icon.remove());
-			} catch (e) {
+			} catch {
 				// Silently handle errors
 			}
 			return; // Don't register icons on mobile
@@ -603,7 +599,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				if (this.terminalRibbonIcon.parentNode) {
 					this.terminalRibbonIcon.remove();
 				}
-			} catch (e) {
+			} catch {
 				// Silently handle errors
 			}
 			this.terminalRibbonIcon = null;
@@ -614,7 +610,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				if (this.configRibbonIcon.parentNode) {
 					this.configRibbonIcon.remove();
 				}
-			} catch (e) {
+			} catch {
 				// Silently handle errors
 			}
 			this.configRibbonIcon = null;
@@ -628,9 +624,9 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			terminalIcons.forEach((icon: Element) => icon.remove());
 			
 			// ALWAYS remove ALL config icons, regardless of settings
-			const configIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit Astro config"]');
+			const configIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit astro config"]');
 			configIcons.forEach((icon: Element) => icon.remove());
-		} catch (e) {
+		} catch {
 			// Silently handle errors
 		}
 
@@ -656,7 +652,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			
 			// Immediately check and remove config icon if it was re-added
 			if (!configShouldExist) {
-				const configIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit Astro config"]');
+				const configIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit astro config"]');
 				if (configIcons.length > 0) {
 					configIcons.forEach((icon: Element) => icon.remove());
 					this.configRibbonIcon = null;
@@ -668,9 +664,9 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 		if (configShouldExist) {
 			// Only add if icon doesn't exist in DOM
-			const existingConfig = document.querySelector('.side-dock-ribbon-action[aria-label="Edit Astro config"]');
+			const existingConfig = document.querySelector('.side-dock-ribbon-action[aria-label="Edit astro config"]');
 			if (!existingConfig) {
-				this.configRibbonIcon = this.addRibbonIcon('wrench', 'Edit Astro config', async () => {
+				this.configRibbonIcon = this.addRibbonIcon('wrench', 'Edit astro config', async () => {
 					if (!this.settings.enableOpenConfigFileCommand) {
 						new Notice("Edit config file command is disabled. Enable it in settings to use this command.");
 						return;
@@ -709,7 +705,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				this.terminalRibbonIcon = null;
 			}
 			if (!configShouldExist) {
-				const configIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit Astro config"]');
+				const configIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit astro config"]');
 				configIcons.forEach((icon: Element) => icon.remove());
 				this.configRibbonIcon = null;
 			}
@@ -733,10 +729,9 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			this.ribbonContextMenuObserver = undefined;
 		}
 		
-		if (this.ribbonContextMenuStyleEl) {
-			this.ribbonContextMenuStyleEl.remove();
-			this.ribbonContextMenuStyleEl = undefined;
-		}
+		// Remove CSS classes
+		document.body.removeClass('astro-composer-hide-terminal-icon');
+		document.body.removeClass('astro-composer-hide-config-icon');
 
 		// Cleanup help button replacement
 		if (this.helpButtonObserver) {
@@ -744,10 +739,6 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			this.helpButtonObserver = undefined;
 		}
 
-		if (this.helpButtonStyleEl) {
-			this.helpButtonStyleEl.remove();
-			this.helpButtonStyleEl = undefined;
-		}
 
 		if (this.customHelpButton) {
 			this.customHelpButton.remove();
@@ -764,48 +755,21 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	}
 
 	private updateRibbonContextMenuCSS() {
-		// Remove existing style if any
-		if (this.ribbonContextMenuStyleEl) {
-			this.ribbonContextMenuStyleEl.remove();
-		}
-
 		// Check if either icon should be hidden
 		const terminalShouldBeHidden = !this.settings.enableTerminalRibbonIcon || !this.settings.enableOpenTerminalCommand;
 		const configShouldBeHidden = !this.settings.enableConfigRibbonIcon || !this.settings.enableOpenConfigFileCommand;
 
-		// Only add CSS if icons should be hidden
-		if (terminalShouldBeHidden || configShouldBeHidden) {
-			// Create style element to hide our ribbon icons from context menu
-			this.ribbonContextMenuStyleEl = document.createElement('style');
-			this.ribbonContextMenuStyleEl.id = 'astro-composer-hide-ribbon-context-menu';
-			let cssRules = '';
-			
-			if (terminalShouldBeHidden) {
-				cssRules += `
-					/* Hide terminal icon from context menu when disabled */
-					.menu-item:has(svg[data-lucide="terminal-square"]),
-					.menu-item:has(.lucide-terminal-square),
-					.menu-item .menu-item-icon:has(svg[data-lucide="terminal-square"]),
-					.menu-item .menu-item-icon:has(.lucide-terminal-square) {
-						display: none !important;
-					}
-				`;
-			}
-			
-			if (configShouldBeHidden) {
-				cssRules += `
-					/* Hide config icon from context menu when disabled */
-					.menu-item:has(svg[data-lucide="wrench"]),
-					.menu-item:has(.lucide-wrench),
-					.menu-item .menu-item-icon:has(svg[data-lucide="wrench"]),
-					.menu-item .menu-item-icon:has(.lucide-wrench) {
-						display: none !important;
-					}
-				`;
-			}
-			
-			this.ribbonContextMenuStyleEl.textContent = cssRules;
-			document.head.appendChild(this.ribbonContextMenuStyleEl);
+		// Use CSS classes on document body to control visibility
+		if (terminalShouldBeHidden) {
+			document.body.addClass('astro-composer-hide-terminal-icon');
+		} else {
+			document.body.removeClass('astro-composer-hide-terminal-icon');
+		}
+		
+		if (configShouldBeHidden) {
+			document.body.addClass('astro-composer-hide-config-icon');
+		} else {
+			document.body.removeClass('astro-composer-hide-config-icon');
 		}
 	}
 
@@ -849,23 +813,11 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	}
 
 	private updateHelpButtonCSS() {
-		// Remove existing style if any
-		if (this.helpButtonStyleEl) {
-			this.helpButtonStyleEl.remove();
-		}
-
-		// Only add CSS if replacement is enabled
+		// Use CSS class on document body to control visibility
 		if (this.settings.helpButtonReplacement?.enabled) {
-			// Create style element to hide help button globally
-			// Use unique ID to avoid conflicts with other plugins
-			this.helpButtonStyleEl = document.createElement('style');
-			this.helpButtonStyleEl.id = 'astro-composer-hide-help-button';
-			this.helpButtonStyleEl.textContent = `
-				.workspace-drawer-vault-actions .clickable-icon:has(svg.help) {
-					display: none !important;
-				}
-			`;
-			document.head.appendChild(this.helpButtonStyleEl);
+			document.body.addClass('astro-composer-hide-help-button');
+		} else {
+			document.body.removeClass('astro-composer-hide-help-button');
 		}
 	}
 
@@ -904,7 +856,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			// Also retry after a short delay
 			setTimeout(() => {
 				if (this.settings.helpButtonReplacement?.enabled) {
-					this.updateHelpButton();
+					void this.updateHelpButton();
 				}
 			}, 500);
 			return;
@@ -928,7 +880,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			// Also retry after a short delay
 			setTimeout(() => {
 				if (this.settings.helpButtonReplacement?.enabled) {
-					this.updateHelpButton();
+					void this.updateHelpButton();
 				}
 			}, 500);
 			return;
@@ -949,7 +901,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 		// Create a new custom button
 		const customButton = helpButton.cloneNode(true) as HTMLElement;
-		customButton.style.display = '';
+		customButton.addClass("astro-composer-help-replacement");
 		customButton.removeAttribute('aria-label'); // Remove any existing aria-label
 		
 		// Add unique identifier to avoid conflicts with other plugins
@@ -962,29 +914,37 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		// Replace the icon using Obsidian's setIcon function
 		const iconContainer = customButton.querySelector('svg')?.parentElement || customButton;
 		try {
-			setIcon(iconContainer as HTMLElement, this.settings.helpButtonReplacement.iconId);
+			if (iconContainer instanceof HTMLElement) {
+				setIcon(iconContainer, this.settings.helpButtonReplacement.iconId);
+			}
 		} catch (error) {
 			console.warn('[Astro Composer] Error setting icon:', error);
 		}
 
 		// Add our custom click handler
-		customButton.addEventListener('click', async (evt: MouseEvent) => {
+		customButton.addEventListener('click', (evt: MouseEvent) => {
 			evt.preventDefault();
 			evt.stopPropagation();
 			
 			const commandId = this.settings.helpButtonReplacement?.commandId;
 			if (commandId) {
-				try {
-					await (this.app as any).commands.executeCommandById(commandId);
-				} catch (error) {
-					console.warn('[Astro Composer] Error executing command:', error);
-					new Notice(`Failed to execute command: ${commandId}`);
-				}
+				void (async () => {
+					try {
+						const appWithCommands = this.app as unknown as { commands?: { executeCommandById?: (id: string) => Promise<void> } };
+						if (appWithCommands.commands?.executeCommandById) {
+							await appWithCommands.commands.executeCommandById(commandId);
+						}
+					} catch (error) {
+						console.warn('[Astro Composer] Error executing command:', error);
+						new Notice(`Failed to execute command: ${commandId}`);
+					}
+				})();
 			}
 		}, true); // Use capture phase to ensure we handle it first
 
-		// Insert the custom button right after the original (hidden) button
-		helpButton.parentElement?.insertBefore(customButton, helpButton.nextSibling);
+		// Insert the custom button in the same position as the help button (before it)
+		// This ensures it takes the help button's position without affecting other buttons
+		helpButton.parentElement?.insertBefore(customButton, helpButton);
 		
 		// Store reference to custom button
 		this.customHelpButton = customButton;
@@ -1034,7 +994,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 					!this.customHelpButton.hasAttribute('data-astro-composer-help-replacement'))) {
 					this.customHelpButton = undefined;
 				}
-				this.updateHelpButton();
+				void this.updateHelpButton();
 			}
 			}, 100); // Shorter debounce for better responsiveness
 		});
@@ -1077,11 +1037,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	}
 
 	private restoreHelpButton() {
-		// Remove CSS that hides help button
-		if (this.helpButtonStyleEl) {
-			this.helpButtonStyleEl.remove();
-			this.helpButtonStyleEl = undefined;
-		}
+		// Remove CSS class that hides help button
+		document.body.removeClass('astro-composer-hide-help-button');
 
 		// Remove the custom button
 		if (this.customHelpButton) {

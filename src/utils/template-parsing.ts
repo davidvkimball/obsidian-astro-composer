@@ -1,5 +1,5 @@
 import { App, TFile, Notice } from "obsidian";
-import { AstroComposerSettings, ParsedFrontmatter, TemplateValues, KNOWN_ARRAY_KEYS, ContentType, ContentTypeId } from "../types";
+import { AstroComposerSettings, ParsedFrontmatter, TemplateValues, KNOWN_ARRAY_KEYS, ContentTypeId } from "../types";
 
 export class TemplateParser {
 	constructor(private app: App, private settings: AstroComposerSettings) {}

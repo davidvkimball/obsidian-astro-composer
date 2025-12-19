@@ -17,20 +17,20 @@ export class MigrationModal extends Modal {
 		contentEl.empty();
 		contentEl.addClass("astro-composer-migration-modal");
 
-		contentEl.createEl("h2", { text: "Migration Conflict Detected" });
+		contentEl.createEl("h2", { text: "Migration conflict detected" });
 
 		contentEl.createEl("p", {
-			text: "You have existing content types with names that conflict with Posts or Pages. How would you like to proceed?",
+			text: "You have existing content types with names that conflict with posts or pages. How would you like to proceed?",
 		});
 
 		const conflictList = contentEl.createEl("ul");
-		conflictList.createEl("li", { text: "Skip migration: Keep your existing Posts/Pages settings (they will be ignored)" });
-		conflictList.createEl("li", { text: "Migrate with renamed types: Create 'Posts (migrated)' and 'Pages (migrated)' content types" });
+		conflictList.createEl("li", { text: "Skip migration: keep your existing posts/pages settings (they will be ignored)" });
+		conflictList.createEl("li", { text: "Migrate with renamed types: create 'posts (migrated)' and 'pages (migrated)' content types" });
 
 		const buttonContainer = contentEl.createDiv({ cls: "modal-button-container" });
 
 		const skipButton = buttonContainer.createEl("button", {
-			text: "Skip Migration",
+			text: "Skip migration",
 			cls: "mod-cta",
 		});
 		skipButton.onclick = () => {
@@ -39,7 +39,7 @@ export class MigrationModal extends Modal {
 		};
 
 		const migrateButton = buttonContainer.createEl("button", {
-			text: "Migrate with Renamed Types",
+			text: "Migrate with renamed types",
 			cls: "mod-cta",
 		});
 		migrateButton.onclick = () => {

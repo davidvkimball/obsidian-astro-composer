@@ -48,8 +48,35 @@ export class TitleModal extends Modal {
 		}
 		const fallbackTitle = basename.replace(/-/g, " ").split(" ").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 
-		if (cache?.frontmatter && cache.frontmatter[titleKey]) {
-			return cache.frontmatter[titleKey];
+		if (cache?.frontmatter && titleKey in cache.frontmatter) {
+			const titleValue = cache.frontmatter[titleKey] as unknown;
+			if (typeof titleValue === 'string') {
+				return titleValue;
+			}
+			if (Array.isArray(titleValue) && titleValue.length > 0) {
+				const firstValue = titleValue[0] as unknown;
+				if (typeof firstValue === 'string') {
+					return firstValue;
+				}
+				if (firstValue != null) {
+					if (typeof firstValue === 'number' || typeof firstValue === 'boolean') {
+						return String(firstValue);
+					}
+					if (typeof firstValue === 'string') {
+						return firstValue;
+					}
+				}
+			}
+			if (titleValue == null) {
+				return '';
+			}
+			if (typeof titleValue === 'number' || typeof titleValue === 'boolean') {
+				return String(titleValue);
+			}
+			if (typeof titleValue === 'string') {
+				return titleValue;
+			}
+			return '';
 		}
 		return fallbackTitle;
 	}

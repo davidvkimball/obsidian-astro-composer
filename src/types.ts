@@ -94,4 +94,6 @@ export interface AstroComposerPluginInterface {
 	settings: AstroComposerSettings;
 	saveSettings(): Promise<void>;
 	registerCreateEvent(): void;
+	registerRibbonIcons?(): void;
+	updateHelpButton?(): Promise<void>;
 }

@@ -1,10 +1,10 @@
-import { App, PluginSettingTab, Setting, Platform, Notice, setIcon } from "obsidian";
+import { App, PluginSettingTab, Setting, Platform, setIcon } from "obsidian";
 import { Plugin } from "obsidian";
-import { ContentType, AstroComposerPluginInterface } from "../types";
+import { ContentType, AstroComposerPluginInterface, AstroComposerSettings } from "../types";
 import { CommandPickerModal } from "./components/CommandPickerModal";
 import { IconPickerModal } from "./components/IconPickerModal";
 import { ConfirmModal } from "./components/ConfirmModal";
-import { matchesFolderPattern } from "../utils/path-matching";
+import { createSettingsGroup } from "../utils/settings-compat";
 
 export class AstroComposerSettingTab extends PluginSettingTab {
 	plugin: AstroComposerPluginInterface;
@@ -19,14 +19,13 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	pagesFieldsContainer: HTMLElement | null = null;
 	pagesIndexFileContainer: HTMLElement | null = null;
 	pagesOnlyAutomateContainer: HTMLElement | null = null;
-	copyHeadingContainer: HTMLElement | null = null;
 	terminalCommandContainer: HTMLElement | null = null;
 	configCommandContainer: HTMLElement | null = null;
 	customContentTypesContainer: HTMLElement | null = null;
 	terminalRibbonToggle: Setting | null = null;
 	configRibbonToggle: Setting | null = null;
-	private terminalRibbonToggleComponent: any = null;
-	private configRibbonToggleComponent: any = null;
+	private terminalRibbonToggleComponent: { setDisabled: (disabled: boolean) => void } | null = null;
+	private configRibbonToggleComponent: { setDisabled: (disabled: boolean) => void } | null = null;
 
 	constructor(app: App, plugin: Plugin) {
 		super(app, plugin);
@@ -56,297 +55,361 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		this.renderSettingsTab(containerEl, settings);
 	}
 
-	private renderSettingsTab(containerEl: HTMLElement, settings: any): void {
+	private renderSettingsTab(containerEl: HTMLElement, settings: AstroComposerSettings): void {
 
-		// Global settings
-		new Setting(containerEl)
-			.setName("Date format")
-			.setDesc("Format for the date in properties (e.g., YYYY-MM-DD, MMMM D, YYYY, YYYY-MM-DD HH:mm).")
-			.addText((text) =>
-				text
-					.setPlaceholder("YYYY-MM-DD")
-					.setValue(settings.dateFormat)
-					.onChange(async (value: string) => {
-						settings.dateFormat = value || "YYYY-MM-DD";
-						await this.plugin.saveSettings();
-					})
-			);
+		// Global settings (first group - no heading)
+		const generalGroup = createSettingsGroup(containerEl);
+		generalGroup.addSetting((setting) => {
+			setting
+				.setName("Date format")
+				// False positive: Date format codes (MMMM, yyyy, etc.) are technical notation, not UI text
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				.setDesc("Format for the date in properties (e.g., yyyy-mm-dd, MMMM D, yyyy, yyyy-mm-dd HH:mm)")
+				.addText((text) =>
+					text
+						// False positive: "YYYY-MM-DD" is a date format placeholder, not UI text
+						// eslint-disable-next-line obsidianmd/ui/sentence-case
+						.setPlaceholder("YYYY-MM-DD")
+						.setValue(settings.dateFormat)
+						.onChange(async (value: string) => {
+							settings.dateFormat = value || "YYYY-MM-DD";
+							await this.plugin.saveSettings();
+						})
+				);
+		});
 
-		new Setting(containerEl)
-			.setName("Enable copy heading links")
-			.setDesc("Add right-click context menu option to copy heading links in various formats.")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(settings.enableCopyHeadingLink)
-					.onChange(async (value: boolean) => {
-						settings.enableCopyHeadingLink = value;
-						await this.plugin.saveSettings();
-						this.updateCopyHeadingFields();
-					})
-			);
+		generalGroup.addSetting((setting) => {
+			setting
+				.setName("Enable copy heading links")
+				.setDesc("Add right-click context menu option to copy heading links in various formats.")
+				.addToggle((toggle) =>
+					toggle
+						.setValue(settings.enableCopyHeadingLink)
+						.onChange(async (value: boolean) => {
+							settings.enableCopyHeadingLink = value;
+							await this.plugin.saveSettings();
+							this.updateCopyHeadingFields();
+						})
+				);
+		});
 
-		this.copyHeadingContainer = containerEl.createDiv({ cls: "copy-heading-fields" });
-		this.copyHeadingContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableCopyHeadingLink);
-		this.copyHeadingContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableCopyHeadingLink);
+		generalGroup.addSetting((setting) => {
+			setting
+				.setName("Default heading link format")
+				// False positive: "Astro" is a proper noun (framework name) and should be capitalized
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				.setDesc("Choose the default format for copied heading links. Obsidian format respects your Obsidian settings for wikilink vs markdown preference. Astro link uses your link base path from above and converts the heading into kebab-case format as an anchor link")
+				.addDropdown((dropdown) =>
+					dropdown
+						.addOption("obsidian", "Obsidian link")
+						.addOption("astro", "Astro link")
+						.setValue(settings.copyHeadingLinkFormat)
+						.onChange(async (value: string) => {
+							settings.copyHeadingLinkFormat = value as "obsidian" | "astro";
+							await this.plugin.saveSettings();
+						})
+				);
+			// Add conditional visibility classes - keep setting in group
+			setting.settingEl.classList.toggle("astro-composer-setting-container-visible", settings.enableCopyHeadingLink);
+			setting.settingEl.classList.toggle("astro-composer-setting-container-hidden", !settings.enableCopyHeadingLink);
+		});
 
-		new Setting(this.copyHeadingContainer)
-			.setName("Default heading link format")
-			.setDesc("Choose the default format for copied heading links. Obsidian format respects your Obsidian settings for wikilink vs markdown preference. Astro link uses your Link base path from above and converts the heading into kebab-case format as an anchor link.")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("obsidian", "Obsidian link")
-					.addOption("astro", "Astro link")
-					.setValue(settings.copyHeadingLinkFormat)
-					.onChange(async (value: string) => {
-						settings.copyHeadingLinkFormat = value as "obsidian" | "astro";
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName("Add trailing slash to links")
-			.setDesc("Add trailing slashes to all converted internal links (e.g., /about/ instead of /about).")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(settings.addTrailingSlashToLinks)
-					.onChange(async (value: boolean) => {
-						settings.addTrailingSlashToLinks = value;
-						await this.plugin.saveSettings();
-					})
-			);
+		generalGroup.addSetting((setting) => {
+			setting
+				.setName("Add trailing slash to links")
+				.setDesc("Add trailing slashes to all converted internal links (e.g., /about/ instead of /about).")
+				.addToggle((toggle) =>
+					toggle
+						.setValue(settings.addTrailingSlashToLinks)
+						.onChange(async (value: boolean) => {
+							settings.addTrailingSlashToLinks = value;
+							await this.plugin.saveSettings();
+						})
+				);
+		});
 
 		// Auto-insert properties (global setting)
-		new Setting(containerEl)
-			.setName("Auto-insert properties")
-			.setDesc("Automatically insert the properties template when creating new files for any content type.")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(settings.autoInsertProperties)
-					.onChange(async (value: boolean) => {
-						settings.autoInsertProperties = value;
-						await this.plugin.saveSettings();
-					})
-			);
+		generalGroup.addSetting((setting) => {
+			setting
+				.setName("Auto-insert properties")
+				.setDesc("Automatically insert the properties template when creating new files for any content type.")
+				.addToggle((toggle) =>
+					toggle
+						.setValue(settings.autoInsertProperties)
+						.onChange(async (value: boolean) => {
+							settings.autoInsertProperties = value;
+							await this.plugin.saveSettings();
+						})
+				);
+		});
 
 		// Content types
-		new Setting(containerEl)
-			.setName("Content types")
-			.setDesc("")
-			.setHeading();
+		const contentTypesGroup = createSettingsGroup(containerEl, "Content types");
 
-		this.customContentTypesContainer = containerEl.createDiv({ cls: "custom-content-types-container" });
-		this.renderCustomContentTypes();
+		// Add container as a setting - hide the setting's default UI, add our container inside
+		contentTypesGroup.addSetting((setting) => {
+			// Hide the setting's default UI elements using CSS classes
+			setting.settingEl.addClass("astro-composer-setting-hidden-elements");
+			setting.settingEl.addClass("astro-composer-setting-container-full-width");
+			// Add our container inside the setting element - ensure it's visible
+			this.customContentTypesContainer = setting.settingEl.createDiv({ 
+				cls: "custom-content-types-container astro-composer-custom-types-container-visible" 
+			});
+		});
+		// Render content types after container is created
+		if (this.customContentTypesContainer) {
+			this.renderCustomContentTypes();
+		}
 
 		// Developer commands (desktop only - not available on mobile)
 		if (!Platform.isMobile) {
-			new Setting(containerEl)
-				.setName("Developer commands")
-				.setDesc("")
-				.setHeading();
+			const developerGroup = createSettingsGroup(containerEl, "Developer commands");
 
 			// Terminal command settings
-			new Setting(containerEl)
-				.setName("Enable open terminal command")
-				.setDesc("Enable command to open terminal in project root directory.")
-				.addToggle((toggle) =>
-					toggle
-						.setValue(settings.enableOpenTerminalCommand)
-						.onChange(async (value: boolean) => {
-							settings.enableOpenTerminalCommand = value;
-							await this.plugin.saveSettings();
-							this.updateTerminalCommandFields();
-							// registerRibbonIcons checks both command and icon settings
-							// If command is enabled AND icon is enabled, it will show; otherwise it will hide
-							if ((this.plugin as any).registerRibbonIcons) {
-								(this.plugin as any).registerRibbonIcons();
-							}
-						})
-				);
+			developerGroup.addSetting((setting) => {
+				setting
+					.setName("Enable open terminal command")
+					.setDesc("Enable command to open terminal in project root directory.")
+					.addToggle((toggle) =>
+						toggle
+							.setValue(settings.enableOpenTerminalCommand)
+							.onChange(async (value: boolean) => {
+								settings.enableOpenTerminalCommand = value;
+								await this.plugin.saveSettings();
+								this.updateTerminalCommandFields();
+								// registerRibbonIcons checks both command and icon settings
+								// If command is enabled AND icon is enabled, it will show; otherwise it will hide
+								if (this.plugin.registerRibbonIcons) {
+									this.plugin.registerRibbonIcons();
+								}
+							})
+					);
+			});
 
+			// Create container for terminal command fields - keep for backward compatibility with update methods
 			this.terminalCommandContainer = containerEl.createDiv({ cls: "terminal-command-fields" });
 			this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenTerminalCommand);
 			this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenTerminalCommand);
 
-			const projectPathSetting = new Setting(this.terminalCommandContainer)
-				.setName("Project root directory path")
-				.setDesc("Path relative to the Obsidian vault root folder. Use ../.. for two levels up. Leave blank to use the vault folder. This is where the terminal will open. Absolute paths work also.")
-				.addText((text) =>
-					text
-						.setPlaceholder("../..")
-						.setValue(settings.terminalProjectRootPath)
-						.onChange(async (value: string) => {
-							settings.terminalProjectRootPath = value;
-							await this.plugin.saveSettings();
-						})
-				);
+			developerGroup.addSetting((setting) => {
+				const descFragment = document.createDocumentFragment();
+				// False positive: Text is already in sentence case; "Obsidian" is a proper noun
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				descFragment.createEl("div", { text: "Path relative to the Obsidian vault root folder. Use ../.. for two levels up. Leave blank to use the vault folder" });
+				descFragment.createEl("div", { text: "This is where the terminal will open. Absolute paths work also." });
+				setting
+					.setName("Project root directory path")
+					.setDesc(descFragment)
+					.addText((text) =>
+						text
+							.setPlaceholder("../..")
+							.setValue(settings.terminalProjectRootPath)
+							.onChange(async (value: string) => {
+								settings.terminalProjectRootPath = value;
+								await this.plugin.saveSettings();
+							})
+					);
+				// Add class for conditional visibility - keep setting in group
+				setting.settingEl.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenTerminalCommand);
+				setting.settingEl.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenTerminalCommand);
+			});
 
-			const terminalRibbonToggle = new Setting(this.terminalCommandContainer)
-				.setName("Show open terminal ribbon icon")
-				.setDesc("Add a ribbon icon to launch the terminal command.")
-				.addToggle((toggle) => {
-					this.terminalRibbonToggleComponent = toggle;
-					toggle
-						.setValue(settings.enableTerminalRibbonIcon)
-						.setDisabled(!settings.enableOpenTerminalCommand)
-						.onChange(async (value: boolean) => {
-							// Update settings directly on plugin instance
-							(this.plugin as any).settings.enableTerminalRibbonIcon = value;
-							settings.enableTerminalRibbonIcon = value;
-							await this.plugin.saveSettings();
-							// Small delay to ensure settings are saved, then re-register
-							setTimeout(() => {
-								if ((this.plugin as any).registerRibbonIcons) {
-									(this.plugin as any).registerRibbonIcons();
-								}
-							}, 50);
-						});
-				});
-			// Store reference for updating disabled state
-			this.terminalRibbonToggle = terminalRibbonToggle;
+			developerGroup.addSetting((setting) => {
+				setting
+					.setName("Show open terminal ribbon icon")
+					.setDesc("Add a ribbon icon to launch the terminal command.")
+					.addToggle((toggle) => {
+						this.terminalRibbonToggleComponent = toggle;
+						toggle
+							.setValue(settings.enableTerminalRibbonIcon)
+							.setDisabled(!settings.enableOpenTerminalCommand)
+							.onChange(async (value: boolean) => {
+								// Update settings directly on plugin instance
+								this.plugin.settings.enableTerminalRibbonIcon = value;
+								settings.enableTerminalRibbonIcon = value;
+								await this.plugin.saveSettings();
+								// Small delay to ensure settings are saved, then re-register
+								setTimeout(() => {
+									if (this.plugin.registerRibbonIcons) {
+										this.plugin.registerRibbonIcons();
+									}
+								}, 50);
+							});
+					});
+				// Add class for conditional visibility - keep setting in group
+				setting.settingEl.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenTerminalCommand);
+				setting.settingEl.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenTerminalCommand);
+				// Store reference for updating disabled state
+				this.terminalRibbonToggle = setting;
+			});
 
 			// Config file command settings
-			new Setting(containerEl)
-				.setName("Enable edit config file command")
-				.setDesc("Enable command to open Astro config file in default editor.")
-				.addToggle((toggle) =>
-					toggle
-						.setValue(settings.enableOpenConfigFileCommand)
-						.onChange(async (value: boolean) => {
-							settings.enableOpenConfigFileCommand = value;
-							await this.plugin.saveSettings();
-							this.updateConfigCommandFields();
-							// registerRibbonIcons checks both command and icon settings
-							// If command is enabled AND icon is enabled, it will show; otherwise it will hide
-							if ((this.plugin as any).registerRibbonIcons) {
-								(this.plugin as any).registerRibbonIcons();
-							}
-						})
-				);
+			developerGroup.addSetting((setting) => {
+				setting
+					.setName("Enable edit config file command")
+					.setDesc("Enable command to open astro config file in default editor.")
+					.addToggle((toggle) =>
+						toggle
+							.setValue(settings.enableOpenConfigFileCommand)
+							.onChange(async (value: boolean) => {
+								settings.enableOpenConfigFileCommand = value;
+								await this.plugin.saveSettings();
+								this.updateConfigCommandFields();
+								// registerRibbonIcons checks both command and icon settings
+								// If command is enabled AND icon is enabled, it will show; otherwise it will hide
+								if (this.plugin.registerRibbonIcons) {
+									this.plugin.registerRibbonIcons();
+								}
+							})
+					);
+			});
 
+			// Create container for config command fields - keep for backward compatibility with update methods
 			this.configCommandContainer = containerEl.createDiv({ cls: "config-command-fields" });
 			this.configCommandContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenConfigFileCommand);
 			this.configCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenConfigFileCommand);
 
-			const configPathSetting = new Setting(this.configCommandContainer)
-				.setName("Config file path")
-				.setDesc("Path to the config file relative to the vault root. Use ../config.ts or ../../astro.config.mjs. This setting is required. Absolute paths work also.")
-				.addText((text) =>
-					text
-						.setPlaceholder("../config.ts")
-						.setValue(settings.configFilePath)
-						.onChange(async (value: string) => {
-							settings.configFilePath = value;
+			developerGroup.addSetting((setting) => {
+				const descFragment = document.createDocumentFragment();
+				descFragment.createEl("div", { text: "Path to the config file relative to the vault root. Use ../config.ts or ../../astro.config.mjs." });
+				descFragment.createEl("div", { text: "Absolute paths work also." });
+				setting
+					.setName("Config file path")
+					.setDesc(descFragment)
+					.addText((text) =>
+						text
+							.setPlaceholder("../config.ts")
+							.setValue(settings.configFilePath)
+							.onChange(async (value: string) => {
+								settings.configFilePath = value;
+								await this.plugin.saveSettings();
+							})
+					);
+				// Add class for conditional visibility - keep setting in group
+				setting.settingEl.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenConfigFileCommand);
+				setting.settingEl.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenConfigFileCommand);
+			});
+
+			developerGroup.addSetting((setting) => {
+				setting
+					.setName("Show open config ribbon icon")
+					.setDesc("Add a ribbon icon to launch the config file command.")
+					.addToggle((toggle) => {
+						this.configRibbonToggleComponent = toggle;
+						toggle
+							.setValue(settings.enableConfigRibbonIcon)
+							.setDisabled(!settings.enableOpenConfigFileCommand)
+							.onChange(async (value: boolean) => {
+								// Update settings directly on plugin instance
+								this.plugin.settings.enableConfigRibbonIcon = value;
+								settings.enableConfigRibbonIcon = value;
+								await this.plugin.saveSettings();
+								// Small delay to ensure settings are saved, then re-register
+								setTimeout(() => {
+									if (this.plugin.registerRibbonIcons) {
+										this.plugin.registerRibbonIcons();
+									}
+								}, 50);
+							});
+					});
+				// Add class for conditional visibility - keep setting in group
+				setting.settingEl.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenConfigFileCommand);
+				setting.settingEl.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenConfigFileCommand);
+				// Store reference for updating disabled state
+				this.configRibbonToggle = setting;
+			});
+
+			// Help button replacement toggle (part of developer commands group)
+			developerGroup.addSetting((setting) => {
+				setting
+					.setName('Swap out help button for custom action')
+					.setDesc('Replace the help button in the vault profile area with a custom action.')
+					.addToggle(toggle => toggle
+						.setValue(settings.helpButtonReplacement?.enabled ?? false)
+						.onChange(async (value) => {
+							if (!settings.helpButtonReplacement) {
+								settings.helpButtonReplacement = {
+									enabled: false,
+									commandId: 'edit-astro-config',
+									iconId: 'wrench',
+								};
+							}
+							settings.helpButtonReplacement.enabled = value;
 							await this.plugin.saveSettings();
-						})
-				);
+							// Trigger help button replacement update (it will reload settings)
+							if (this.plugin.updateHelpButton) {
+								await this.plugin.updateHelpButton();
+							}
+							// Re-render to show/hide options
+							this.display();
+						}));
+			});
 
-			const configRibbonToggle = new Setting(this.configCommandContainer)
-				.setName("Show open config ribbon icon")
-				.setDesc("Add a ribbon icon to launch the config file command.")
-				.addToggle((toggle) => {
-					this.configRibbonToggleComponent = toggle;
-					toggle
-						.setValue(settings.enableConfigRibbonIcon)
-						.setDisabled(!settings.enableOpenConfigFileCommand)
-						.onChange(async (value: boolean) => {
-							// Update settings directly on plugin instance
-							(this.plugin as any).settings.enableConfigRibbonIcon = value;
-							settings.enableConfigRibbonIcon = value;
-							await this.plugin.saveSettings();
-							// Small delay to ensure settings are saved, then re-register
-							setTimeout(() => {
-								if ((this.plugin as any).registerRibbonIcons) {
-									(this.plugin as any).registerRibbonIcons();
-								}
-							}, 50);
-						});
-				});
-			// Store reference for updating disabled state
-			this.configRibbonToggle = configRibbonToggle;
-		}
-
-		// Help button replacement toggle (desktop only - not available on mobile)
-		if (!Platform.isMobile) {
-			const helpButtonSetting = new Setting(containerEl)
-				.setName('Swap out help button for custom action')
-				.setDesc('Replace the help button in the vault profile area with a custom action.')
-				.addToggle(toggle => toggle
-					.setValue(settings.helpButtonReplacement?.enabled ?? false)
-					.onChange(async (value) => {
-						if (!settings.helpButtonReplacement) {
-							settings.helpButtonReplacement = {
-								enabled: false,
-								commandId: 'edit-astro-config',
-								iconId: 'wrench',
-							};
-						}
-						settings.helpButtonReplacement.enabled = value;
-						await this.plugin.saveSettings();
-						// Trigger help button replacement update (it will reload settings)
-						if ((this.plugin as any).updateHelpButton) {
-							await (this.plugin as any).updateHelpButton();
-						}
-						// Re-render to show/hide options
-						this.display();
-					}));
-
-			// Show command and icon pickers only if enabled
+			// Show command and icon pickers only if enabled (part of developer commands group)
 			if (settings.helpButtonReplacement?.enabled) {
-			// Command picker
-			const commandName = this.getCommandName(settings.helpButtonReplacement.commandId);
-			new Setting(containerEl)
-				.setName('Command')
-				.setDesc('Select the command to execute when the button is clicked.')
-				.addButton(button => button
-					.setButtonText(commandName || 'Select command')
-					.onClick(() => {
-						const modal = new CommandPickerModal(this.app, async (commandId) => {
-							if (!settings.helpButtonReplacement) {
-								settings.helpButtonReplacement = {
-									enabled: true,
-									commandId: 'edit-astro-config',
-									iconId: 'wrench',
-								};
-							}
-							settings.helpButtonReplacement.commandId = commandId;
-							await this.plugin.saveSettings();
-							// Trigger help button replacement update immediately (it will reload settings)
-							if ((this.plugin as any).updateHelpButton) {
-								await (this.plugin as any).updateHelpButton();
-							}
-							// Re-render to show updated command name
-							this.display();
-						});
-						modal.open();
-					}));
+				// Command picker
+				const commandName = this.getCommandName(settings.helpButtonReplacement.commandId);
+				developerGroup.addSetting((setting) => {
+					setting
+						.setName('Command')
+						.setDesc('Select the command to execute when the button is clicked.')
+						.addButton(button => button
+							.setButtonText(commandName || 'Select command')
+							.onClick(() => {
+								const modal = new CommandPickerModal(this.app, (commandId) => {
+									void (async () => {
+										if (!settings.helpButtonReplacement) {
+											settings.helpButtonReplacement = {
+												enabled: true,
+												commandId: 'edit-astro-config',
+												iconId: 'wrench',
+											};
+										}
+										settings.helpButtonReplacement.commandId = commandId;
+										await this.plugin.saveSettings();
+										// Trigger help button replacement update immediately (it will reload settings)
+										if (this.plugin.updateHelpButton) {
+											await this.plugin.updateHelpButton();
+										}
+										// Re-render to show updated command name
+										this.display();
+									})();
+								});
+								modal.open();
+							}));
+				});
 
-			// Icon picker
-			const iconName = this.getIconName(settings.helpButtonReplacement.iconId);
-			new Setting(containerEl)
-				.setName('Icon')
-				.setDesc('Select the icon to display on the button.')
-				.addButton(button => button
-					.setButtonText(iconName || 'Select icon...')
-					.onClick(() => {
-						const modal = new IconPickerModal(this.app, async (iconId) => {
-							if (!settings.helpButtonReplacement) {
-								settings.helpButtonReplacement = {
-									enabled: true,
-									commandId: 'edit-astro-config',
-									iconId: 'wrench',
-								};
-							}
-							settings.helpButtonReplacement.iconId = iconId;
-							await this.plugin.saveSettings();
-							// Trigger help button replacement update immediately (it will reload settings)
-							if ((this.plugin as any).updateHelpButton) {
-								await (this.plugin as any).updateHelpButton();
-							}
-							// Re-render to show updated icon name
-							this.display();
-						});
-						modal.open();
-					}));
+				// Icon picker
+				const iconName = this.getIconName(settings.helpButtonReplacement.iconId);
+				developerGroup.addSetting((setting) => {
+					setting
+						.setName('Icon')
+						.setDesc('Select the icon to display on the button.')
+						.addButton(button => button
+							.setButtonText(iconName || 'Select icon...')
+							.onClick(() => {
+								const modal = new IconPickerModal(this.app, (iconId) => {
+									void (async () => {
+										if (!settings.helpButtonReplacement) {
+											settings.helpButtonReplacement = {
+												enabled: true,
+												commandId: 'edit-astro-config',
+												iconId: 'wrench',
+											};
+										}
+										settings.helpButtonReplacement.iconId = iconId;
+										await this.plugin.saveSettings();
+										// Trigger help button replacement update immediately (it will reload settings)
+										if (this.plugin.updateHelpButton) {
+											await this.plugin.updateHelpButton();
+										}
+										// Re-render to show updated icon name
+										this.display();
+									})();
+								});
+								modal.open();
+							}));
+				});
 			}
 		}
 
@@ -360,19 +423,46 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 
 	updateCopyHeadingFields() {
-		if (this.copyHeadingContainer) {
-			const settings = this.plugin.settings;
-			this.copyHeadingContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableCopyHeadingLink);
-			this.copyHeadingContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableCopyHeadingLink);
-		}
+		const settings = this.plugin.settings;
+		const isVisible = settings.enableCopyHeadingLink;
+		
+		// Update the "Default heading link format" setting element visibility
+		const containerEl = this.containerEl;
+		const allSettings = containerEl.querySelectorAll('.setting-item');
+		allSettings.forEach((settingEl) => {
+			const nameEl = settingEl.querySelector('.setting-item-name');
+			if (nameEl && nameEl.textContent?.trim() === "Default heading link format") {
+				settingEl.classList.toggle("astro-composer-setting-container-visible", isVisible);
+				settingEl.classList.toggle("astro-composer-setting-container-hidden", !isVisible);
+			}
+		});
 	}
 
 	updateTerminalCommandFields() {
+		const settings = this.plugin.settings;
+		const isVisible = settings.enableOpenTerminalCommand;
+		
+		// Update container for backward compatibility
 		if (this.terminalCommandContainer) {
-			const settings = this.plugin.settings;
-			this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenTerminalCommand);
-			this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenTerminalCommand);
+			this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-visible", isVisible);
+			this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !isVisible);
 		}
+		
+		// Update individual setting elements that are in the group
+		// Find settings by their name text content
+		const containerEl = this.containerEl;
+		const allSettings = containerEl.querySelectorAll('.setting-item');
+		allSettings.forEach((settingEl) => {
+			const nameEl = settingEl.querySelector('.setting-item-name');
+			if (nameEl) {
+				const name = nameEl.textContent?.trim();
+				if (name === "Project root directory path" || name === "Show open terminal ribbon icon") {
+					settingEl.classList.toggle("astro-composer-setting-container-visible", isVisible);
+					settingEl.classList.toggle("astro-composer-setting-container-hidden", !isVisible);
+				}
+			}
+		});
+		
 		// Update ribbon toggle disabled state using the toggle component
 		if (this.terminalRibbonToggleComponent) {
 			this.terminalRibbonToggleComponent.setDisabled(!this.plugin.settings.enableOpenTerminalCommand);
@@ -380,11 +470,30 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	}
 
 	updateConfigCommandFields() {
+		const settings = this.plugin.settings;
+		const isVisible = settings.enableOpenConfigFileCommand;
+		
+		// Update container for backward compatibility
 		if (this.configCommandContainer) {
-			const settings = this.plugin.settings;
-			this.configCommandContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenConfigFileCommand);
-			this.configCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenConfigFileCommand);
+			this.configCommandContainer.classList.toggle("astro-composer-setting-container-visible", isVisible);
+			this.configCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !isVisible);
 		}
+		
+		// Update individual setting elements that are in the group
+		// Find settings by their name text content
+		const containerEl = this.containerEl;
+		const allSettings = containerEl.querySelectorAll('.setting-item');
+		allSettings.forEach((settingEl) => {
+			const nameEl = settingEl.querySelector('.setting-item-name');
+			if (nameEl) {
+				const name = nameEl.textContent?.trim();
+				if (name === "Config file path" || name === "Show open config ribbon icon") {
+					settingEl.classList.toggle("astro-composer-setting-container-visible", isVisible);
+					settingEl.classList.toggle("astro-composer-setting-container-hidden", !isVisible);
+				}
+			}
+		});
+		
 		// Update ribbon toggle disabled state using the toggle component
 		if (this.configRibbonToggleComponent) {
 			this.configRibbonToggleComponent.setDisabled(!this.plugin.settings.enableOpenConfigFileCommand);
@@ -566,12 +675,21 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				cls: "custom-content-type-settings",
 				attr: { "data-type-id": customType.id }
 			});
+			
+			// Set initial visibility state based on enabled and collapsed state
+			const initiallyCollapsed = customType.collapsed ?? false;
+			const initiallyVisible = customType.enabled && !initiallyCollapsed;
+			if (initiallyVisible) {
+				settingsContainer.classList.add("astro-composer-setting-container-visible");
+			} else {
+				settingsContainer.classList.add("astro-composer-setting-container-hidden");
+			}
 
 			// Content type name
 			const nameContainer = settingsContainer.createDiv();
 			new Setting(nameContainer)
 				.setName("Content type name")
-				.setDesc("Display name for this content type (e.g., 'Projects', 'Notes', 'Tutorials')")
+				.setDesc("Display name for this content type (e.g., 'projects', 'notes', 'tutorials')")
 				.addText((text) => {
 					text
 						.setPlaceholder("Enter content type name")
@@ -605,8 +723,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				});
 			
 			// Add conflict warning element
-			const conflictWarningEl = folderContainer.createDiv({ cls: "astro-composer-conflict-warning", attr: { "data-type-id": customType.id } });
-			conflictWarningEl.style.display = "none";
+			folderContainer.createDiv({ cls: "astro-composer-conflict-warning hidden", attr: { "data-type-id": customType.id } });
 			this.updateFolderConflictWarning(customType.id, folderSetting);
 
 			// Ignore subfolders (only show when folder is set)
@@ -630,7 +747,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			const underscorePrefixContainer = settingsContainer.createDiv();
 			new Setting(underscorePrefixContainer)
 				.setName("Use underscore prefix for drafts")
-				.setDesc("Add an underscore prefix (_content-title) to new notes by default when enabled. This hides them from Astro, which can be helpful for drafts.")
+				.setDesc("Add an underscore prefix (_content-title) to new notes by default when enabled. This hides them from astro, which can be helpful for drafts")
 				.addToggle((toggle) =>
 					toggle
 						.setValue(customType.enableUnderscorePrefix || false)
@@ -681,7 +798,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				.setDesc("Name for index files in folder-based content (without .md extension). Defaults to 'index' if left blank.")
 				.addText((text) =>
 					text
-						.setPlaceholder("index")
+						.setPlaceholder("Index")
 						.setValue(customType.indexFileName)
 						.onChange(async (value: string) => {
 							customType.indexFileName = value;
@@ -748,21 +865,15 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			this.updateFolderConflictWarning(customType.id, null);
 		});
 
-		// Add button for creating new custom content types
-		const addButtonContainer = this.customContentTypesContainer.createDiv();
-		const addButtonSetting = new Setting(addButtonContainer)
-			.setName("")
-			.addButton((button) => {
-				button
-					.setButtonText("Add content type")
-					.setCta()
-					.onClick(() => {
-						this.addCustomContentType();
-					});
-			});
-		
-		// Hide the divider line for the add button
-		addButtonSetting.settingEl.classList.add("astro-composer-add-button");
+		// Add floating button for creating new custom content types (no settings background)
+		const addButtonContainer = this.customContentTypesContainer.createDiv({ cls: "astro-composer-add-button-container" });
+		const addButton = addButtonContainer.createEl("button", {
+			cls: "mod-cta",
+			text: "Add content type"
+		});
+		addButton.addEventListener("click", () => {
+			this.addCustomContentType();
+		});
 	}
 
 	private updateCustomContentTypeVisibility(typeId: string, enabled: boolean) {
@@ -831,13 +942,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		}
 
 		if (conflictingTypes.length > 0) {
-			conflictWarningEl.style.display = "block";
+			conflictWarningEl.removeClass("hidden");
 			conflictWarningEl.textContent = `Conflict: ${conflictingTypes.join(", ")} also use${conflictingTypes.length === 1 ? "s" : ""} this folder. More specific patterns will take priority.`;
-			conflictWarningEl.style.color = "var(--text-warning)";
-			conflictWarningEl.style.fontSize = "0.9em";
-			conflictWarningEl.style.marginTop = "0.5em";
 		} else {
-			conflictWarningEl.style.display = "none";
+			conflictWarningEl.addClass("hidden");
 		}
 	}
 
@@ -895,13 +1003,13 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	private getCommandName(commandId: string): string {
 		if (!commandId) return '';
 		try {
-			const commandRegistry = (this.app as { commands?: { listCommands?: () => Array<{ id: string; name: string }>; commands?: Record<string, { id: string; name: string }> } }).commands;
+			const commandRegistry = (this.app as unknown as { commands?: { listCommands?: () => Array<{ id: string; name: string }>; commands?: Record<string, { id: string; name: string }> } }).commands;
 			
 			// Method 1: Try listCommands()
 			if (commandRegistry && typeof commandRegistry.listCommands === 'function') {
 				try {
 					const allCommands = commandRegistry.listCommands();
-					const command = allCommands.find((cmd: any) => cmd.id === commandId);
+					const command = allCommands.find((cmd: { id: string; name?: string }) => cmd.id === commandId);
 					if (command?.name) {
 						return command.name;
 					}
@@ -914,7 +1022,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			try {
 				const registry = commandRegistry?.commands;
 				if (registry && typeof registry === 'object') {
-					const command = registry[commandId];
+					const command = (registry as Record<string, { name?: string }>)[commandId];
 					if (command?.name) {
 						return command.name;
 					}
