@@ -327,6 +327,7 @@ export class TitleModal extends Modal {
 	private generateInitialContent(title: string): string {
 		const now = new Date();
 		const dateString = window.moment(now).format(this.plugin.settings.dateFormat);
+		const slug = this.fileOps.toKebabCase(title);
 
 		let template: string;
 		if (this.type === "note") {
@@ -346,6 +347,7 @@ export class TitleModal extends Modal {
 		
 		template = template.replace(/\{\{title\}\}/g, title);
 		template = template.replace(/\{\{date\}\}/g, dateString);
+		template = template.replace(/\{\{slug\}\}/g, slug);
 
 		return template;
 	}
@@ -353,6 +355,7 @@ export class TitleModal extends Modal {
 	private async addPropertiesToFile(file: TFile, title: string, type: ContentTypeId) {
 		const now = new Date();
 		const dateString = window.moment(now).format(this.plugin.settings.dateFormat);
+		const slug = this.fileOps.toKebabCase(title);
 
 		let template: string;
 		if (type === "note") {
@@ -372,6 +375,7 @@ export class TitleModal extends Modal {
 		
 		template = template.replace(/\{\{title\}\}/g, title);
 		template = template.replace(/\{\{date\}\}/g, dateString);
+		template = template.replace(/\{\{slug\}\}/g, slug);
 
 		// Ensure no extra newlines or --- are added beyond the template
 		await this.app.vault.modify(file, template);

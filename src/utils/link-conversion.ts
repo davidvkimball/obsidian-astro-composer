@@ -32,10 +32,12 @@ export class LinkConverter {
 
 		// URL decode the path to handle encoded characters like %20
 		path = decodeURIComponent(path);
-		path = path.replace(/\.md$/, "");
+		path = path.replace(/\.(md|mdx)$/, "");
 
 		// Determine content type and appropriate base path using pattern specificity
-		const contentTypeInfo = this.getContentTypeForPath(path + '.md');
+		// Support both .md and .mdx extensions
+		const fileExtension = link.endsWith('.mdx') ? '.mdx' : '.md';
+		const contentTypeInfo = this.getContentTypeForPath(path + fileExtension);
 		let basePath = contentTypeInfo.basePath || "";
 		let contentFolder = contentTypeInfo.contentFolder || "";
 		let indexFileName = contentTypeInfo.indexFileName || "";
@@ -103,7 +105,7 @@ export class LinkConverter {
 
 		// URL decode the path to handle encoded characters like %20
 		path = decodeURIComponent(path);
-		path = path.replace(/\.md$/, "");
+		path = path.replace(/\.(md|mdx)$/, "");
 		
 
 		// Determine content type and appropriate base path
@@ -112,7 +114,9 @@ export class LinkConverter {
 		let indexFileName = "";
 
 		// Use the same logic as getContentTypeForPath but for the target link
-		const targetContentType = this.getContentTypeForPath(path + '.md');
+		// Support both .md and .mdx extensions - try .mdx first if link suggests it
+		const fileExtension = link.endsWith('.mdx') ? '.mdx' : '.md';
+		const targetContentType = this.getContentTypeForPath(path + fileExtension);
 		
 		// If target link doesn't have a clear content type (no folder path), use current file's content type
 		if (!targetContentType.basePath && currentFileContentType.basePath) {
@@ -299,6 +303,14 @@ export class LinkConverter {
 			return;
 		}
 
+		// Preserve cursor position before modifying content
+		const cursor = editor.getCursor();
+		const originalLine = cursor.line;
+		const originalCh = cursor.ch;
+		const originalContent = editor.getValue();
+		const originalLineCount = originalContent.split('\n').length;
+		const originalLineLength = originalContent.split('\n')[originalLine]?.length || 0;
+
 		const content = editor.getValue();
 		let newContent = content;
 		let convertedCount = 0;
@@ -323,13 +335,20 @@ export class LinkConverter {
 				return false;
 			}
 
-			// Don't convert if it's not a .md file and doesn't look like a valid internal link
-			if (!linkText.includes('.md') && !linkText.match(/^[a-zA-Z0-9_-]+(\/[a-zA-Z0-9_-]+)*$/)) {
+			// Don't convert if it's not a .md or .mdx file and doesn't look like a valid internal link
+			if (!linkText.includes('.md') && !linkText.includes('.mdx') && !linkText.match(/^[a-zA-Z0-9_-]+(\/[a-zA-Z0-9_-]+)*$/)) {
 				return false;
 			}
 
 			// Check if the target file is in any configured content directory
-			const targetPath = linkText.endsWith('.md') ? linkText : linkText + '.md';
+			// Support both .md and .mdx extensions
+			let targetPath: string;
+			if (linkText.endsWith('.md') || linkText.endsWith('.mdx')) {
+				targetPath = linkText;
+			} else {
+				// Default to .md if no extension specified
+				targetPath = linkText + '.md';
+			}
 			
 			// Check if it's in a configured content directory
 			const isInConfiguredDirectory = this.isInConfiguredContentDirectory(targetPath);
@@ -359,7 +378,7 @@ export class LinkConverter {
 					return match; // Return original if we can't convert reliably
 				}
 
-				const display = displayText || linkText.replace(/\.md$/, "");
+				const display = displayText || linkText.replace(/\.(md|mdx)$/, "");
 
 				// For relative links (no folder path), use current file's content type
 				const url = this.getAstroUrlFromInternalLinkWithContext(linkText, file.path, currentFileContentType);
@@ -370,9 +389,9 @@ export class LinkConverter {
 		);
 
 		// Handle standard Markdown links (non-image, non-external)
-		// Only process links that contain .md to avoid processing already-converted links
+		// Only process links that contain .md or .mdx to avoid processing already-converted links
 		newContent = newContent.replace(
-			/\[([^\]]+)\]\(([^)]+\.md[^)]*)\)/g,
+			/\[([^\]]+)\]\(([^)]+\.(md|mdx)[^)]*)\)/g,
 			(match: string, displayText: string, link: string) => {
 				// Check if it's an image link or external link
 				if (link.match(/^https?:\/\//) || imageExtensions.test(link)) {
@@ -426,6 +445,34 @@ export class LinkConverter {
 		});
 
 		editor.setValue(newContent);
+		
+		// Restore cursor position, adjusting for content changes
+		const newLineCount = newContent.split('\n').length;
+		const newLineLength = newContent.split('\n')[originalLine]?.length || 0;
+		
+		// Calculate new cursor position
+		let newLine = originalLine;
+		let newCh = originalCh;
+		
+		// If content length changed, adjust cursor position
+		if (newLineCount !== originalLineCount) {
+			// If lines were added/removed before cursor, adjust line number
+			// For simplicity, keep same line if it still exists, otherwise clamp to end
+			if (newLine >= newLineCount) {
+				newLine = Math.max(0, newLineCount - 1);
+			}
+		}
+		
+		// Adjust column position if line length changed
+		if (newLineLength !== originalLineLength) {
+			// If line got shorter, clamp to end of line
+			if (newCh > newLineLength) {
+				newCh = Math.max(0, newLineLength);
+			}
+		}
+		
+		// Restore cursor position
+		editor.setCursor({ line: newLine, ch: newCh });
 		
 		// Show appropriate notice based on results
 		if (convertedCount > 0 && skippedCount === 0) {

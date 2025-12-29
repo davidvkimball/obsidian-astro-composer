@@ -304,7 +304,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			}
 			lastProcessedTime = now;
 
-			if (file instanceof TFile && file.extension === "md") {
+			if (file instanceof TFile && (file.extension === "md" || file.extension === "mdx")) {
 				const filePath = file.path;
 
 				// Skip if this file was created by the plugin itself

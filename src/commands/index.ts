@@ -28,7 +28,7 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 				if (file instanceof TFile) {
 					// Get fresh settings from plugin
 					const currentSettings = pluginInterface.settings || settings;
-					void standardizeProperties(plugin.app, currentSettings, file, pluginInterface);
+					void standardizeProperties(plugin.app, currentSettings, file, pluginInterface, editor);
 				}
 			},
 		});
@@ -118,7 +118,7 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 			const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
 			if (file instanceof TFile) {
-				void standardizeProperties(plugin.app, settings, file, plugin as unknown as AstroComposerPluginInterface);
+				void standardizeProperties(plugin.app, settings, file, plugin as unknown as AstroComposerPluginInterface, editor);
 			}
 		},
 	});
@@ -204,11 +204,20 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 	}
 }
 
-async function standardizeProperties(app: App, settings: AstroComposerSettings, file: TFile, plugin?: AstroComposerPluginInterface): Promise<void> {
+async function standardizeProperties(app: App, settings: AstroComposerSettings, file: TFile, plugin?: AstroComposerPluginInterface, editor?: Editor): Promise<void> {
 	// Get fresh settings from plugin if available
 	const currentSettings = plugin?.settings || settings;
 	const templateParser = new TemplateParser(app, currentSettings);
 	const fileOps = new FileOperations(app, currentSettings, plugin);
+	
+	// Preserve cursor position if editor is provided
+	let cursorPosition: { line: number; ch: number } | null = null;
+	let originalContent = "";
+	if (editor) {
+		const cursor = editor.getCursor();
+		cursorPosition = { line: cursor.line, ch: cursor.ch };
+		originalContent = editor.getValue();
+	}
 	
 	// Determine content type using the existing logic
 	const type = fileOps.determineType(file);
@@ -249,6 +258,9 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 	const finalProps: Record<string, string[]> = { ...parsed.properties };
 	const arrayKeys = new Set<string>(); // Track which keys are arrays
 	
+	// Generate slug from title for slug property auto-population
+	const slug = fileOps.toKebabCase(title);
+	
 	for (const key of templateProps) {
 		if (!(key in parsed.properties)) {
 			// Property doesn't exist, add it from template
@@ -270,8 +282,28 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 				const newItems = templateValue.filter(item => !existingItems.includes(item));
 				finalProps[key] = [...existingItems, ...newItems];
 				arrayKeys.add(key); // Mark as array
+			} else {
+				// For non-array values, check if it's slug and needs auto-population
+				if (key === "slug") {
+					const existingSlug = parsed.properties[key][0] || "";
+					// Only auto-populate if slug is empty or missing
+					if (!existingSlug || existingSlug.trim() === "") {
+						finalProps[key] = [slug];
+					}
+					// If slug has a value, preserve it (don't overwrite)
+				}
+				// For other non-array values, keep existing value (don't overwrite)
 			}
-			// For non-array values, keep existing value (don't overwrite)
+		}
+	}
+	
+	// Also check if slug property exists in frontmatter but is empty (even if not in template)
+	// Only auto-populate if template has {{slug}} placeholder
+	if ("slug" in parsed.properties && templateString.includes("{{slug}}")) {
+		const existingSlug = parsed.properties["slug"][0] || "";
+		if (!existingSlug || existingSlug.trim() === "") {
+			// Slug exists but is empty, and template has {{slug}} - auto-populate it
+			finalProps["slug"] = [slug];
 		}
 	}
 
@@ -285,6 +317,42 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 	const newContent = templateParser.buildFrontmatterContent(finalProps, arrayKeys) + parsed.bodyContent;
 
 	await app.vault.modify(file, newContent);
+	
+	// Restore cursor position if editor was provided and file is still open
+	if (editor && cursorPosition) {
+		// Wait for Obsidian to reload the file in the editor
+		await new Promise(resolve => setTimeout(resolve, 50));
+		
+		// Try to get the active editor for this file
+		const activeView = app.workspace.getActiveViewOfType(MarkdownView);
+		if (activeView && activeView.file === file && activeView.editor) {
+			const activeEditor = activeView.editor;
+			const newLineCount = newContent.split('\n').length;
+			const originalLineCount = originalContent.split('\n').length;
+			
+			// Calculate new cursor position
+			let newLine = cursorPosition.line;
+			let newCh = cursorPosition.ch;
+			
+			// Adjust for content changes
+			if (newLineCount !== originalLineCount) {
+				// If lines were added/removed, adjust line number
+				if (newLine >= newLineCount) {
+					newLine = Math.max(0, newLineCount - 1);
+				}
+			}
+			
+			// Adjust column position if line length changed
+			const newLineLength = newContent.split('\n')[newLine]?.length || 0;
+			if (newCh > newLineLength) {
+				newCh = Math.max(0, newLineLength);
+			}
+			
+			// Restore cursor position
+			activeEditor.setCursor({ line: newLine, ch: newCh });
+		}
+	}
+	
 	new Notice("Properties standardized using template.");
 }
 

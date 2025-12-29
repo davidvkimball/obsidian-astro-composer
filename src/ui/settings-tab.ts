@@ -825,7 +825,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				setting.descEl.empty();
 				const descDiv = setting.descEl.createEl("div");
 				descDiv.createEl("div", { text: "Template for new files of this content type." });
-				descDiv.createEl("div", { text: "Variables include {{title}} and {{date}}." });
+				descDiv.createEl("div", { text: "Variables include {{title}}, {{date}}, and {{slug}}." });
 				descDiv.createEl("div", { text: "Do not wrap {{date}} in quotes as it represents a datetime value, not a string." });
 				});
 

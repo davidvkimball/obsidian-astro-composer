@@ -4,6 +4,19 @@ import { AstroComposerSettings, ParsedFrontmatter, TemplateValues, KNOWN_ARRAY_K
 export class TemplateParser {
 	constructor(private app: App, private settings: AstroComposerSettings) {}
 
+	/**
+	 * Convert a string to kebab-case for slug generation
+	 */
+	private toKebabCase(str: string): string {
+		return str
+			.toLowerCase()
+			.replace(/[^a-z0-9\s-]/g, "")
+			.trim()
+			.replace(/\s+/g, "-")
+			.replace(/-+/g, "-")
+			.replace(/^-|-$/g, "");
+	}
+
 	parseFrontmatter(content: string): ParsedFrontmatter {
 		let propertiesEnd = 0;
 		let propertiesText = "";
@@ -31,15 +44,73 @@ export class TemplateParser {
 					if (match) {
 						const [, key, value] = match;
 						currentKey = key;
-						const isKnownArrayKey = KNOWN_ARRAY_KEYS.includes(key as typeof KNOWN_ARRAY_KEYS[number]);
-						const isEmptyArray = !value || value.trim() === "" || value.trim() === "[]";
-						const isArrayProperty = isKnownArrayKey || isEmptyArray;
+						const trimmedValue = value ? value.trim() : "";
 						
-						if (isArrayProperty) {
+						// Check for bracket-syntax arrays: [item] or ["item1", "item2"] or [item1, item2]
+						const bracketArrayMatch = trimmedValue.match(/^\[(.*)\]$/);
+						if (bracketArrayMatch) {
+							// This is a bracket-format array
+							const arrayContent = bracketArrayMatch[1].trim();
 							existingProperties[key] = [];
 							arrayKeys.add(key); // Mark this key as an array
+							
+							if (arrayContent) {
+								// Parse array items - handle both quoted and unquoted values
+								// Split by comma, but respect quotes
+								const items: string[] = [];
+								let currentItem = "";
+								let inQuotes = false;
+								let quoteChar = '';
+								
+								for (let i = 0; i < arrayContent.length; i++) {
+									const char = arrayContent[i];
+									
+									if (!inQuotes && (char === '"' || char === "'")) {
+										inQuotes = true;
+										quoteChar = char;
+									} else if (inQuotes && char === quoteChar) {
+										// Check if it's escaped
+										if (i > 0 && arrayContent[i - 1] === '\\') {
+											currentItem += char;
+										} else {
+											inQuotes = false;
+											quoteChar = '';
+										}
+									} else if (!inQuotes && char === ',') {
+										// End of current item
+										const trimmedItem = currentItem.trim();
+										if (trimmedItem) {
+											// Remove surrounding quotes if present
+											const unquoted = trimmedItem.replace(/^["']|["']$/g, '');
+											items.push(unquoted);
+										}
+										currentItem = "";
+									} else {
+										currentItem += char;
+									}
+								}
+								
+								// Add the last item
+								if (currentItem.trim()) {
+									const trimmedItem = currentItem.trim();
+									const unquoted = trimmedItem.replace(/^["']|["']$/g, '');
+									items.push(unquoted);
+								}
+								
+								existingProperties[key] = items;
+							}
 						} else {
-							existingProperties[key] = [value ? value.trim() : ""];
+							// Not a bracket array, check for other array formats
+							const isKnownArrayKey = KNOWN_ARRAY_KEYS.includes(key as typeof KNOWN_ARRAY_KEYS[number]);
+							const isEmptyArray = !trimmedValue || trimmedValue === "";
+							const isArrayProperty = isKnownArrayKey || isEmptyArray;
+							
+							if (isArrayProperty) {
+								existingProperties[key] = [];
+								arrayKeys.add(key); // Mark this key as an array
+							} else {
+								existingProperties[key] = [trimmedValue];
+							}
 						}
 					} else if (currentKey && trimmedLine.startsWith("- ")) {
 						// Check if current key is an array property
@@ -141,7 +212,11 @@ export class TemplateParser {
 						}
 					} else {
 						// This is a string property, not an array
-						const stringValue = (value || "").replace(/\{\{title\}\}/g, title).replace(/\{\{date\}\}/g, window.moment(new Date()).format(this.settings.dateFormat));
+						const slug = this.toKebabCase(title);
+						const stringValue = (value || "")
+							.replace(/\{\{title\}\}/g, title)
+							.replace(/\{\{date\}\}/g, window.moment(new Date()).format(this.settings.dateFormat))
+							.replace(/\{\{slug\}\}/g, slug);
 						// Store as a single string value, not in an array
 						templateValues[key] = stringValue;
 					}
