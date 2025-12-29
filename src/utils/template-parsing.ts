@@ -339,6 +339,12 @@ export class TemplateParser {
 			titleVal = newTitle;
 		}
 		existing[titleKey] = titleVal;
+		
+		// Also update slug if it exists in frontmatter
+		if ("slug" in existing) {
+			const newSlug = this.toKebabCase(newTitle);
+			existing["slug"] = newSlug;
+		}
 
 		// If title key was found in original properties, preserve its position
 		// Otherwise, add it at the end
