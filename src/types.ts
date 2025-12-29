@@ -16,6 +16,7 @@ export interface AstroComposerSettings {
 	contentTypes: ContentType[];
 	helpButtonReplacement: HelpButtonReplacementSettings;
 	migrationCompleted: boolean;
+	showMdxFilesInExplorer: boolean;
 	// Legacy fields (kept for migration, ignored after migration)
 	enableUnderscorePrefix?: boolean;
 	postsFolder?: string;
@@ -66,6 +67,7 @@ export interface ContentType {
 	indexFileName: string;
 	ignoreSubfolders: boolean;
 	enableUnderscorePrefix: boolean;
+	useMdxExtension: boolean;
 	collapsed?: boolean;
 }
 

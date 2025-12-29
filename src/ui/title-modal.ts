@@ -1,4 +1,4 @@
-import { App, Modal, TFile, Notice, Platform } from "obsidian";
+import { App, Modal, TFile, Notice, Platform, MarkdownView } from "obsidian";
 import { AstroComposerPluginInterface, ContentTypeId } from "../types";
 import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
@@ -28,6 +28,34 @@ export class TitleModal extends Modal {
 		this.templateParser = new TemplateParser(app, settings);
 	}
 
+	async getCurrentTitleAsync(): Promise<string> {
+		if (!this.file) {
+			return "";
+		}
+		
+		// Read the file content directly to ensure we have the latest title
+		try {
+			const content = await this.app.vault.read(this.file);
+			const titleKey = this.fileOps.getTitleKey(this.type);
+			const { properties } = this.templateParser.parseFrontmatter(content);
+			
+			if (titleKey in properties) {
+				const titleValue = properties[titleKey];
+				if (Array.isArray(titleValue) && titleValue.length > 0) {
+					return String(titleValue[0]);
+				}
+				if (titleValue !== null && titleValue !== undefined) {
+					return String(titleValue);
+				}
+			}
+		} catch (error) {
+			console.error("Error reading file for title:", error);
+		}
+		
+		// Fall back to filename-based title
+		return this.getFallbackTitle();
+	}
+
 	getCurrentTitle(): string {
 		if (!this.file) {
 			return "";
@@ -35,18 +63,6 @@ export class TitleModal extends Modal {
 		
 		const titleKey = this.fileOps.getTitleKey(this.type);
 		const cache = this.app.metadataCache.getFileCache(this.file);
-		let basename = this.file.basename;
-		if (this.file.parent && this.type !== "note") {
-			const contentType = this.fileOps.getContentType(this.type);
-			const indexFileName = contentType?.indexFileName || "";
-			if (indexFileName.trim() !== "" && basename === indexFileName) {
-				basename = this.file.parent.name;
-			}
-		}
-		if (basename.startsWith("_")) {
-			basename = basename.slice(1);
-		}
-		const fallbackTitle = basename.replace(/-/g, " ").split(" ").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 
 		if (cache?.frontmatter && titleKey in cache.frontmatter) {
 			const titleValue = cache.frontmatter[titleKey] as unknown;
@@ -78,7 +94,26 @@ export class TitleModal extends Modal {
 			}
 			return '';
 		}
-		return fallbackTitle;
+		return this.getFallbackTitle();
+	}
+
+	private getFallbackTitle(): string {
+		if (!this.file) {
+			return "";
+		}
+		
+		let basename = this.file.basename;
+		if (this.file.parent && this.type !== "note") {
+			const contentType = this.fileOps.getContentType(this.type);
+			const indexFileName = contentType?.indexFileName || "";
+			if (indexFileName.trim() !== "" && basename === indexFileName) {
+				basename = this.file.parent.name;
+			}
+		}
+		if (basename.startsWith("_")) {
+			basename = basename.slice(1);
+		}
+		return basename.replace(/-/g, " ").split(" ").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 	}
 
 	/**
@@ -139,7 +174,11 @@ export class TitleModal extends Modal {
 				placeholder: "New Title",
 				cls: "astro-composer-title-input"
 			});
-			this.titleInput.value = this.getCurrentTitle();
+			
+			// Async load the current title from file
+			void this.getCurrentTitleAsync().then(title => {
+				this.titleInput.value = title;
+			});
 		} else if (this.isNewNote) {
 			const typeName = this.getTypeDisplayName();
 			
@@ -233,6 +272,8 @@ export class TitleModal extends Modal {
 					
 					if (newFile && shouldInsertProperties) {
 						await this.addPropertiesToFile(newFile, title, this.type);
+						// Position cursor at end after properties are added
+						this.positionCursorAtEnd(newFile);
 					}
 				}
 			} else if (this.file) {
@@ -243,6 +284,8 @@ export class TitleModal extends Modal {
 				
 				if (newFile && shouldInsertProperties) {
 					await this.addPropertiesToFile(newFile, title, this.type);
+					// Position cursor at end after properties are added
+					this.positionCursorAtEnd(newFile);
 				}
 			} else {
 				// Fallback - create new file
@@ -296,7 +339,9 @@ export class TitleModal extends Modal {
 
 		// Create the filename from the title
 		const filename = this.fileOps.generateFilename(title);
-		const filePath = targetFolder ? `${targetFolder}/${filename}.md` : `${filename}.md`;
+		const contentType = this.fileOps.getContentType(this.type);
+		const extension = contentType?.useMdxExtension ? ".mdx" : ".md";
+		const filePath = targetFolder ? `${targetFolder}/${filename}${extension}` : `${filename}${extension}`;
 
 		// Track that this file will be created by the plugin BEFORE creating it
 		// This prevents the create event from triggering another modal
@@ -315,7 +360,38 @@ export class TitleModal extends Modal {
 			const newFile = await this.app.vault.create(filePath, initialContent);
 			
 			// Open the new file
-			await this.app.workspace.getLeaf().openFile(newFile);
+			const leaf = this.app.workspace.getLeaf();
+			await leaf.openFile(newFile);
+			
+			// Position cursor at the end of content after editor is ready
+			// Use multiple attempts to ensure it works even if editor isn't ready immediately
+			const positionCursor = () => {
+				const view = leaf.view;
+				if (view instanceof MarkdownView && view.editor) {
+					const editor = view.editor;
+					const content = editor.getValue();
+					if (content) {
+						const lines = content.split('\n');
+						const lastLine = lines.length - 1;
+						const lastLineLength = lines[lastLine]?.length || 0;
+						editor.setCursor({ line: lastLine, ch: lastLineLength });
+						// Focus the editor to ensure cursor is visible and filename isn't selected
+						editor.focus();
+						return true;
+					}
+				}
+				return false;
+			};
+			
+			// Try immediately
+			setTimeout(() => {
+				if (!positionCursor()) {
+					// If it didn't work, try again after a longer delay
+					setTimeout(() => {
+						positionCursor();
+					}, 200);
+				}
+			}, 100);
 			
 			return newFile;
 		} catch (error) {
@@ -379,6 +455,35 @@ export class TitleModal extends Modal {
 
 		// Ensure no extra newlines or --- are added beyond the template
 		await this.app.vault.modify(file, template);
+	}
+
+	private positionCursorAtEnd(file: TFile) {
+		const positionCursor = () => {
+			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+			if (view && view.file === file && view.editor) {
+				const editor = view.editor;
+				const content = editor.getValue();
+				if (content) {
+					const lines = content.split('\n');
+					const lastLine = lines.length - 1;
+					const lastLineLength = lines[lastLine]?.length || 0;
+					editor.setCursor({ line: lastLine, ch: lastLineLength });
+					// Focus the editor to ensure cursor is visible
+					editor.focus();
+					return true;
+				}
+			}
+			return false;
+		};
+		
+		setTimeout(() => {
+			if (!positionCursor()) {
+				// If it didn't work, try again after a longer delay
+				setTimeout(() => {
+					positionCursor();
+				}, 200);
+			}
+		}, 100);
 	}
 
 	private escapeYamlString(str: string): string {

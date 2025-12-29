@@ -24,4 +24,5 @@ export const DEFAULT_SETTINGS: AstroComposerSettings = {
 		commandId: 'edit-astro-config',
 		iconId: 'wrench',
 	},
+	showMdxFilesInExplorer: false,
 };

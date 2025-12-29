@@ -109,7 +109,9 @@ export class TemplateParser {
 								existingProperties[key] = [];
 								arrayKeys.add(key); // Mark this key as an array
 							} else {
-								existingProperties[key] = [trimmedValue];
+								// Strip surrounding quotes from string values
+								const unquotedValue = trimmedValue.replace(/^["']|["']$/g, '');
+								existingProperties[key] = [unquotedValue];
 							}
 						}
 					} else if (currentKey && trimmedLine.startsWith("- ")) {

@@ -165,7 +165,7 @@ export class FileOperations {
 		if (creationMode === "folder") {
 			return this.createFolderStructure(file, kebabTitle, prefix, targetFolder, type, contentType);
 		} else {
-			return this.createFileStructure(file, kebabTitle, prefix, targetFolder);
+			return this.createFileStructure(file, kebabTitle, prefix, targetFolder, contentType);
 		}
 	}
 
@@ -197,7 +197,8 @@ export class FileOperations {
 		}
 
 		const indexFileName = contentType?.indexFileName || "index";
-		const fileName = `${indexFileName}.md`;
+		const extension = contentType?.useMdxExtension ? ".mdx" : ".md";
+		const fileName = `${indexFileName}${extension}`;
 		const newPath = `${folderPath}/${fileName}`;
 
 		const existingFile = this.app.vault.getAbstractFileByPath(newPath);
@@ -236,6 +237,34 @@ export class FileOperations {
 			const leaf = this.app.workspace.getLeaf(false);
 			await leaf.openFile(newFile);
 
+			// Position cursor at the end of content after editor is ready
+			const positionCursor = () => {
+				const view = leaf.view;
+				if (view && 'editor' in view) {
+					const editor = (view as { editor?: { setCursor: (pos: { line: number; ch: number }) => void; getValue: () => string; focus: () => void } }).editor;
+					if (editor) {
+						const content = editor.getValue();
+						if (content) {
+							const lines = content.split('\n');
+							const lastLine = lines.length - 1;
+							const lastLineLength = lines[lastLine]?.length || 0;
+							editor.setCursor({ line: lastLine, ch: lastLineLength });
+							editor.focus();
+							return true;
+						}
+					}
+				}
+				return false;
+			};
+			
+			setTimeout(() => {
+				if (!positionCursor()) {
+					setTimeout(() => {
+						positionCursor();
+					}, 200);
+				}
+			}, 100);
+
 			return newFile;
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error);
@@ -244,8 +273,9 @@ export class FileOperations {
 		}
 	}
 
-	private async createFileStructure(file: TFile, kebabTitle: string, prefix: string, targetFolder: string): Promise<TFile | null> {
-		const newName = `${prefix}${kebabTitle}.md`;
+	private async createFileStructure(file: TFile, kebabTitle: string, prefix: string, targetFolder: string, contentType: ContentType | null): Promise<TFile | null> {
+		const extension = contentType?.useMdxExtension ? ".mdx" : ".md";
+		const newName = `${prefix}${kebabTitle}${extension}`;
 		let newPath: string;
 		
 		if (targetFolder) {
@@ -287,6 +317,34 @@ export class FileOperations {
 
 			const leaf = this.app.workspace.getLeaf(false);
 			await leaf.openFile(newFile);
+
+			// Position cursor at the end of content after editor is ready
+			const positionCursor = () => {
+				const view = leaf.view;
+				if (view && 'editor' in view) {
+					const editor = (view as { editor?: { setCursor: (pos: { line: number; ch: number }) => void; getValue: () => string; focus: () => void } }).editor;
+					if (editor) {
+						const content = editor.getValue();
+						if (content) {
+							const lines = content.split('\n');
+							const lastLine = lines.length - 1;
+							const lastLineLength = lines[lastLine]?.length || 0;
+							editor.setCursor({ line: lastLine, ch: lastLineLength });
+							editor.focus();
+							return true;
+						}
+					}
+				}
+				return false;
+			};
+			
+			setTimeout(() => {
+				if (!positionCursor()) {
+					setTimeout(() => {
+						positionCursor();
+					}, 200);
+				}
+			}, 100);
 
 			return newFile;
 		} catch (error) {
@@ -378,7 +436,9 @@ export class FileOperations {
 				return null;
 			}
 			prefix = file.basename.startsWith("_") ? "_" : "";
-			const newName = `${prefix}${kebabTitle}.md`;
+			// Preserve the original file extension
+			const extension = file.extension;
+			const newName = `${prefix}${kebabTitle}.${extension}`;
 			const newPath = `${file.parent.path}/${newName}`;
 
 			const existingFile = this.app.vault.getAbstractFileByPath(newPath);
@@ -437,6 +497,16 @@ export class FileOperations {
 				return null;
 			}
 
+			// Calculate the new file path before renaming
+			const newFilePath = `${newFolderPath}/${file.name}`;
+			
+			// Track that this file will be created by the plugin BEFORE renaming
+			// This prevents the create event from triggering another modal
+			if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
+				const pluginWithFiles = this.plugin as { pluginCreatedFiles?: Set<string> };
+				pluginWithFiles.pluginCreatedFiles?.add(newFilePath);
+			}
+
 			try {
 				await this.app.fileManager.renameFile(file.parent, newFolderPath);
 			} catch (error) {
@@ -446,7 +516,6 @@ export class FileOperations {
 				return null;
 			}
 			
-			const newFilePath = `${newFolderPath}/${file.name}`;
 			const newFile = this.app.vault.getAbstractFileByPath(newFilePath);
 			if (!(newFile instanceof TFile)) {
 				new Notice("Failed to locate renamed file.");
@@ -458,7 +527,9 @@ export class FileOperations {
 		
 		// For non-index files, rename the file itself
 		prefix = file.basename.startsWith("_") ? "_" : "";
-		const newName = `${prefix}${kebabTitle}.md`;
+		// Preserve the original file extension
+		const extension = file.extension;
+		const newName = `${prefix}${kebabTitle}.${extension}`;
 		
 		// Fix path construction to avoid double slashes
 		let newPath: string;
@@ -474,6 +545,13 @@ export class FileOperations {
 		if (existingFile instanceof TFile && existingFile !== file) {
 			new Notice(`File already exists at ${newPath}.`);
 			return null;
+		}
+
+		// Track that this file will be created by the plugin BEFORE renaming
+		// This prevents the create event from triggering another modal
+		if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
+			const pluginWithFiles = this.plugin as { pluginCreatedFiles?: Set<string> };
+			pluginWithFiles.pluginCreatedFiles?.add(newPath);
 		}
 
 		try {

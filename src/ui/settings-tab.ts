@@ -128,6 +128,22 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				);
 		});
 
+		generalGroup.addSetting((setting) => {
+			setting
+				// False positive: "MDX" is a proper noun (file format) and should be capitalized
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				.setName("Show MDX files in file explorer")
+				.setDesc("Make .mdx files visible in Obsidian's file explorer. Requires reload to take effect.")
+				.addToggle((toggle) =>
+					toggle
+						.setValue(settings.showMdxFilesInExplorer)
+						.onChange(async (value: boolean) => {
+							settings.showMdxFilesInExplorer = value;
+							await this.plugin.saveSettings();
+						})
+				);
+		});
+
 		// Auto-insert properties (global setting)
 		generalGroup.addSetting((setting) => {
 			setting
@@ -538,6 +554,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			indexFileName: "",
 			ignoreSubfolders: false,
 			enableUnderscorePrefix: false,
+			useMdxExtension: false,
 		};
 		contentTypes.push(newType);
 		settings.contentTypes = contentTypes;
@@ -786,6 +803,22 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 							customType.creationMode = value as "file" | "folder";
 							await this.plugin.saveSettings();
 							this.updateCustomContentTypeIndexFileField(customType.id);
+						})
+				);
+
+			// Use MDX extension
+			const useMdxContainer = settingsContainer.createDiv();
+			new Setting(useMdxContainer)
+				// False positive: "MDX" is a proper noun (file format) and should be capitalized
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				.setName("Use MDX instead of MD")
+				.setDesc("Create files with .mdx extension instead of .md extension.")
+				.addToggle((toggle) =>
+					toggle
+						.setValue(customType.useMdxExtension || false)
+						.onChange(async (value: boolean) => {
+							customType.useMdxExtension = value;
+							await this.plugin.saveSettings();
 						})
 				);
 

@@ -125,6 +125,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				indexFileName: this.settings.indexFileName || "",
 				ignoreSubfolders: this.settings.onlyAutomateInPostsFolder || false,
 				enableUnderscorePrefix: this.settings.enableUnderscorePrefix || false,
+				useMdxExtension: false,
 			};
 			migratedTypes.push(postsType);
 		}
@@ -142,6 +143,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				indexFileName: this.settings.pagesIndexFileName || "",
 				ignoreSubfolders: this.settings.onlyAutomateInPagesFolder || false,
 				enableUnderscorePrefix: false, // Pages didn't have this option before
+				useMdxExtension: false,
 			};
 			migratedTypes.push(pagesType);
 		}
@@ -258,6 +260,11 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		this.templateParser = new TemplateParser(this.app, this.settings);
 		this.headingLinkGenerator = new HeadingLinkGenerator(this.settings);
 
+		// Register MDX file visibility if enabled
+		if (this.settings.showMdxFilesInExplorer) {
+			this.registerExtensions(["mdx"], "markdown");
+		}
+
 		// Wait for the vault to be fully loaded before registering the create event
 		this.app.workspace.onLayoutReady(() => {
 			this.registerCreateEvent();
@@ -294,23 +301,32 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		// This ensures automation works even if content types are enabled after plugin load
 		
 		// Debounce to prevent multiple modals from rapid file creations
-		let lastProcessedTime = 0;
+		// Use a Map to track per-file debouncing instead of global debouncing
+		const lastProcessedFiles = new Map<string, number>();
 
 		this.createEvent = (file: TFile) => {
 			void (async () => {
 			const now = Date.now();
-			if (now - lastProcessedTime < CONSTANTS.DEBOUNCE_MS) {
-				return; // Skip if within debounce period
-			}
-			lastProcessedTime = now;
 
 			if (file instanceof TFile && (file.extension === "md" || file.extension === "mdx")) {
 				const filePath = file.path;
 
 				// Skip if this file was created by the plugin itself
+				// Don't delete immediately - keep it for a bit to handle rapid events
 				if (this.pluginCreatedFiles.has(filePath)) {
-					this.pluginCreatedFiles.delete(filePath); // Clean up
 					return;
+				}
+
+				// Per-file debounce check - but only check, don't mark yet
+				// We'll mark it as processed only AFTER we successfully show the modal
+				// However, if the file was processed more than 2 seconds ago, clear it to allow new processing
+				const lastProcessed = lastProcessedFiles.get(filePath) || 0;
+				if (lastProcessed > 0 && now - lastProcessed < CONSTANTS.DEBOUNCE_MS) {
+					return; // Skip if this specific file was just processed
+				}
+				// Clean up old entries (older than 2 seconds)
+				if (lastProcessed > 0 && now - lastProcessed > 2000) {
+					lastProcessedFiles.delete(filePath);
 				}
 
 				// CRITICAL: Reload settings from disk to ensure we have the latest data
@@ -398,20 +414,73 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 						return;
 					}
 
-					// Check if file already has properties that look like they were created by another plugin
-					const cache = this.app.metadataCache.getFileCache(file);
-					if (cache?.frontmatter) {
-						// If it already has properties, it might have been created by another plugin
-						// Only proceed if it's very basic properties (like just a title)
-						const frontmatterKeys = Object.keys(cache.frontmatter);
-						if (frontmatterKeys.length > 1 || !frontmatterKeys.includes('title')) {
-							// This looks like it was created by another plugin with a full template
+					// Wait a moment for the file to be fully written
+					// This helps avoid race conditions where we read before Obsidian finishes writing
+					await new Promise(resolve => setTimeout(resolve, 50));
+					
+					// Read file content directly for more reliable detection
+					// (metadata cache might not be ready yet, especially for MDX files)
+					let content: string;
+					try {
+						content = await this.app.vault.read(file);
+					} catch (error) {
+						console.error("Error reading file for create detection:", error);
+						return;
+					}
+					
+					// Skip if file already has substantial content or frontmatter
+					if (content.trim().length > 0) {
+						// Check if it has frontmatter created by another plugin
+						if (content.startsWith('---')) {
+							const frontmatterEnd = content.indexOf('\n---', 3);
+							if (frontmatterEnd !== -1) {
+								const frontmatterText = content.slice(4, frontmatterEnd).trim();
+								const lines = frontmatterText.split('\n').filter(line => line.trim().length > 0);
+								// If it has more than just a title line, skip
+								if (lines.length > 1 || (lines.length === 1 && !lines[0].startsWith('title:'))) {
+									return;
+								}
+							}
+						}
+						// If it has body content (after frontmatter), skip
+						const contentWithoutFrontmatter = content.startsWith('---') 
+							? content.slice(content.indexOf('\n---', 3) + 4).trim()
+							: content.trim();
+						if (contentWithoutFrontmatter.length > 0) {
 							return;
 						}
 					}
 
-					// Mark the original file as handled to prevent it from triggering the create event again
+					// Mark the original file as handled IMMEDIATELY to prevent it from triggering the create event again
+					// This must happen before we show the modal, as the modal will rename the file
+					// Keep it in the set for a while to handle any delayed events
 					this.pluginCreatedFiles.add(file.path);
+					
+					// Clean up after a delay to prevent memory leaks
+					setTimeout(() => {
+						this.pluginCreatedFiles.delete(file.path);
+					}, 2000);
+					
+					// Mark as processed in debounce map ONLY after we've confirmed we'll show the modal
+					// This prevents marking files that we skip due to early returns
+					// Use a shorter debounce time for CTRL+N (user-initiated) vs automatic creation
+					lastProcessedFiles.set(file.path, now);
+					
+					// Clear the debounce entry after processing completes (when modal closes)
+					// This allows the next CTRL+N to work immediately
+					setTimeout(() => {
+						lastProcessedFiles.delete(file.path);
+					}, CONSTANTS.DEBOUNCE_MS + 100);
+					
+					// Clean up old entries to prevent memory leak
+					if (lastProcessedFiles.size > 100) {
+						const cutoff = now - CONSTANTS.DEBOUNCE_MS * 2;
+						for (const [path, time] of lastProcessedFiles.entries()) {
+							if (time < cutoff) {
+								lastProcessedFiles.delete(path);
+							}
+						}
+					}
 					
 					// Show the modal with the matched content type
 					new TitleModal(this.app, file, this, matchedContentTypeId, false, true).open();
