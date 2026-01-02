@@ -4,6 +4,7 @@ import {
 	Notice,
 	setIcon,
 	Platform,
+	EventRef,
 } from "obsidian";
 
 import { AstroComposerSettings, DEFAULT_SETTINGS, CONSTANTS } from "./settings";
@@ -20,6 +21,7 @@ import { matchesFolderPattern, sortByPatternSpecificity } from "./utils/path-mat
 export default class AstroComposerPlugin extends Plugin implements AstroComposerPluginInterface {
 	settings!: AstroComposerSettings;
 	private createEvent!: (file: TFile) => void;
+	private createEventRef?: EventRef;
 	private fileOps!: FileOperations;
 	private templateParser!: TemplateParser;
 	private headingLinkGenerator!: HeadingLinkGenerator;
@@ -297,6 +299,10 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 
 	public registerCreateEvent() {
+		if (this.createEventRef) {
+			this.app.vault.offref(this.createEventRef);
+			this.createEventRef = undefined;
+		}
 		// Always register the event listener, but check enabled content types dynamically
 		// This ensures automation works even if content types are enabled after plugin load
 		
@@ -490,12 +496,14 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		
 		// Always register the event listener - it will check enabled content types dynamically
 		// Use vault.create event to detect new file creation
-		this.registerEvent(this.app.vault.on("create", (file) => {
+		const createEventRef = this.app.vault.on("create", (file) => {
 			if (file instanceof TFile) {
 				// Always call createEvent - it will check for enabled content types after reloading settings
 				this.createEvent(file);
 			}
-		}));
+		});
+		this.registerEvent(createEventRef);
+		this.createEventRef = createEventRef;
 	}
 
 	async loadSettings() {
