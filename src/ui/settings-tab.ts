@@ -58,7 +58,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	private renderSettingsTab(containerEl: HTMLElement, settings: AstroComposerSettings): void {
 
 		// Global settings (first group - no heading)
-		const generalGroup = createSettingsGroup(containerEl);
+		const generalGroup = createSettingsGroup(containerEl, undefined, 'astro-composer');
 		generalGroup.addSetting((setting) => {
 			setting
 				.setName("Date format")
@@ -160,7 +160,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		});
 
 		// Content types
-		const contentTypesGroup = createSettingsGroup(containerEl, "Content types");
+		const contentTypesGroup = createSettingsGroup(containerEl, "Content types", 'astro-composer');
 
 		// Add container as a setting - hide the setting's default UI, add our container inside
 		contentTypesGroup.addSetting((setting) => {
@@ -179,7 +179,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		// Developer commands (desktop only - not available on mobile)
 		if (!Platform.isMobile) {
-			const developerGroup = createSettingsGroup(containerEl, "Developer commands");
+			const developerGroup = createSettingsGroup(containerEl, "Developer commands", 'astro-composer');
 
 			// Terminal command settings
 			developerGroup.addSetting((setting) => {
