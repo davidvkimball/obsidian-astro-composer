@@ -175,13 +175,13 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 			id: "open-project-terminal",
 			name: "Open project terminal",
 			icon: "terminal-square",
-			callback: async () => {
+			callback: () => {
 				const currentSettings = (plugin as unknown as AstroComposerPluginInterface).settings;
 				if (!currentSettings.enableOpenTerminalCommand) {
 					new Notice("Open terminal command is disabled. Enable it in settings to use this command.");
 					return;
 				}
-				await openTerminalInProjectRoot(plugin.app, currentSettings);
+				openTerminalInProjectRoot(plugin.app, currentSettings);
 			},
 		});
 	}
@@ -360,12 +360,12 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
  * Rename a file by path (for programmatic use, e.g., from other plugins)
  * This allows the rename modal to appear without opening the file first
  */
-export async function renameContentByPath(
+export function renameContentByPath(
 	app: App,
 	filePath: string,
 	settings: AstroComposerSettings,
 	plugin: AstroComposerPluginInterface
-): Promise<void> {
+): void {
 	const file = app.vault.getAbstractFileByPath(filePath);
 	if (!(file instanceof TFile)) {
 		new Notice(`File not found: ${filePath}`);
@@ -404,7 +404,7 @@ export async function renameContentByPath(
  * Open terminal in project root directory
  * Exported for use by ribbon icons
  */
-export async function openTerminalInProjectRoot(app: App, settings: AstroComposerSettings): Promise<void> {
+export function openTerminalInProjectRoot(app: App, settings: AstroComposerSettings): void {
 	try {
 		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef
 		const { exec } = require('child_process') as { exec: (command: string, callback: (error: { message?: string } | null) => void) => void };

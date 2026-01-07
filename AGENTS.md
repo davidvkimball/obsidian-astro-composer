@@ -38,6 +38,8 @@ Astro Composer is an Obsidian plugin that turns notes into posts and pages for A
 
 ### Project-Specific Conventions
 
+- **Terminology: Use "properties" not "frontmatter"**: Obsidian prefers the term "properties" over "frontmatter" or "front-matter" when referring to YAML metadata at the top of markdown files. All documentation, code comments, and UI text should use "properties" to align with Obsidian's official terminology.
+
 - **Code organization**: Modular structure with `src/` containing commands, ui, utils, and main plugin file
 - **Settings**: Content types array with migration support from legacy posts/pages settings
 - **Naming**: Classes use descriptive names (AstroComposerPlugin, AstroComposerSettingTab, etc.)

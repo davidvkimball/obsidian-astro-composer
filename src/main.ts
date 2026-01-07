@@ -620,8 +620,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	 * Rename a file by path (for programmatic use, e.g., from other plugins)
 	 * This allows the rename modal to appear without opening the file first
 	 */
-	async renameContentByPath(filePath: string): Promise<void> {
-		await renameContentByPathFunction(this.app, filePath, this.settings, this);
+	renameContentByPath(filePath: string): void {
+		renameContentByPathFunction(this.app, filePath, this.settings, this);
 	}
 
 	public registerRibbonIcons() {
@@ -712,12 +712,12 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			// Only add if icon doesn't exist in DOM
 			const existingTerminal = document.querySelector('.side-dock-ribbon-action[aria-label="Open project terminal"]');
 			if (!existingTerminal) {
-				this.terminalRibbonIcon = this.addRibbonIcon('terminal-square', 'Open project terminal', async () => {
+				this.terminalRibbonIcon = this.addRibbonIcon('terminal-square', 'Open project terminal', () => {
 					if (!this.settings.enableOpenTerminalCommand) {
 						new Notice("Open terminal command is disabled. Enable it in settings to use this command.");
 						return;
 					}
-					await openTerminalInProjectRoot(this.app, this.settings);
+					openTerminalInProjectRoot(this.app, this.settings);
 				});
 				// Add data attribute to identify our icon
 				if (this.terminalRibbonIcon) {
