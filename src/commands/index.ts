@@ -1,4 +1,4 @@
-import { Plugin, Editor, MarkdownView, TFile, Notice, App, MarkdownFileInfo, Platform } from "obsidian";
+import { Plugin, Editor, MarkdownView, TFile, Notice, App, MarkdownFileInfo, Platform, TFolder } from "obsidian";
 import { AstroComposerSettings, AstroComposerPluginInterface } from "../types";
 import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
@@ -401,10 +401,142 @@ export function renameContentByPath(
 }
 
 /**
+ * Register commands for each enabled content type
+ * Each command creates a new file in the content type's folder and opens the TitleModal
+ */
+export function registerContentTypeCommands(plugin: Plugin, settings: AstroComposerSettings): void {
+	const pluginInterface = plugin as unknown as AstroComposerPluginInterface;
+	const contentTypes = settings.contentTypes || [];
+	
+	// Register a command for each enabled content type
+	for (const contentType of contentTypes) {
+		if (!contentType.enabled) {
+			continue; // Skip disabled content types
+		}
+		
+		const commandId = `create-content-type-${contentType.id}`;
+		const commandName = `Create new content type: ${contentType.name}`;
+		
+		plugin.addCommand({
+			id: commandId,
+			name: commandName,
+			callback: async () => {
+				// Determine target folder from content type (or vault root if blank)
+				let targetFolder = contentType.folder || "";
+				
+				// Create folder if it doesn't exist and is specified
+				if (targetFolder && targetFolder.trim() !== "") {
+					const folder = plugin.app.vault.getAbstractFileByPath(targetFolder);
+					if (!(folder instanceof TFolder)) {
+						try {
+							await plugin.app.vault.createFolder(targetFolder);
+						} catch (error) {
+							const errorMessage = error instanceof Error ? error.message : String(error);
+							new Notice(`Failed to create folder: ${errorMessage}`);
+							return;
+						}
+					}
+				}
+				
+				// Create a temporary file in the target folder
+				const tempFileName = "Untitled.md";
+				const filePath = targetFolder ? `${targetFolder}/${tempFileName}` : tempFileName;
+				
+				// Check if file already exists (unlikely but possible)
+				const existingFile = plugin.app.vault.getAbstractFileByPath(filePath);
+				if (existingFile instanceof TFile) {
+					// If file exists, use it directly
+					new TitleModal(plugin.app, existingFile, pluginInterface, contentType.id, false, true).open();
+					return;
+				}
+				
+				// Mark that this file will be created by the plugin
+				// This prevents the create event from triggering another modal
+				if (pluginInterface && 'pluginCreatedFiles' in pluginInterface) {
+					const pluginWithFiles = pluginInterface as { pluginCreatedFiles?: Set<string> };
+					if (!pluginWithFiles.pluginCreatedFiles) {
+						pluginWithFiles.pluginCreatedFiles = new Set<string>();
+					}
+					pluginWithFiles.pluginCreatedFiles.add(filePath);
+				}
+				
+				try {
+					// Create the temporary file
+					const tempFile = await plugin.app.vault.create(filePath, "");
+					
+					// Open the TitleModal with the file, content type ID, and isNewNote flag
+					new TitleModal(plugin.app, tempFile, pluginInterface, contentType.id, false, true).open();
+				} catch (error) {
+					const errorMessage = error instanceof Error ? error.message : String(error);
+					new Notice(`Failed to create file: ${errorMessage}`);
+					
+					// Clean up the tracking if file creation failed
+					if (pluginInterface && 'pluginCreatedFiles' in pluginInterface) {
+						const pluginWithFiles = pluginInterface as { pluginCreatedFiles?: Set<string> };
+						pluginWithFiles.pluginCreatedFiles?.delete(filePath);
+					}
+				}
+			},
+		});
+	}
+}
+
+/**
+ * Debug logger for terminal commands
+ */
+const terminalLogger = {
+	enabled: false,
+	setEnabled(value: boolean) {
+		this.enabled = value;
+	},
+	log(...args: unknown[]) {
+		if (this.enabled) {
+			console.debug("[astro-composer:terminal]", ...args);
+		}
+	}
+};
+
+/**
+ * Get default terminal application name based on platform
+ */
+function getDefaultTerminalApp(): string {
+	if (!Platform.isDesktopApp) {
+		return "";
+	}
+	if (Platform.isMacOS) {
+		return "Terminal";
+	}
+	if (Platform.isWin) {
+		return "cmd.exe";
+	}
+	if (Platform.isLinux) {
+		return "gnome-terminal";
+	}
+	return "";
+}
+
+/**
+ * Sanitize terminal application name (trim whitespace)
+ */
+function sanitizeTerminalApp(value: string): string {
+	return value.trim();
+}
+
+/**
+ * Escape double quotes in a string
+ */
+function escapeDoubleQuotes(value: string): string {
+	return value.replace(/"/g, '\\"');
+}
+
+/**
  * Open terminal in project root directory
  * Exported for use by ribbon icons
  */
 export function openTerminalInProjectRoot(app: App, settings: AstroComposerSettings): void {
+	// Update logger state
+	terminalLogger.setEnabled(settings.enableTerminalDebugLogging);
+
 	try {
 		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef
 		const { exec } = require('child_process') as { exec: (command: string, callback: (error: { message?: string } | null) => void) => void };
@@ -434,81 +566,150 @@ export function openTerminalInProjectRoot(app: App, settings: AstroComposerSetti
 			return;
 		}
 
+		// Get terminal application name (use configured or default)
+		const configuredApp = sanitizeTerminalApp(settings.terminalApplicationName || "");
+		const terminalApp = configuredApp || getDefaultTerminalApp();
+
+		// Warn if terminal app name is empty (but still try to use defaults)
+		if (!configuredApp && !terminalApp) {
+			new Notice("Terminal application name is empty. Please configure it in settings.");
+			return;
+		}
+
 		// eslint-disable-next-line no-undef
 		const platform = process.platform;
-		let command: string;
+		terminalLogger.log("Opening terminal", { platform, terminalApp, projectPath });
 
 		if (platform === 'win32') {
-			// Windows: Try Windows Terminal first, fallback to cmd
-			exec('where wt', (error: { message?: string } | null) => {
-				if (!error) {
-					// Windows Terminal is available
-					exec(`wt -d "${projectPath}"`, (execError: { message?: string } | null) => {
-						if (execError) {
-							// Fallback to cmd
-							exec(`cmd /k cd /d "${projectPath}"`, (cmdError: { message?: string } | null) => {
-								if (cmdError) {
-									new Notice(`Error opening terminal: ${cmdError.message || 'Unknown error'}`);
-								}
-							});
-						}
-					});
-				} else {
-					// Fallback to cmd
-					exec(`cmd /k cd /d "${projectPath}"`, (cmdError: { message?: string } | null) => {
-						if (cmdError) {
-							new Notice(`Error opening terminal: ${cmdError.message || 'Unknown error'}`);
-						}
-					});
+			// Windows: Use start command with configurable terminal
+			const escapedPath = projectPath.replace(/"/g, '"');
+			const lowerApp = terminalApp.toLowerCase();
+
+			if (lowerApp === "wt.exe" || lowerApp === "wt" || lowerApp === "windows terminal") {
+				// Windows Terminal
+				exec('where wt', (error: { message?: string } | null) => {
+					if (!error) {
+						const command = `start "" wt.exe -d "${escapedPath}"`;
+						terminalLogger.log("Windows launch (wt)", { command, projectPath });
+						exec(command, (execError: { message?: string } | null) => {
+							if (execError) {
+								terminalLogger.log("Windows Terminal failed, falling back to cmd", { error: execError.message });
+								// Fallback to cmd
+								const fallbackCommand = `start "" cmd.exe /K "cd /d "${escapedPath}""`;
+								exec(fallbackCommand, (cmdError: { message?: string } | null) => {
+									if (cmdError) {
+										new Notice(`Error opening terminal: ${cmdError.message || 'Unknown error'}`);
+									}
+								});
+							}
+						});
+					} else {
+						// Windows Terminal not found, fallback to cmd
+						terminalLogger.log("Windows Terminal not found, using cmd", {});
+						const fallbackCommand = `start "" cmd.exe /K "cd /d "${escapedPath}""`;
+						exec(fallbackCommand, (cmdError: { message?: string } | null) => {
+							if (cmdError) {
+								new Notice(`Error opening terminal: ${cmdError.message || 'Unknown error'}`);
+							}
+						});
+					}
+				});
+			} else if (lowerApp === "powershell" || lowerApp === "powershell.exe") {
+				// PowerShell
+				const escapedPathForPS = projectPath.replace(/'/g, "''");
+				const command = `start "" powershell -NoExit -Command "Set-Location '${escapedPathForPS}';"`;
+				terminalLogger.log("Windows launch (powershell)", { command, projectPath });
+				exec(command, (error: { message?: string } | null) => {
+					if (error) {
+						new Notice(`Error opening terminal: ${error.message || 'Unknown error'}`);
+					}
+				});
+			} else if (lowerApp === "cmd.exe" || lowerApp === "cmd") {
+				// Command Prompt
+				const command = `start "" cmd.exe /K "cd /d "${escapedPath}""`;
+				terminalLogger.log("Windows launch (cmd)", { command, projectPath });
+				exec(command, (error: { message?: string } | null) => {
+					if (error) {
+						new Notice(`Error opening terminal: ${error.message || 'Unknown error'}`);
+					}
+				});
+			} else {
+				// Generic terminal - try to launch it directly
+				const command = `start "" "${terminalApp}"`;
+				terminalLogger.log("Windows launch (generic)", { command, terminalApp, projectPath });
+				exec(command, (error: { message?: string } | null) => {
+					if (error) {
+						// Fallback to cmd if generic launch fails
+						terminalLogger.log("Generic terminal failed, falling back to cmd", { error: error.message });
+						const fallbackCommand = `start "" cmd.exe /K "cd /d "${escapedPath}""`;
+						exec(fallbackCommand, (cmdError: { message?: string } | null) => {
+							if (cmdError) {
+								new Notice(`Error opening terminal: ${cmdError.message || 'Unknown error'}`);
+							}
+						});
+					}
+				});
+			}
+		} else if (platform === 'darwin') {
+			// macOS: Use open -a (simpler than osascript)
+			const escapedApp = escapeDoubleQuotes(terminalApp);
+			const escapedPath = escapeDoubleQuotes(projectPath);
+			const command = `open -na "${escapedApp}" "${escapedPath}"`;
+			terminalLogger.log("macOS launch", { command, terminalApp, projectPath });
+			exec(command, (error: { message?: string } | null) => {
+				if (error) {
+					new Notice(`Error opening terminal: ${error.message || 'Unknown error'}`);
 				}
 			});
-			return; // Early return since we handle Windows asynchronously
-		} else if (platform === 'darwin') {
-			// macOS: Use osascript to open Terminal.app
-			command = `osascript -e 'tell application "Terminal" to do script "cd \\"${projectPath}\\" && bash"'`;
 		} else {
-			// Linux: Try common terminals
-			const terminals = [
-				`gnome-terminal --working-directory="${projectPath}"`,
-				`konsole --workdir "${projectPath}"`,
-				`xterm -e "cd \\"${projectPath}\\" && bash"`
-			];
+			// Linux: Try configurable terminal with fallback chain
+			const terminals = terminalApp ? [terminalApp] : ["gnome-terminal", "konsole", "xterm"];
+			const projectPathEscaped = projectPath.replace(/"/g, '\\"');
 
 			// Try each terminal until one works
 			const tryTerminal = (index: number) => {
 				if (index >= terminals.length) {
-					new Notice('No supported terminal found. Please install gnome-terminal, konsole, or xterm.');
+					new Notice('No supported terminal found. Please install a terminal application or configure one in settings.');
 					return;
 				}
 
-				exec(`which ${terminals[index].split(' ')[0]}`, (error: { message?: string } | null) => {
+				const currentTerminal = terminals[index];
+				const terminalName = currentTerminal.split(' ')[0];
+
+				// Check if terminal exists
+				exec(`which ${terminalName}`, (error: { message?: string } | null) => {
 					if (!error) {
-						exec(terminals[index], (execError: { message?: string } | null) => {
+						// Terminal found, try to launch it
+						let command: string;
+						if (currentTerminal.includes("gnome-terminal")) {
+							command = `gnome-terminal --working-directory="${projectPathEscaped}"`;
+						} else if (currentTerminal.includes("konsole")) {
+							command = `konsole --workdir "${projectPathEscaped}"`;
+						} else {
+							// Generic terminal
+							command = `${currentTerminal} -e "cd \\"${projectPathEscaped}\\" && bash"`;
+						}
+						terminalLogger.log("Linux launch", { command, terminal: currentTerminal, projectPath });
+						exec(command, (execError: { message?: string } | null) => {
 							if (execError && index < terminals.length - 1) {
+								terminalLogger.log("Terminal launch failed, trying next", { terminal: currentTerminal, error: execError.message });
 								tryTerminal(index + 1);
 							} else if (execError) {
 								new Notice(`Error opening terminal: ${execError.message || 'Unknown error'}`);
 							}
 						});
 					} else {
+						// Terminal not found, try next
+						terminalLogger.log("Terminal not found, trying next", { terminal: currentTerminal });
 						tryTerminal(index + 1);
 					}
 				});
 			};
 
 			tryTerminal(0);
-			return; // Early return since we handle Linux asynchronously
-		}
-
-		// Execute command for macOS
-		if (command) {
-			exec(command, (error: { message?: string } | null) => {
-				if (error) {
-					new Notice(`Error opening terminal: ${error.message || 'Unknown error'}`);
-				}
-			});
 		}
 	} catch (error) {
+		terminalLogger.log("Unexpected error", { error });
 		new Notice(`Error opening terminal: ${error instanceof Error ? error.message : String(error)}`);
 	}
 }

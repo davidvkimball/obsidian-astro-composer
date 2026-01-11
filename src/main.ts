@@ -9,7 +9,7 @@ import {
 
 import { AstroComposerSettings, DEFAULT_SETTINGS, CONSTANTS } from "./settings";
 import { AstroComposerPluginInterface, ContentType } from "./types";
-import { registerCommands, renameContentByPath as renameContentByPathFunction, openTerminalInProjectRoot, openConfigFile } from "./commands";
+import { registerCommands, registerContentTypeCommands, renameContentByPath as renameContentByPathFunction, openTerminalInProjectRoot, openConfigFile } from "./commands";
 import { AstroComposerSettingTab } from "./ui/settings-tab";
 import { TitleModal } from "./ui/title-modal";
 import { MigrationModal, MigrationConflictResult } from "./ui/components/MigrationModal";
@@ -282,6 +282,9 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 		// Register commands
 		registerCommands(this, this.settings);
+		
+		// Register content type commands
+		registerContentTypeCommands(this, this.settings);
 
 		// Add settings tab and store reference for refresh after migration
 		this.settingsTab = new AstroComposerSettingTab(this.app, this);

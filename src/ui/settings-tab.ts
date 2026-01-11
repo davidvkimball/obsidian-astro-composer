@@ -5,6 +5,7 @@ import { CommandPickerModal } from "./components/CommandPickerModal";
 import { IconPickerModal } from "./components/IconPickerModal";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { createSettingsGroup } from "../utils/settings-compat";
+import { registerContentTypeCommands } from "../commands";
 
 export class AstroComposerSettingTab extends PluginSettingTab {
 	plugin: AstroComposerPluginInterface;
@@ -222,6 +223,48 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 							.setValue(settings.terminalProjectRootPath)
 							.onChange(async (value: string) => {
 								settings.terminalProjectRootPath = value;
+								await this.plugin.saveSettings();
+							})
+					);
+				// Add class for conditional visibility - keep setting in group
+				setting.settingEl.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenTerminalCommand);
+				setting.settingEl.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenTerminalCommand);
+			});
+
+			developerGroup.addSetting((setting) => {
+				const descFragment = document.createDocumentFragment();
+				// False positive: Text is already in sentence case; "macOS", "Windows", "Linux", "Terminal", "Windows Terminal", "cmd.exe" are proper nouns or product names
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				descFragment.createEl("div", { text: "Leave blank to use platform defaults. On macOS, the default is Terminal. On Windows, it's Windows Terminal or cmd.exe. On Linux, it's gnome-terminal, konsole, or xterm" });
+				// False positive: Text is already in sentence case; "Terminal", "iTerm", "PowerShell", "Alacritty" are proper nouns (product names)
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				descFragment.createEl("div", { text: "Examples include Terminal, iTerm, PowerShell, and Alacritty" });
+				setting
+					.setName("Terminal application name")
+					.setDesc(descFragment)
+					.addText((text) =>
+						text
+							.setPlaceholder("Terminal")
+							.setValue(settings.terminalApplicationName)
+							.onChange(async (value: string) => {
+								settings.terminalApplicationName = value;
+								await this.plugin.saveSettings();
+							})
+					);
+				// Add class for conditional visibility - keep setting in group
+				setting.settingEl.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenTerminalCommand);
+				setting.settingEl.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenTerminalCommand);
+			});
+
+			developerGroup.addSetting((setting) => {
+				setting
+					.setName("Enable debug logging")
+					.setDesc("Log terminal launch commands and platform decisions to the developer console for troubleshooting.")
+					.addToggle((toggle) =>
+						toggle
+							.setValue(settings.enableTerminalDebugLogging)
+							.onChange(async (value: boolean) => {
+								settings.enableTerminalDebugLogging = value;
 								await this.plugin.saveSettings();
 							})
 					);
@@ -561,6 +604,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		void this.plugin.saveSettings();
 		this.renderCustomContentTypes();
 		this.plugin.registerCreateEvent();
+		// Re-register content type commands to include the new type
+		registerContentTypeCommands(this.plugin as unknown as Plugin, settings);
 	}
 
 	private renderCustomContentTypes() {
@@ -663,6 +708,9 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					// Update visibility
 					this.updateCustomContentTypeVisibility(customType.id, newValue);
 					
+					// Re-register content type commands to reflect enabled/disabled state
+					registerContentTypeCommands(this.plugin as unknown as Plugin, this.plugin.settings);
+					
 					// Conflict checking removed from settings UI
 				})();
 			});
@@ -684,6 +732,9 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					
 					// Update visibility
 					this.updateCustomContentTypeVisibility(customType.id, value);
+					
+					// Re-register content type commands to reflect enabled/disabled state
+					registerContentTypeCommands(this.plugin as unknown as Plugin, this.plugin.settings);
 				})();
 			});
 
@@ -714,6 +765,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						.onChange(async (value: string) => {
 							customType.name = value;
 							await this.plugin.saveSettings();
+							// Re-register content type commands to update command name
+							registerContentTypeCommands(this.plugin as unknown as Plugin, this.plugin.settings);
 						});
 				});
 
@@ -1031,6 +1084,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		await this.plugin.saveSettings();
 		this.renderCustomContentTypes();
 		this.plugin.registerCreateEvent();
+		// Re-register content type commands to remove the deleted type
+		registerContentTypeCommands(this.plugin as unknown as Plugin, settings);
 	}
 
 	private getCommandName(commandId: string): string {

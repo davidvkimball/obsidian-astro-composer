@@ -9,6 +9,8 @@ export interface AstroComposerSettings {
 	addTrailingSlashToLinks: boolean;
 	enableOpenTerminalCommand: boolean;
 	terminalProjectRootPath: string;
+	terminalApplicationName: string;
+	enableTerminalDebugLogging: boolean;
 	enableTerminalRibbonIcon: boolean;
 	enableOpenConfigFileCommand: boolean;
 	configFilePath: string;

@@ -13,6 +13,8 @@ export const DEFAULT_SETTINGS: AstroComposerSettings = {
 	addTrailingSlashToLinks: false,
 	enableOpenTerminalCommand: false,
 	terminalProjectRootPath: "",
+	terminalApplicationName: "",
+	enableTerminalDebugLogging: false,
 	enableTerminalRibbonIcon: false,
 	enableOpenConfigFileCommand: false,
 	configFilePath: "",
