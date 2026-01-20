@@ -507,6 +507,20 @@ function getDefaultTerminalApp(): string {
 		return "Terminal";
 	}
 	if (Platform.isWin) {
+		try {
+			// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef
+			const os = require('os') as { release: () => string };
+			const release = os.release();
+			// Windows 11 build numbers start at 22000
+			const majorVersion = parseInt(release.split('.')[0]);
+			const buildNumber = parseInt(release.split('.')[2]);
+
+			if (majorVersion > 10 || (majorVersion === 10 && buildNumber >= 22000)) {
+				return "wt.exe";
+			}
+		} catch (e) {
+			// Fallback to cmd.exe if OS detection fails
+		}
 		return "cmd.exe";
 	}
 	if (Platform.isLinux) {

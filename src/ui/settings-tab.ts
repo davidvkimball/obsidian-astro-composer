@@ -235,7 +235,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				const descFragment = document.createDocumentFragment();
 				// False positive: Text is already in sentence case; "macOS", "Windows", "Linux", "Terminal", "Windows Terminal", "cmd.exe" are proper nouns or product names
 				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				descFragment.createEl("div", { text: "Leave blank to use platform defaults. On macOS, the default is Terminal. On Windows, it's Windows Terminal or cmd.exe. On Linux, it's gnome-terminal, konsole, or xterm" });
+				descFragment.createEl("div", { text: "Leave blank to use platform defaults. On macOS, the default is Terminal. On Windows, it's Windows Terminal (Win 11) or cmd.exe (Win 10). On Linux, it's gnome-terminal, konsole, or xterm" });
 				// False positive: Text is already in sentence case; "Terminal", "iTerm", "PowerShell", "Alacritty" are proper nouns (product names)
 				// eslint-disable-next-line obsidianmd/ui/sentence-case
 				descFragment.createEl("div", { text: "Examples include Terminal, iTerm, PowerShell, and Alacritty" });
