@@ -26,6 +26,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	private templateParser!: TemplateParser;
 	private headingLinkGenerator!: HeadingLinkGenerator;
 	private pluginCreatedFiles: Set<string> = new Set();
+	private processedFiles: Map<string, number> = new Map();
 	private terminalRibbonIcon: HTMLElement | null = null;
 	private configRibbonIcon: HTMLElement | null = null;
 	private ribbonContextMenuObserver?: MutationObserver;
@@ -320,8 +321,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			if (file instanceof TFile && (file.extension === "md" || file.extension === "mdx")) {
 				const filePath = file.path;
 
-				// Skip if this file was created by the plugin itself
-				// Don't delete immediately - keep it for a bit to handle rapid events
+				// Skip if this file was created by the plugin itself (e.g., via commands)
+				// pluginCreatedFiles only contains files created programmatically by the plugin
 				if (this.pluginCreatedFiles.has(filePath)) {
 					return;
 				}
@@ -333,9 +334,17 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				if (lastProcessed > 0 && now - lastProcessed < CONSTANTS.DEBOUNCE_MS) {
 					return; // Skip if this specific file was just processed
 				}
-				// Clean up old entries (older than 2 seconds)
+				// Clean up old entries (older than 2 seconds) - do this even if we skip the file
 				if (lastProcessed > 0 && now - lastProcessed > 2000) {
 					lastProcessedFiles.delete(filePath);
+				}
+
+				// Periodic cleanup of debounce map to prevent memory leaks
+				const periodicCutoff = now - CONSTANTS.DEBOUNCE_MS * 2;
+				for (const [path, time] of lastProcessedFiles.entries()) {
+					if (time < periodicCutoff) {
+						lastProcessedFiles.delete(path);
+					}
 				}
 
 				// CRITICAL: Reload settings from disk to ensure we have the latest data
@@ -346,7 +355,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				// This ensures automation works when content types are enabled by another plugin
 				const contentTypes = this.settings.contentTypes || [];
 				const hasEnabledContentTypes = contentTypes.some(ct => ct.enabled);
-				
+
 				// If no content types are enabled, skip processing
 				if (!hasEnabledContentTypes) {
 					return;
@@ -357,10 +366,10 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 					const sortedContentTypes = sortByPatternSpecificity(contentTypes);
 					let matchedContentTypeId: string | null = null;
 					const matchingTypes: ContentType[] = []; // Track all matching types for conflict detection
-					
+
 					for (const contentType of sortedContentTypes) {
 						if (!contentType.enabled) continue;
-						
+
 						let matches = false;
 						
 						// Handle blank folder (root) - matches files in vault root only
@@ -460,53 +469,53 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 						}
 					}
 
-					// Mark the original file as handled IMMEDIATELY to prevent it from triggering the create event again
-					// This must happen before we show the modal, as the modal will rename the file
-					// Keep it in the set for a while to handle any delayed events
-					this.pluginCreatedFiles.add(file.path);
-					
-					// Clean up after a delay to prevent memory leaks
-					setTimeout(() => {
-						this.pluginCreatedFiles.delete(file.path);
-					}, 2000);
+					// Note: We don't add files to pluginCreatedFiles here because these are user-created files,
+					// not plugin-created files. pluginCreatedFiles is only for files created by plugin commands.
+
+					// Also clean up old entries from pluginCreatedFiles periodically
+					if (this.pluginCreatedFiles.size > 50) {
+						console.log(`[Astro Composer Debug] pluginCreatedFiles is large (${this.pluginCreatedFiles.size}), cleaning up old entries`);
+						// Since we don't have timestamps for pluginCreatedFiles, we'll clear it periodically
+						// This is safe because entries are only kept for 2 seconds anyway
+						this.pluginCreatedFiles.clear();
+					}
 					
 					// Mark as processed in debounce map ONLY after we've confirmed we'll show the modal
 					// This prevents marking files that we skip due to early returns
 					// Use a shorter debounce time for CTRL+N (user-initiated) vs automatic creation
 					lastProcessedFiles.set(file.path, now);
-					
+
 					// Clear the debounce entry after processing completes (when modal closes)
 					// This allows the next CTRL+N to work immediately
 					setTimeout(() => {
 						lastProcessedFiles.delete(file.path);
 					}, CONSTANTS.DEBOUNCE_MS + 100);
-					
+
 					// Clean up old entries to prevent memory leak
-					if (lastProcessedFiles.size > 100) {
-						const cutoff = now - CONSTANTS.DEBOUNCE_MS * 2;
-						for (const [path, time] of lastProcessedFiles.entries()) {
-							if (time < cutoff) {
-								lastProcessedFiles.delete(path);
-							}
+					// Clean up more aggressively - remove entries older than debounce time, not just when size > 100
+					const modalCutoff = now - CONSTANTS.DEBOUNCE_MS * 2;
+					for (const [path, time] of lastProcessedFiles.entries()) {
+						if (time < modalCutoff) {
+							lastProcessedFiles.delete(path);
 						}
 					}
-					
+
 					// Show the modal with the matched content type
 					new TitleModal(this.app, file, this, matchedContentTypeId, false, true).open();
 				}
 				})();
 			};
 		
-		// Always register the event listener - it will check enabled content types dynamically
-		// Use vault.create event to detect new file creation
-		const createEventRef = this.app.vault.on("create", (file) => {
-			if (file instanceof TFile) {
-				// Always call createEvent - it will check for enabled content types after reloading settings
-				this.createEvent(file);
-			}
-		});
-		this.registerEvent(createEventRef);
-		this.createEventRef = createEventRef;
+	// Always register the event listener - it will check enabled content types dynamically
+	// Use vault.create event to detect new file creation
+	const createEventRef = this.app.vault.on("create", (file) => {
+		if (file instanceof TFile) {
+			// Always call createEvent - it will check for enabled content types after reloading settings
+			this.createEvent(file);
+		}
+	});
+	this.registerEvent(createEventRef);
+	this.createEventRef = createEventRef;
 	}
 
 	async loadSettings() {

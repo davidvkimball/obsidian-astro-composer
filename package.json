@@ -1,6 +1,6 @@
 {
 	"name": "astro-composer",
-	"version": "0.10.2",
+	"version": "0.10.3",
 	"description": "Turn your notes into posts and pages for your Astro blog with automated content management features.",
 	"main": "main.js",
 	"type": "module",
