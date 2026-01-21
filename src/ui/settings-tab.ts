@@ -131,6 +131,22 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		generalGroup.addSetting((setting) => {
 			setting
+				.setName("Process background file changes")
+				// False positive: Technical terms like "Obsidian", "git" are proper nouns in this context
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				.setDesc("Automatically process new files when they're changed in the background (by Git or other plugins). Disable to prevent modal spam when files are already processed on other devices during a sync.")
+				.addToggle((toggle) =>
+					toggle
+						.setValue(settings.processBackgroundFileChanges)
+						.onChange(async (value: boolean) => {
+							settings.processBackgroundFileChanges = value;
+							await this.plugin.saveSettings();
+						})
+				);
+		});
+
+		generalGroup.addSetting((setting) => {
+			setting
 				// False positive: "MDX" is a proper noun (file format) and should be capitalized
 				// eslint-disable-next-line obsidianmd/ui/sentence-case
 				.setName("Show MDX files in file explorer")

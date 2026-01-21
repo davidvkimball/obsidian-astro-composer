@@ -351,6 +351,14 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				// This is necessary because other plugins might have modified data.json
 				await this.loadSettings();
 
+				// Check if background file processing is disabled
+				// If so, only process files that are currently active (being edited)
+				const activeFile = this.app.workspace.getActiveFile();
+				const isActiveFile = activeFile && activeFile.path === file.path;
+				if (!this.settings.processBackgroundFileChanges && !isActiveFile) {
+					return;
+				}
+
 				// CRITICAL: Check if any content types are enabled AFTER reloading settings
 				// This ensures automation works when content types are enabled by another plugin
 				const contentTypes = this.settings.contentTypes || [];
@@ -454,6 +462,13 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 							if (frontmatterEnd !== -1) {
 								const frontmatterText = content.slice(4, frontmatterEnd).trim();
 								const lines = frontmatterText.split('\n').filter(line => line.trim().length > 0);
+
+								// If "Process background file changes" is disabled, skip ANY file with frontmatter
+								// (assuming it was processed on another device/computer)
+								if (!this.settings.processBackgroundFileChanges && lines.length > 0) {
+									return;
+								}
+
 								// If it has more than just a title line, skip
 								if (lines.length > 1 || (lines.length === 1 && !lines[0].startsWith('title:'))) {
 									return;
@@ -461,7 +476,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 							}
 						}
 						// If it has body content (after frontmatter), skip
-						const contentWithoutFrontmatter = content.startsWith('---') 
+						const contentWithoutFrontmatter = content.startsWith('---')
 							? content.slice(content.indexOf('\n---', 3) + 4).trim()
 							: content.trim();
 						if (contentWithoutFrontmatter.length > 0) {
@@ -474,7 +489,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 					// Also clean up old entries from pluginCreatedFiles periodically
 					if (this.pluginCreatedFiles.size > 50) {
-						console.log(`[Astro Composer Debug] pluginCreatedFiles is large (${this.pluginCreatedFiles.size}), cleaning up old entries`);
+						console.debug(`[Astro Composer Debug] pluginCreatedFiles is large (${this.pluginCreatedFiles.size}), cleaning up old entries`);
 						// Since we don't have timestamps for pluginCreatedFiles, we'll clear it periodically
 						// This is safe because entries are only kept for 2 seconds anyway
 						this.pluginCreatedFiles.clear();

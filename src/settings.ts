@@ -27,4 +27,5 @@ export const DEFAULT_SETTINGS: AstroComposerSettings = {
 		iconId: 'wrench',
 	},
 	showMdxFilesInExplorer: false,
+	processBackgroundFileChanges: true,
 };

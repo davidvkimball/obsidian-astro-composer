@@ -19,6 +19,7 @@ export interface AstroComposerSettings {
 	helpButtonReplacement: HelpButtonReplacementSettings;
 	migrationCompleted: boolean;
 	showMdxFilesInExplorer: boolean;
+	processBackgroundFileChanges: boolean;
 	// Legacy fields (kept for migration, ignored after migration)
 	enableUnderscorePrefix?: boolean;
 	postsFolder?: string;
