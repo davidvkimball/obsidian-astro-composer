@@ -1,11 +1,11 @@
 ---
 name: project
-description: Project-specific architecture, maintenance tasks, and unique conventions for Astro Composer. Load when performing project-wide maintenance or working with the core architecture.
+description: Project-specific architecture, maintenance tasks, and unique conventions for this repository. Load when performing project-wide maintenance or working with the core architecture.
 ---
 
 # Project Context
 
-This skill provides the unique context and architectural details for the **Astro Composer** repository.
+This skill provides the unique context and architectural details for the **Obsidian Sample Plugin Plus** repository.
 
 ## Purpose
 
@@ -20,16 +20,15 @@ Load this skill when:
 
 ## Project Overview
 
-Astro Composer is an Obsidian plugin that turns notes into posts and pages for Astro blogs with automated content management features. It provides a bridge between Obsidian notes and Astro blog content, enabling seamless content creation and management workflows.
+- **Architecture**: Organized structure with main code in `src/main.ts` and settings in `src/settings.ts`.
+- **Reference Management**: Uses a `.ref` folder with symlinks to centralized Obsidian repositories for API and documentation.
 
 ## Maintenance Tasks
 
 - **Sync References**: Run the setup scripts (`scripts/setup-ref-links.*`) to update symlinks to the 6 core Obsidian projects.
 - **Update Skills**: Use `node scripts/update-agents.mjs "Description"` after syncing or updating reference materials.
-- **Test Platforms**: Ensure features are tested on both desktop and mobile.
 
 ## Project-Specific Conventions
 
-- **Modular Source**: Core logic is distributed across `src/ui`, `src/utils`, and `src/commands`.
-- **Settings Compatibility**: Uses `SettingGroup` with backward compatibility for API versions < 1.11.0.
-- **Wildcard Patterns**: Supports wildcard folder matching (e.g., `docs/*`) for content types.
+- **Organized Source**: Prefer keeping logic separated into files within `src/` rather than bloating `main.ts`.
+- **Ref Symlinks**: Always use the `.ref/` path when looking up API documentation to ensure parity with the central reference store.

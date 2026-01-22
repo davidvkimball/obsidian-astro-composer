@@ -51,7 +51,7 @@ if (isNpm) {
     // Run pnpm install instead
     const pnpm = spawn('pnpm', ['install'], {
       stdio: 'inherit',
-      shell: true,
+      shell: false,
       // Clear npm-specific env vars to prevent recursion
       env: {
         ...process.env,

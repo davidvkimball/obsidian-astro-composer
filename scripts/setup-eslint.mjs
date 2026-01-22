@@ -67,7 +67,7 @@ const commandArgs = usePnpm ? ['exec', ...eslintArgs] : eslintArgs;
 
 const eslint = spawn(command, commandArgs, {
 	stdio: 'inherit',
-	shell: true
+	shell: false
 });
 
 eslint.on('close', (code) => {
@@ -98,7 +98,11 @@ function generateEslintConfig(customRules = {}) {
         "returns": false,
         "variables": false
       }
-    }]
+    }],
+    // Console rules: Match Obsidian bot requirements (only warn/error/debug allowed)
+    "no-console": ["error", { "allow": ["warn", "error", "debug"] }],
+    // Require await in async functions (matches Obsidian bot)
+    "@typescript-eslint/require-await": "error"
   };
   
   // Merge custom rules with defaults (custom rules take precedence)
@@ -157,6 +161,7 @@ export default defineConfig([
       }
     },
     // Custom rule overrides${Object.keys(customRules).length > 0 ? ' (migrated from .eslintrc)' : ''}
+    // Note: Console and async/await rules match Obsidian bot requirements
     rules: {
 ${rulesString}
     },
