@@ -4,20 +4,21 @@ import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
 import { LinkConverter } from "../utils/link-conversion";
 import { TitleModal } from "../ui/title-modal";
+import { toKebabCase } from "../utils/string-utils";
 
 export function registerCommands(plugin: Plugin, settings: AstroComposerSettings): void {
 	// Terminal and config commands are desktop-only - NEVER register on mobile
 	// Check Platform.isMobile - if true, these commands must NEVER be registered
 	const isMobile = Platform.isMobile;
-	
+
 	// If on mobile, absolutely do not register terminal/config commands
 	// They use Node.js/Electron APIs that don't exist on mobile
 	if (isMobile) {
 		// On mobile, only register the safe commands that work on mobile
 		const pluginInterface = plugin as unknown as AstroComposerPluginInterface;
-		const fileOps = new FileOperations(plugin.app, settings, pluginInterface as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
+		const fileOps = new FileOperations(plugin.app, settings, pluginInterface);
 		const linkConverter = new LinkConverter(settings, pluginInterface);
-		
+
 		// Register only mobile-safe commands
 		plugin.addCommand({
 			id: "standardize-properties",
@@ -69,16 +70,16 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 						new Notice("Cannot rename: this file is not part of a configured content type folder.");
 						return;
 					}
-					
+
 					const type = fileOps.determineType(file);
 					const cache = plugin.app.metadataCache.getFileCache(file);
 					const titleKey = fileOps.getTitleKey(type);
-					
+
 					if (!cache?.frontmatter || !(titleKey in cache.frontmatter)) {
 						new Notice(`Cannot rename: No ${titleKey} found in properties`);
 						return;
 					}
-					
+
 					new TitleModal(plugin.app, file, plugin as unknown as AstroComposerPluginInterface, type, true).open();
 				}
 			},
@@ -87,7 +88,7 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		// DO NOT register terminal or config commands on mobile - return early
 		return;
 	}
-	
+
 	// Desktop: register all commands including terminal and config
 	const pluginInterface = plugin as unknown as AstroComposerPluginInterface;
 
@@ -99,7 +100,7 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		// Get fresh settings from plugin if available
 		const currentSettings = (plugin as unknown as AstroComposerPluginInterface)?.settings || settings;
 		// Create a temporary FileOperations with fresh settings
-		const tempFileOps = new FileOperations(plugin.app, currentSettings, plugin as unknown as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
+		const tempFileOps = new FileOperations(plugin.app, currentSettings, plugin as unknown as AstroComposerPluginInterface);
 		const type = tempFileOps.determineType(file);
 		// If determineType returns "note", it means no content type matched
 		if (type === "note") {
@@ -139,35 +140,35 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		},
 	});
 
-		// Rename Content command
-		plugin.addCommand({
-			id: "rename-content",
-			name: "Rename current content",
-			icon: "pencil",
-			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
-				const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
-				if (file instanceof TFile) {
-					// Get fresh settings from plugin
-					const currentSettings = pluginInterface.settings || settings;
-					// Create FileOperations with fresh settings
-					const currentFileOps = new FileOperations(plugin.app, currentSettings, pluginInterface as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
-					
-					// Check if this file matches any configured content type
-					if (!hasMatchingContentType(file, currentSettings)) {
-						new Notice("Cannot rename: this file is not part of a configured content type folder.");
-						return;
-					}
-					
-					// Determine content type from folder structure
-					const type = currentFileOps.determineType(file);
-					
-					// Always open the modal - it will handle files without frontmatter or title key
-					// If there's no title in frontmatter, the modal will use the filename as fallback
-					// and the rename will proceed with kebab-case version of what user types
-					new TitleModal(plugin.app, file, pluginInterface, type, true).open();
+	// Rename Content command
+	plugin.addCommand({
+		id: "rename-content",
+		name: "Rename current content",
+		icon: "pencil",
+		editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
+			const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
+			if (file instanceof TFile) {
+				// Get fresh settings from plugin
+				const currentSettings = pluginInterface.settings || settings;
+				// Create FileOperations with fresh settings
+				const currentFileOps = new FileOperations(plugin.app, currentSettings, pluginInterface);
+
+				// Check if this file matches any configured content type
+				if (!hasMatchingContentType(file, currentSettings)) {
+					new Notice("Cannot rename: this file is not part of a configured content type folder.");
+					return;
 				}
-			},
-		});
+
+				// Determine content type from folder structure
+				const type = currentFileOps.determineType(file);
+
+				// Always open the modal - it will handle files without frontmatter or title key
+				// If there's no title in frontmatter, the modal will use the filename as fallback
+				// and the rename will proceed with kebab-case version of what user types
+				new TitleModal(plugin.app, file, pluginInterface, type, true).open();
+			}
+		},
+	});
 
 	// Open Terminal command (desktop only - not available on mobile)
 	if (!isMobile) {
@@ -209,7 +210,7 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 	const currentSettings = plugin?.settings || settings;
 	const templateParser = new TemplateParser(app, currentSettings);
 	const fileOps = new FileOperations(app, currentSettings, plugin);
-	
+
 	// Preserve cursor position if editor is provided
 	let cursorPosition: { line: number; ch: number } | null = null;
 	let originalContent = "";
@@ -218,30 +219,30 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 		cursorPosition = { line: cursor.line, ch: cursor.ch };
 		originalContent = editor.getValue();
 	}
-	
+
 	// Determine content type using the existing logic
 	const type = fileOps.determineType(file);
-	
+
 	// Check if this file has a valid content type (not just "note")
 	if (type === "note") {
 		new Notice("No properties template specified for this content. This file doesn't match any configured content type folders.");
 		return;
 	}
-	
+
 	let templateString: string;
-	
+
 	// Determine template based on content type
 	if (type === "note") {
 		new Notice("No properties template specified for this content. This file doesn't match any configured content type folders.");
 		return;
 	}
-	
+
 	const contentType = fileOps.getContentType(type);
 	if (!contentType) {
 		new Notice("Content type not found.");
 		return;
 	}
-	
+
 	templateString = contentType.template;
 
 	// Wait briefly to allow editor state to stabilize
@@ -250,17 +251,17 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 	// Re-read content to ensure latest state after editor changes
 	const content = await app.vault.read(file);
 	const title = file.basename.replace(/^_/, "");
-	
+
 	const parsed = templateParser.parseFrontmatter(content);
 	const { templateProps, templateValues } = templateParser.parseTemplate(templateString, title);
 
 	// Merge template properties with existing ones, preserving all existing
 	const finalProps: Record<string, string[]> = { ...parsed.properties };
 	const arrayKeys = new Set<string>(); // Track which keys are arrays
-	
+
 	// Generate slug from title for slug property auto-population
-	const slug = fileOps.toKebabCase(title);
-	
+	const slug = toKebabCase(title);
+
 	for (const key of templateProps) {
 		if (!(key in parsed.properties)) {
 			// Property doesn't exist, add it from template
@@ -275,7 +276,7 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 			// Property exists, check if it's an array type
 			const templateValue = templateValues[key];
 			const isArrayValue = Array.isArray(templateValue);
-			
+
 			if (isArrayValue) {
 				// This is an array property - preserve existing values and merge with template
 				const existingItems = parsed.properties[key] || [];
@@ -296,7 +297,7 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 			}
 		}
 	}
-	
+
 	// Also check if slug property exists in frontmatter but is empty (even if not in template)
 	// Only auto-populate if template has {{slug}} placeholder
 	if ("slug" in parsed.properties && templateString.includes("{{slug}}")) {
@@ -317,23 +318,23 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 	const newContent = templateParser.buildFrontmatterContent(finalProps, arrayKeys) + parsed.bodyContent;
 
 	await app.vault.modify(file, newContent);
-	
+
 	// Restore cursor position if editor was provided and file is still open
 	if (editor && cursorPosition) {
 		// Wait for Obsidian to reload the file in the editor
 		await new Promise(resolve => setTimeout(resolve, 50));
-		
+
 		// Try to get the active editor for this file
 		const activeView = app.workspace.getActiveViewOfType(MarkdownView);
 		if (activeView && activeView.file === file && activeView.editor) {
 			const activeEditor = activeView.editor;
 			const newLineCount = newContent.split('\n').length;
 			const originalLineCount = originalContent.split('\n').length;
-			
+
 			// Calculate new cursor position
 			let newLine = cursorPosition.line;
 			let newCh = cursorPosition.ch;
-			
+
 			// Adjust for content changes
 			if (newLineCount !== originalLineCount) {
 				// If lines were added/removed, adjust line number
@@ -341,18 +342,18 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 					newLine = Math.max(0, newLineCount - 1);
 				}
 			}
-			
+
 			// Adjust column position if line length changed
 			const newLineLength = newContent.split('\n')[newLine]?.length || 0;
 			if (newCh > newLineLength) {
 				newCh = Math.max(0, newLineLength);
 			}
-			
+
 			// Restore cursor position
 			activeEditor.setCursor({ line: newLine, ch: newCh });
 		}
 	}
-	
+
 	new Notice("Properties standardized using template.");
 }
 
@@ -372,7 +373,7 @@ export function renameContentByPath(
 		return;
 	}
 
-	const fileOps = new FileOperations(app, settings, plugin as unknown as AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> });
+	const fileOps = new FileOperations(app, settings, plugin);
 
 	// Helper function to check if file matches content type
 	// Uses the same logic as FileOperations.determineType() to ensure consistency
@@ -393,7 +394,7 @@ export function renameContentByPath(
 	}
 
 	const type = fileOps.determineType(file);
-	
+
 	// Always open the modal - it will handle files without frontmatter or title key
 	// If there's no title in frontmatter, the modal will use the filename as fallback
 	// and the rename will proceed with kebab-case version of what user types
@@ -407,23 +408,23 @@ export function renameContentByPath(
 export function registerContentTypeCommands(plugin: Plugin, settings: AstroComposerSettings): void {
 	const pluginInterface = plugin as unknown as AstroComposerPluginInterface;
 	const contentTypes = settings.contentTypes || [];
-	
+
 	// Register a command for each enabled content type
 	for (const contentType of contentTypes) {
 		if (!contentType.enabled) {
 			continue; // Skip disabled content types
 		}
-		
+
 		const commandId = `create-content-type-${contentType.id}`;
 		const commandName = `Create new content type: ${contentType.name}`;
-		
+
 		plugin.addCommand({
 			id: commandId,
 			name: commandName,
 			callback: async () => {
 				// Determine target folder from content type (or vault root if blank)
 				let targetFolder = contentType.folder || "";
-				
+
 				// Create folder if it doesn't exist and is specified
 				if (targetFolder && targetFolder.trim() !== "") {
 					const folder = plugin.app.vault.getAbstractFileByPath(targetFolder);
@@ -437,11 +438,11 @@ export function registerContentTypeCommands(plugin: Plugin, settings: AstroCompo
 						}
 					}
 				}
-				
+
 				// Create a temporary file in the target folder
 				const tempFileName = "Untitled.md";
 				const filePath = targetFolder ? `${targetFolder}/${tempFileName}` : tempFileName;
-				
+
 				// Check if file already exists (unlikely but possible)
 				const existingFile = plugin.app.vault.getAbstractFileByPath(filePath);
 				if (existingFile instanceof TFile) {
@@ -449,31 +450,26 @@ export function registerContentTypeCommands(plugin: Plugin, settings: AstroCompo
 					new TitleModal(plugin.app, existingFile, pluginInterface, contentType.id, false, true).open();
 					return;
 				}
-				
+
 				// Mark that this file will be created by the plugin
 				// This prevents the create event from triggering another modal
 				if (pluginInterface && 'pluginCreatedFiles' in pluginInterface) {
-					const pluginWithFiles = pluginInterface as { pluginCreatedFiles?: Set<string> };
-					if (!pluginWithFiles.pluginCreatedFiles) {
-						pluginWithFiles.pluginCreatedFiles = new Set<string>();
-					}
-					pluginWithFiles.pluginCreatedFiles.add(filePath);
+					pluginInterface.pluginCreatedFiles.set(filePath, Date.now());
 				}
-				
+
 				try {
 					// Create the temporary file
 					const tempFile = await plugin.app.vault.create(filePath, "");
-					
+
 					// Open the TitleModal with the file, content type ID, and isNewNote flag
 					new TitleModal(plugin.app, tempFile, pluginInterface, contentType.id, false, true).open();
 				} catch (error) {
 					const errorMessage = error instanceof Error ? error.message : String(error);
 					new Notice(`Failed to create file: ${errorMessage}`);
-					
+
 					// Clean up the tracking if file creation failed
 					if (pluginInterface && 'pluginCreatedFiles' in pluginInterface) {
-						const pluginWithFiles = pluginInterface as { pluginCreatedFiles?: Set<string> };
-						pluginWithFiles.pluginCreatedFiles?.delete(filePath);
+						pluginInterface.pluginCreatedFiles.delete(filePath);
 					}
 				}
 			},
@@ -508,7 +504,7 @@ function getDefaultTerminalApp(): string {
 	}
 	if (Platform.isWin) {
 		try {
-			// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef
+			// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef -- Required for OS release detection on desktop
 			const os = require('os') as { release: () => string };
 			const release = os.release();
 			// Windows 11 build numbers start at 22000
@@ -518,7 +514,7 @@ function getDefaultTerminalApp(): string {
 			if (majorVersion > 10 || (majorVersion === 10 && buildNumber >= 22000)) {
 				return "wt.exe";
 			}
-		} catch (e) {
+		} catch {
 			// Fallback to cmd.exe if OS detection fails
 		}
 		return "cmd.exe";
@@ -552,11 +548,11 @@ export function openTerminalInProjectRoot(app: App, settings: AstroComposerSetti
 	terminalLogger.setEnabled(settings.enableTerminalDebugLogging);
 
 	try {
-		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef
+		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef -- child_process is required for terminal commands on desktop
 		const { exec } = require('child_process') as { exec: (command: string, callback: (error: { message?: string } | null) => void) => void };
-		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef
+		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef -- path is required for resolving paths on desktop
 		const path = require('path') as { resolve: (...args: string[]) => string };
-		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef
+		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef -- fs is required for verifying paths on desktop
 		const fs = require('fs') as { existsSync: (path: string) => boolean };
 
 		// Get the actual vault path string from the adapter
@@ -590,7 +586,7 @@ export function openTerminalInProjectRoot(app: App, settings: AstroComposerSetti
 			return;
 		}
 
-		// eslint-disable-next-line no-undef
+		// eslint-disable-next-line no-undef -- process is a global in the Electron renderer process
 		const platform = process.platform;
 		terminalLogger.log("Opening terminal", { platform, terminalApp, projectPath });
 
@@ -734,11 +730,11 @@ export function openTerminalInProjectRoot(app: App, settings: AstroComposerSetti
  */
 export async function openConfigFile(app: App, settings: AstroComposerSettings): Promise<void> {
 	try {
-		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef
+		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef -- fs is required for verifying config file exists on desktop
 		const fs = require('fs') as { existsSync: (path: string) => boolean };
-		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef
+		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef -- path is required for resolving paths on desktop
 		const path = require('path') as { resolve: (...args: string[]) => string };
-		// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef
+		// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- electron shell is required to open files in default editor
 		const { shell } = require('electron') as { shell: { openPath: (path: string) => Promise<string> } };
 
 		// Get the actual vault path string from the adapter

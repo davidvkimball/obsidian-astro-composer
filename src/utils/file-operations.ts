@@ -1,10 +1,11 @@
 import { App, TFile, TFolder, Notice } from "obsidian";
 import { AstroComposerSettings, FileCreationOptions, RenameOptions, ContentType, ContentTypeId, AstroComposerPluginInterface } from "../types";
 import { matchesFolderPattern, sortByPatternSpecificity } from "./path-matching";
+import { toKebabCase } from "./string-utils";
 
 export class FileOperations {
-	constructor(private app: App, private settings: AstroComposerSettings, private plugin?: AstroComposerPluginInterface & { pluginCreatedFiles?: Set<string> }) {}
-	
+	constructor(private app: App, private settings: AstroComposerSettings, private plugin?: AstroComposerPluginInterface) { }
+
 	// Get fresh settings from plugin if available, otherwise use stored settings
 	private getSettings(): AstroComposerSettings {
 		// Always prefer plugin settings (they're kept up to date)
@@ -14,21 +15,8 @@ export class FileOperations {
 		return this.settings;
 	}
 
-	toKebabCase(str: string): string {
-		return str
-			.toLowerCase()
-			// Remove or replace problematic characters for filenames
-			.replace(/[<>:"/\\|?*]/g, "") // Remove Windows/Unix invalid filename characters
-			.replace(/['"]/g, "") // Remove quotes
-			.replace(/[^\w\s-]/g, "") // Remove other special characters but keep letters, numbers, spaces, hyphens
-			.trim()
-			.replace(/\s+/g, "-")
-			.replace(/-+/g, "-")
-			.replace(/^-|-$/g, "");
-	}
-
 	generateFilename(title: string, enableUnderscorePrefix: boolean = false): string {
-		const kebabTitle = this.toKebabCase(title);
+		const kebabTitle = toKebabCase(title);
 		// If kebab case results in empty string, use a fallback
 		const safeKebabTitle = kebabTitle || "untitled";
 		const prefix = enableUnderscorePrefix ? "_" : "";
@@ -38,14 +26,14 @@ export class FileOperations {
 	determineType(file: TFile): ContentTypeId {
 		const filePath = file.path;
 		const settings = this.getSettings();
-		
+
 		// Check all content types, sorted by pattern specificity (more specific first)
 		const contentTypes = settings.contentTypes || [];
 		const sortedTypes = sortByPatternSpecificity(contentTypes);
-		
+
 		for (const contentType of sortedTypes) {
 			if (!contentType.enabled) continue;
-			
+
 			// Handle blank folder (root) - matches files in vault root only
 			if (!contentType.folder || contentType.folder.trim() === "") {
 				if (!filePath.includes("/") || filePath.split("/").length === 1) {
@@ -58,7 +46,7 @@ export class FileOperations {
 					const pathDepth = pathSegments.length;
 					const patternSegments = contentType.folder.split("/");
 					const expectedDepth = patternSegments.length;
-					
+
 					if (contentType.creationMode === "folder") {
 						// For folder-based creation, files are one level deeper (e.g., test/my-file/index.md)
 						// So we need to allow one extra level beyond the pattern depth
@@ -77,7 +65,7 @@ export class FileOperations {
 				}
 			}
 		}
-		
+
 		// If no content type matches, return "note" as fallback
 		return "note";
 	}
@@ -91,10 +79,10 @@ export class FileOperations {
 	getTitleKey(type: ContentTypeId): string {
 		// For generic notes, always use "title"
 		if (type === "note") return "title";
-		
+
 		const contentType = this.getContentType(type);
 		if (!contentType) return "title";
-		
+
 		const template = contentType.template;
 		const lines = template.split("\n");
 		let inProperties = false;
@@ -120,7 +108,7 @@ export class FileOperations {
 
 	async createFile(options: FileCreationOptions): Promise<TFile | null> {
 		const { file, title, type } = options;
-		
+
 		if (!title) {
 			new Notice(`Title is required to create a ${type}.`);
 			return null;
@@ -133,7 +121,7 @@ export class FileOperations {
 			return null;
 		}
 
-		const kebabTitle = this.toKebabCase(title);
+		const kebabTitle = toKebabCase(title);
 		const enableUnderscorePrefix = contentType?.enableUnderscorePrefix || false;
 		const prefix = enableUnderscorePrefix ? "_" : "";
 
@@ -144,7 +132,7 @@ export class FileOperations {
 		} else if (contentType) {
 			// Get the directory where the user created the file
 			const originalDir = file.parent?.path || "";
-			
+
 			// Respect the user's chosen location (subfolder)
 			// Only use the configured folder if the user created the file in the vault root
 			if (originalDir === "" || originalDir === "/") {
@@ -153,7 +141,7 @@ export class FileOperations {
 				targetFolder = originalDir;
 			}
 		}
-		
+
 		if (targetFolder) {
 			const folder = this.app.vault.getAbstractFileByPath(targetFolder);
 			if (!(folder instanceof TFolder)) {
@@ -172,7 +160,7 @@ export class FileOperations {
 	private async createFolderStructure(file: TFile, kebabTitle: string, prefix: string, targetFolder: string, type: ContentTypeId, contentType: ContentType | null): Promise<TFile | null> {
 		const folderName = `${prefix}${kebabTitle}`;
 		let folderPath: string;
-		
+
 		if (targetFolder) {
 			// Move to target folder
 			folderPath = `${targetFolder}/${folderName}`;
@@ -209,9 +197,8 @@ export class FileOperations {
 
 		// Track that this file will be created by the plugin BEFORE renaming
 		// This prevents the create event from triggering another modal
-		if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
-			const pluginWithFiles = this.plugin as { pluginCreatedFiles?: Set<string> };
-			pluginWithFiles.pluginCreatedFiles?.add(newPath);
+		if (this.plugin) {
+			this.plugin.pluginCreatedFiles.set(newPath, Date.now());
 		}
 
 		try {
@@ -256,7 +243,7 @@ export class FileOperations {
 				}
 				return false;
 			};
-			
+
 			setTimeout(() => {
 				if (!positionCursor()) {
 					setTimeout(() => {
@@ -277,7 +264,7 @@ export class FileOperations {
 		const extension = contentType?.useMdxExtension ? ".mdx" : ".md";
 		const newName = `${prefix}${kebabTitle}${extension}`;
 		let newPath: string;
-		
+
 		if (targetFolder) {
 			// Move to target folder
 			newPath = `${targetFolder}/${newName}`;
@@ -300,15 +287,14 @@ export class FileOperations {
 
 		// Track that this file will be created by the plugin BEFORE renaming
 		// This prevents the create event from triggering another modal
-		if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
-			const pluginWithFiles = this.plugin as { pluginCreatedFiles?: Set<string> };
-			pluginWithFiles.pluginCreatedFiles?.add(newPath);
+		if (this.plugin) {
+			this.plugin.pluginCreatedFiles.set(newPath, Date.now());
 		}
 
 		try {
 			// Use fileManager.renameFile() which respects user settings and handles all link formats
 			await this.app.fileManager.renameFile(file, newPath);
-			
+
 			const newFile = this.app.vault.getAbstractFileByPath(newPath);
 			if (!(newFile instanceof TFile)) {
 				new Notice("Failed to locate renamed file.");
@@ -337,7 +323,7 @@ export class FileOperations {
 				}
 				return false;
 			};
-			
+
 			setTimeout(() => {
 				if (!positionCursor()) {
 					setTimeout(() => {
@@ -357,7 +343,7 @@ export class FileOperations {
 
 	async renameFile(options: RenameOptions): Promise<TFile | null> {
 		const { file, title, type } = options;
-		
+
 		if (!title) {
 			new Notice(`Title is required to rename the content.`);
 			return null;
@@ -369,7 +355,7 @@ export class FileOperations {
 			return null;
 		}
 
-		const kebabTitle = this.toKebabCase(title);
+		const kebabTitle = toKebabCase(title);
 		const prefix = "";
 
 		const creationMode = contentType?.creationMode || "file";
@@ -420,15 +406,15 @@ export class FileOperations {
 				new Notice(`Failed to rename folder: ${errorMessage}.`);
 				return null;
 			}
-			
+
 			const newFilePath = `${newFolderPath}/${file.name}`;
 			const newFile = this.app.vault.getAbstractFileByPath(newFilePath);
 			if (!(newFile instanceof TFile)) {
 				new Notice("Failed to locate renamed file.");
 				return null;
 			}
-			
-			
+
+
 			return newFile;
 		} else {
 			if (!file.parent) {
@@ -454,8 +440,8 @@ export class FileOperations {
 				new Notice("Failed to locate renamed file.");
 				return null;
 			}
-			
-			
+
+
 			return newFile;
 		}
 	}
@@ -465,14 +451,14 @@ export class FileOperations {
 			new Notice("Cannot rename: file has no parent folder.");
 			return null;
 		}
-		
+
 		// Check if this is an index file - if so, rename the parent folder instead
 		// Smart detection: only treat as index if indexFileName is specified and matches
 		const indexFileName = contentType?.indexFileName || "";
-		const isIndex = indexFileName && 
-			indexFileName.trim() !== "" && 
+		const isIndex = indexFileName &&
+			indexFileName.trim() !== "" &&
 			file.basename === indexFileName;
-		
+
 		if (isIndex) {
 			prefix = file.parent.name.startsWith("_") ? "_" : "";
 			const newFolderName = `${prefix}${kebabTitle}`;
@@ -499,12 +485,11 @@ export class FileOperations {
 
 			// Calculate the new file path before renaming
 			const newFilePath = `${newFolderPath}/${file.name}`;
-			
+
 			// Track that this file will be created by the plugin BEFORE renaming
 			// This prevents the create event from triggering another modal
-			if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
-				const pluginWithFiles = this.plugin as { pluginCreatedFiles?: Set<string> };
-				pluginWithFiles.pluginCreatedFiles?.add(newFilePath);
+			if (this.plugin) {
+				this.plugin.pluginCreatedFiles.set(newFilePath, Date.now());
 			}
 
 			try {
@@ -515,22 +500,22 @@ export class FileOperations {
 				new Notice(`Failed to rename folder: ${errorMessage}.`);
 				return null;
 			}
-			
+
 			const newFile = this.app.vault.getAbstractFileByPath(newFilePath);
 			if (!(newFile instanceof TFile)) {
 				new Notice("Failed to locate renamed file.");
 				return null;
 			}
-			
+
 			return newFile;
 		}
-		
+
 		// For non-index files, rename the file itself
 		prefix = file.basename.startsWith("_") ? "_" : "";
 		// Preserve the original file extension
 		const extension = file.extension;
 		const newName = `${prefix}${kebabTitle}.${extension}`;
-		
+
 		// Fix path construction to avoid double slashes
 		let newPath: string;
 		if (file.parent.path === "" || file.parent.path === "/") {
@@ -549,9 +534,8 @@ export class FileOperations {
 
 		// Track that this file will be created by the plugin BEFORE renaming
 		// This prevents the create event from triggering another modal
-		if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
-			const pluginWithFiles = this.plugin as { pluginCreatedFiles?: Set<string> };
-			pluginWithFiles.pluginCreatedFiles?.add(newPath);
+		if (this.plugin) {
+			this.plugin.pluginCreatedFiles.set(newPath, Date.now());
 		}
 
 		try {
@@ -562,13 +546,13 @@ export class FileOperations {
 			new Notice(`Failed to rename file: ${errorMessage}.`);
 			return null;
 		}
-		
+
 		const newFile = this.app.vault.getAbstractFileByPath(newPath);
 		if (!(newFile instanceof TFile)) {
 			new Notice("Failed to locate renamed file.");
 			return null;
 		}
-		
+
 		return newFile;
 	}
 }

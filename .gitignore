@@ -18,6 +18,10 @@ main.js
 # obsidian
 data.json
 
+# lock files
+pnpm-lock.yaml
+package-lock.json
+
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store
 

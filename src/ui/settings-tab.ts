@@ -9,6 +9,7 @@ import { registerContentTypeCommands } from "../commands";
 
 export class AstroComposerSettingTab extends PluginSettingTab {
 	plugin: AstroComposerPluginInterface;
+	public icon = 'lucide-pencil-line';
 	autoRenameContainer: HTMLElement | null = null;
 	postsFolderContainer: HTMLElement | null = null;
 	onlyAutomateContainer: HTMLElement | null = null;
@@ -50,7 +51,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		// Use current plugin settings (already loaded and up-to-date)
 		// Always read fresh settings to ensure we show migrated content types immediately
 		const settings = this.plugin.settings;
-		
+
 		// Render the settings tab with current settings
 		// This will show all content types including newly migrated ones
 		this.renderSettingsTab(containerEl, settings);
@@ -63,13 +64,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		generalGroup.addSetting((setting) => {
 			setting
 				.setName("Date format")
-				// False positive: Date format codes (MMMM, yyyy, etc.) are technical notation, not UI text
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				// Date format codes (MMMM, yyyy, etc.) are technical notation, not UI text
 				.setDesc("Format for the date in properties (e.g., yyyy-mm-dd, MMMM D, yyyy, yyyy-mm-dd HH:mm)")
 				.addText((text) =>
 					text
-						// False positive: "YYYY-MM-DD" is a date format placeholder, not UI text
-						// eslint-disable-next-line obsidianmd/ui/sentence-case
+						// "YYYY-MM-DD" is a date format placeholder, not UI text
 						.setPlaceholder("YYYY-MM-DD")
 						.setValue(settings.dateFormat)
 						.onChange(async (value: string) => {
@@ -97,8 +96,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		generalGroup.addSetting((setting) => {
 			setting
 				.setName("Default heading link format")
-				// False positive: "Astro" is a proper noun (framework name) and should be capitalized
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				// "Astro" is a proper noun (framework name) and should be capitalized
 				.setDesc("Choose the default format for copied heading links. Obsidian format respects your Obsidian settings for wikilink vs markdown preference. Astro link uses your link base path from above and converts the heading into kebab-case format as an anchor link")
 				.addDropdown((dropdown) =>
 					dropdown
@@ -132,8 +130,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		generalGroup.addSetting((setting) => {
 			setting
 				.setName("Process background file changes")
-				// False positive: Technical terms like "Obsidian", "git" are proper nouns in this context
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				// Technical terms like "Obsidian", "git" are proper nouns in this context
 				.setDesc("Automatically process new files when they're changed in the background (by Git or other plugins). Disable to prevent modal spam when files are already processed on other devices during a sync.")
 				.addToggle((toggle) =>
 					toggle
@@ -147,8 +144,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		generalGroup.addSetting((setting) => {
 			setting
-				// False positive: "MDX" is a proper noun (file format) and should be capitalized
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				// "MDX" is a proper noun (file format) and should be capitalized
 				.setName("Show MDX files in file explorer")
 				.setDesc("Make .mdx files visible in Obsidian's file explorer. Requires reload to take effect.")
 				.addToggle((toggle) =>
@@ -185,8 +181,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			setting.settingEl.addClass("astro-composer-setting-hidden-elements");
 			setting.settingEl.addClass("astro-composer-setting-container-full-width");
 			// Add our container inside the setting element - ensure it's visible
-			this.customContentTypesContainer = setting.settingEl.createDiv({ 
-				cls: "custom-content-types-container astro-composer-custom-types-container-visible" 
+			this.customContentTypesContainer = setting.settingEl.createDiv({
+				cls: "custom-content-types-container astro-composer-custom-types-container-visible"
 			});
 		});
 		// Render content types after container is created
@@ -226,8 +222,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 			developerGroup.addSetting((setting) => {
 				const descFragment = document.createDocumentFragment();
-				// False positive: Text is already in sentence case; "Obsidian" is a proper noun
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				// Text is already in sentence case; "Obsidian" is a proper noun
 				descFragment.createEl("div", { text: "Path relative to the Obsidian vault root folder. Use ../.. for two levels up. Leave blank to use the vault folder" });
 				descFragment.createEl("div", { text: "This is where the terminal will open. Absolute paths work also." });
 				setting
@@ -249,11 +244,9 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 			developerGroup.addSetting((setting) => {
 				const descFragment = document.createDocumentFragment();
-				// False positive: Text is already in sentence case; "macOS", "Windows", "Linux", "Terminal", "Windows Terminal", "cmd.exe" are proper nouns or product names
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				// Text is already in sentence case; proper nouns or product names like "macOS", "Windows", "Linux"
 				descFragment.createEl("div", { text: "Leave blank to use platform defaults. On macOS, the default is Terminal. On Windows, it's Windows Terminal (Win 11) or cmd.exe (Win 10). On Linux, it's gnome-terminal, konsole, or xterm" });
-				// False positive: Text is already in sentence case; "Terminal", "iTerm", "PowerShell", "Alacritty" are proper nouns (product names)
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				// Text is already in sentence case; proper nouns like "Terminal", "iTerm", "PowerShell"
 				descFragment.createEl("div", { text: "Examples include Terminal, iTerm, PowerShell, and Alacritty" });
 				setting
 					.setName("Terminal application name")
@@ -500,7 +493,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	updateCopyHeadingFields() {
 		const settings = this.plugin.settings;
 		const isVisible = settings.enableCopyHeadingLink;
-		
+
 		// Update the "Default heading link format" setting element visibility
 		const containerEl = this.containerEl;
 		const allSettings = containerEl.querySelectorAll('.setting-item');
@@ -516,13 +509,13 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	updateTerminalCommandFields() {
 		const settings = this.plugin.settings;
 		const isVisible = settings.enableOpenTerminalCommand;
-		
+
 		// Update container for backward compatibility
 		if (this.terminalCommandContainer) {
 			this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-visible", isVisible);
 			this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !isVisible);
 		}
-		
+
 		// Update individual setting elements that are in the group
 		// Find settings by their name text content
 		const containerEl = this.containerEl;
@@ -537,7 +530,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				}
 			}
 		});
-		
+
 		// Update ribbon toggle disabled state using the toggle component
 		if (this.terminalRibbonToggleComponent) {
 			this.terminalRibbonToggleComponent.setDisabled(!this.plugin.settings.enableOpenTerminalCommand);
@@ -547,13 +540,13 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 	updateConfigCommandFields() {
 		const settings = this.plugin.settings;
 		const isVisible = settings.enableOpenConfigFileCommand;
-		
+
 		// Update container for backward compatibility
 		if (this.configCommandContainer) {
 			this.configCommandContainer.classList.toggle("astro-composer-setting-container-visible", isVisible);
 			this.configCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !isVisible);
 		}
-		
+
 		// Update individual setting elements that are in the group
 		// Find settings by their name text content
 		const containerEl = this.containerEl;
@@ -568,7 +561,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				}
 			}
 		});
-		
+
 		// Update ribbon toggle disabled state using the toggle component
 		if (this.configRibbonToggleComponent) {
 			this.configRibbonToggleComponent.setDisabled(!this.plugin.settings.enableOpenConfigFileCommand);
@@ -579,7 +572,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		const settings = this.plugin.settings;
 		const blankFolders: string[] = [];
 		const folderConflicts: { [folder: string]: string[] } = {};
-		
+
 		// Check content types
 		const contentTypes = settings.contentTypes || [];
 		for (const contentType of contentTypes) {
@@ -594,7 +587,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				}
 			}
 		}
-		
+
 		// Check for conflicts
 		// Warning box removed - conflicts are still detected at runtime
 	}
@@ -626,16 +619,16 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 	private renderCustomContentTypes() {
 		if (!this.customContentTypesContainer) return;
-		
+
 		this.customContentTypesContainer.empty();
-		
+
 		// Always read fresh settings from plugin to ensure we have latest data
 		// This is critical after migration
 		const settings = this.plugin.settings;
 		const contentTypes = settings.contentTypes || [];
 		contentTypes.forEach((customType: ContentType, index: number) => {
 			if (!this.customContentTypesContainer) return;
-			const typeContainer = this.customContentTypesContainer.createDiv({ 
+			const typeContainer = this.customContentTypesContainer.createDiv({
 				cls: "custom-content-type-item",
 				attr: { "data-type-id": customType.id }
 			});
@@ -643,9 +636,9 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			// Header with controls
 			const header = typeContainer.createDiv({ cls: "custom-content-type-header" });
 			header.classList.add("astro-composer-custom-type-header");
-			
+
 			// Left side - collapse/expand button
-			const collapseButton = header.createEl("button", { 
+			const collapseButton = header.createEl("button", {
 				cls: "astro-composer-collapse-button",
 				attr: { "aria-label": "Collapse/expand" }
 			});
@@ -667,11 +660,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					}
 				}
 			});
-			
+
 			// Middle left - content type name
 			const headerName = header.createDiv({ cls: "astro-composer-header-name" });
 			headerName.createEl("div", { text: customType.name || `Content ${index + 1}`, cls: "setting-item-name" });
-			
+
 			// Middle right - up/down buttons (side-by-side)
 			const reorderContainer = header.createDiv({ cls: "astro-composer-reorder-buttons" });
 			const upButton = reorderContainer.createEl("button", {
@@ -683,7 +676,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			upButton.addEventListener("click", () => {
 				void this.moveContentTypeUp(customType.id);
 			});
-			
+
 			const downButton = reorderContainer.createEl("button", {
 				cls: "astro-composer-reorder-button",
 				attr: { "aria-label": "Move down" }
@@ -693,16 +686,16 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			downButton.addEventListener("click", () => {
 				void this.moveContentTypeDown(customType.id);
 			});
-			
+
 			// Right side - toggle
 			const toggleContainer = header.createDiv({ cls: "checkbox-container" });
 			if (customType.enabled) {
 				toggleContainer.classList.add("is-enabled");
 			}
-			
+
 			const toggle = toggleContainer.createEl("input", { type: "checkbox", cls: "checkbox-input" });
 			toggle.checked = customType.enabled;
-			
+
 			// Add click event to the container as well
 			toggleContainer.addEventListener("click", (e) => {
 				void (async () => {
@@ -710,27 +703,27 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					const newValue = !customType.enabled;
 					customType.enabled = newValue;
 					toggle.checked = newValue;
-					
+
 					await this.plugin.saveSettings();
 					this.plugin.registerCreateEvent();
-					
+
 					// Update the container class for visual feedback
 					if (newValue) {
 						toggleContainer.classList.add("is-enabled");
 					} else {
 						toggleContainer.classList.remove("is-enabled");
 					}
-					
+
 					// Update visibility
 					this.updateCustomContentTypeVisibility(customType.id, newValue);
-					
+
 					// Re-register content type commands to reflect enabled/disabled state
 					registerContentTypeCommands(this.plugin as unknown as Plugin, this.plugin.settings);
-					
+
 					// Conflict checking removed from settings UI
 				})();
 			});
-			
+
 			// Also add change event as backup
 			toggle.addEventListener("change", (e) => {
 				void (async () => {
@@ -738,28 +731,28 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					customType.enabled = value;
 					await this.plugin.saveSettings();
 					this.plugin.registerCreateEvent();
-					
+
 					// Update the container class for visual feedback
 					if (value) {
 						toggleContainer.classList.add("is-enabled");
 					} else {
 						toggleContainer.classList.remove("is-enabled");
 					}
-					
+
 					// Update visibility
 					this.updateCustomContentTypeVisibility(customType.id, value);
-					
+
 					// Re-register content type commands to reflect enabled/disabled state
 					registerContentTypeCommands(this.plugin as unknown as Plugin, this.plugin.settings);
 				})();
 			});
 
 			// Settings container that can be collapsed
-			const settingsContainer = typeContainer.createDiv({ 
+			const settingsContainer = typeContainer.createDiv({
 				cls: "custom-content-type-settings",
 				attr: { "data-type-id": customType.id }
 			});
-			
+
 			// Set initial visibility state based on enabled and collapsed state
 			const initiallyCollapsed = customType.collapsed ?? false;
 			const initiallyVisible = customType.enabled && !initiallyCollapsed;
@@ -807,7 +800,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 							}
 						});
 				});
-			
+
 			// Add conflict warning element
 			folderContainer.createDiv({ cls: "astro-composer-conflict-warning hidden", attr: { "data-type-id": customType.id } });
 			this.updateFolderConflictWarning(customType.id, folderSetting);
@@ -878,8 +871,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			// Use MDX extension
 			const useMdxContainer = settingsContainer.createDiv();
 			new Setting(useMdxContainer)
-				// False positive: "MDX" is a proper noun (file format) and should be capitalized
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				// "MDX" is a proper noun (file format) and should be capitalized
 				.setName("Use MDX instead of MD")
 				.setDesc("Create files with .mdx extension instead of .md extension.")
 				.addToggle((toggle) =>
@@ -894,7 +886,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			// Index file name (only show for folder-based)
 			const indexFileContainer = settingsContainer.createDiv({ cls: "custom-index-file-field" });
 			indexFileContainer.classList.toggle("astro-composer-setting-container-visible", customType.creationMode === "folder");
-		indexFileContainer.classList.toggle("astro-composer-setting-container-hidden", customType.creationMode !== "folder");
+			indexFileContainer.classList.toggle("astro-composer-setting-container-hidden", customType.creationMode !== "folder");
 			new Setting(indexFileContainer)
 				.setName("Index file name")
 				.setDesc("Name for index files in folder-based content (without .md extension). Defaults to 'index' if left blank.")
@@ -924,11 +916,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					return text;
 				})
 				.then((setting) => {
-				setting.descEl.empty();
-				const descDiv = setting.descEl.createEl("div");
-				descDiv.createEl("div", { text: "Template for new files of this content type." });
-				descDiv.createEl("div", { text: "Variables include {{title}}, {{date}}, and {{slug}}." });
-				descDiv.createEl("div", { text: "Do not wrap {{date}} in quotes as it represents a datetime value, not a string." });
+					setting.descEl.empty();
+					const descDiv = setting.descEl.createEl("div");
+					descDiv.createEl("div", { text: "Template for new files of this content type." });
+					descDiv.createEl("div", { text: "Variables include {{title}}, {{date}}, and {{slug}}." });
+					descDiv.createEl("div", { text: "Do not wrap {{date}} in quotes as it represents a datetime value, not a string." });
 				});
 
 			// Remove button at the bottom (no divider)
@@ -954,14 +946,14 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 							}
 						});
 				});
-			
+
 			// Hide the divider line for the remove button
 			removeSetting.settingEl.classList.add("astro-composer-remove-setting");
 
 			// Set initial visibility (checks both enabled and collapsed state)
 			this.updateCustomContentTypeVisibility(customType.id, customType.enabled);
 		});
-		
+
 		// Update conflict warnings for all types after rendering (folder changes may affect others)
 		contentTypes.forEach((customType: ContentType) => {
 			this.updateFolderConflictWarning(customType.id, null);
@@ -985,7 +977,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			const contentType = contentTypes.find((ct: ContentType) => ct.id === typeId);
 			const isCollapsed = contentType?.collapsed ?? false;
 			const shouldBeVisible = enabled && !isCollapsed;
-			
+
 			settingsContainer.classList.toggle("astro-composer-setting-container-visible", shouldBeVisible);
 			settingsContainer.classList.toggle("astro-composer-setting-container-hidden", !shouldBeVisible);
 		}
@@ -999,7 +991,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		const indexFileContainer = this.customContentTypesContainer?.querySelector(`[data-type-id="${typeId}"] .custom-index-file-field`) as HTMLElement;
 		if (indexFileContainer) {
 			indexFileContainer.classList.toggle("astro-composer-setting-container-visible", customType.creationMode === "folder");
-		indexFileContainer.classList.toggle("astro-composer-setting-container-hidden", customType.creationMode !== "folder");
+			indexFileContainer.classList.toggle("astro-composer-setting-container-hidden", customType.creationMode !== "folder");
 		}
 	}
 
@@ -1026,12 +1018,12 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		// Find conflicts - other content types with the same folder pattern
 		const currentFolder = (currentType.folder || "").trim();
 		const conflictingTypes: string[] = [];
-		
+
 		for (const otherType of contentTypes) {
 			if (otherType.id === typeId || !otherType.enabled) continue;
-			
+
 			const otherFolder = (otherType.folder || "").trim();
-			
+
 			// Check if folders conflict
 			// Both blank = conflict (both match vault root)
 			if (currentFolder === "" && otherFolder === "") {
@@ -1056,9 +1048,9 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		const settings = this.plugin.settings;
 		const contentTypes = settings.contentTypes || [];
 		const currentIndex = contentTypes.findIndex((ct: ContentType) => ct.id === typeId);
-		
+
 		if (currentIndex <= 0) return; // Already at the top
-		
+
 		// Swap with previous item
 		[contentTypes[currentIndex], contentTypes[currentIndex - 1]] = [contentTypes[currentIndex - 1], contentTypes[currentIndex]];
 		settings.contentTypes = contentTypes;
@@ -1070,9 +1062,9 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		const settings = this.plugin.settings;
 		const contentTypes = settings.contentTypes || [];
 		const currentIndex = contentTypes.findIndex((ct: ContentType) => ct.id === typeId);
-		
+
 		if (currentIndex < 0 || currentIndex >= contentTypes.length - 1) return; // Already at the bottom
-		
+
 		// Swap with next item
 		[contentTypes[currentIndex], contentTypes[currentIndex + 1]] = [contentTypes[currentIndex + 1], contentTypes[currentIndex]];
 		settings.contentTypes = contentTypes;
@@ -1084,9 +1076,9 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		const settings = this.plugin.settings;
 		const contentTypes = settings.contentTypes || [];
 		const contentType = contentTypes.find((ct: ContentType) => ct.id === typeId);
-		
+
 		if (!contentType) return;
-		
+
 		contentType.collapsed = !contentType.collapsed;
 		await this.plugin.saveSettings();
 		this.updateCustomContentTypeVisibility(typeId, contentType.enabled);
@@ -1108,7 +1100,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		if (!commandId) return '';
 		try {
 			const commandRegistry = (this.app as unknown as { commands?: { listCommands?: () => Array<{ id: string; name: string }>; commands?: Record<string, { id: string; name: string }> } }).commands;
-			
+
 			// Method 1: Try listCommands()
 			if (commandRegistry && typeof commandRegistry.listCommands === 'function') {
 				try {
@@ -1121,7 +1113,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					console.warn('[Astro Composer] Error getting command name via listCommands():', e);
 				}
 			}
-			
+
 			// Method 2: Try accessing the internal commands registry directly
 			try {
 				const registry = commandRegistry?.commands;

@@ -1,11 +1,10 @@
 {
 	"name": "astro-composer",
-	"version": "0.10.4",
+	"version": "0.10.5",
 	"description": "Turn your notes into posts and pages for your Astro blog with automated content management features.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
-		"preinstall": "node scripts/npm-proxy.mjs",
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",

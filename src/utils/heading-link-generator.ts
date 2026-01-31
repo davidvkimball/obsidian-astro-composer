@@ -1,22 +1,15 @@
 import { TFile, HeadingCache, App } from "obsidian";
 import { AstroComposerSettings } from "../types";
 import { matchesFolderPattern, sortByPatternSpecificity } from "./path-matching";
+import { toKebabCase } from "./string-utils";
 
 export class HeadingLinkGenerator {
-	constructor(private settings: AstroComposerSettings) {}
+	constructor(private settings: AstroComposerSettings) { }
 
 	/**
 	 * Converts text to kebab-case slug for URLs
 	 */
-	private toKebabCase(str: string): string {
-		return str
-			.toLowerCase()
-			.replace(/[^a-z0-9\s-]/g, "")
-			.trim()
-			.replace(/\s+/g, "-")
-			.replace(/-+/g, "-")
-			.replace(/^-|-$/g, "");
-	}
+	// Local toKebabCase removed, using imported one instead
 
 	/**
 	 * Gets the Astro-compatible URL from an internal link (copied from LinkConverter)
@@ -37,12 +30,12 @@ export class HeadingLinkGenerator {
 		// Check all content types, sorted by pattern specificity (more specific first)
 		const contentTypes = this.settings.contentTypes || [];
 		const sortedTypes = sortByPatternSpecificity(contentTypes);
-		
+
 		for (const contentType of sortedTypes) {
 			if (!contentType.enabled) continue;
-			
+
 			let matches = false;
-			
+
 			// Handle blank folder (root) - matches files in vault root only
 			if (!contentType.folder || contentType.folder.trim() === "") {
 				if (!path.includes("/") || path.split("/").length === 1) {
@@ -51,7 +44,7 @@ export class HeadingLinkGenerator {
 			} else if (matchesFolderPattern(path, contentType.folder)) {
 				matches = true;
 			}
-			
+
 			if (matches) {
 				contentFolder = contentType.folder || "";
 				basePath = contentType.linkBasePath || "";
@@ -67,7 +60,7 @@ export class HeadingLinkGenerator {
 		}
 
 		let addTrailingSlash = false;
-		
+
 		// Smart detection: if the filename matches the index file name (regardless of creation mode),
 		// treat it as folder-based logic
 		// Note: We only set addTrailingSlash here; the final check will prevent it if there's an anchor
@@ -90,7 +83,7 @@ export class HeadingLinkGenerator {
 			}
 		}
 
-		const slugParts = path.split('/').map(part => this.toKebabCase(part));
+		const slugParts = path.split('/').map(part => toKebabCase(part));
 		const slug = slugParts.join('/');
 
 		// Format base path
@@ -113,7 +106,7 @@ export class HeadingLinkGenerator {
 	 */
 	generateObsidianLink(app: App, file: TFile, heading: HeadingCache): string {
 		const headingText = heading.heading;
-		
+
 		// Check if user prefers wikilinks by testing Obsidian's default behavior
 		const testLink = app.fileManager.generateMarkdownLink(file, '', '');
 		if (testLink.startsWith('[[')) {
@@ -161,7 +154,7 @@ export class HeadingLinkGenerator {
 	 */
 	generateAstroLink(file: TFile, heading: HeadingCache): string {
 		const headingText = heading.heading;
-		const anchor = this.toKebabCase(headingText);
+		const anchor = toKebabCase(headingText);
 		// Use the same logic as the existing link converter
 		const internalLink = `${file.path}#${anchor}`;
 		const astroUrl = this.getAstroUrlFromInternalLink(internalLink);
@@ -173,7 +166,7 @@ export class HeadingLinkGenerator {
 	 */
 	generateAstroWikilink(file: TFile, heading: HeadingCache): string {
 		const headingText = heading.heading;
-		const anchor = this.toKebabCase(headingText);
+		const anchor = toKebabCase(headingText);
 		// Use the same logic as the existing link converter
 		const internalLink = `${file.path}#${anchor}`;
 		const astroUrl = this.getAstroUrlFromInternalLink(internalLink);
@@ -190,7 +183,7 @@ export class HeadingLinkGenerator {
 		if (markdownMatch) {
 			return markdownMatch[2];
 		}
-		
+
 		// Handle wikilinks: [[path#heading|text]] or [[path#heading]]
 		const wikilinkMatch = link.match(/\[\[([^\]]+)\]\]/);
 		if (wikilinkMatch) {
@@ -199,7 +192,7 @@ export class HeadingLinkGenerator {
 			const pathPart = content.split('|')[0];
 			return pathPart;
 		}
-		
+
 		// If it doesn't match either format, return as-is (might already be a URL)
 		return link;
 	}

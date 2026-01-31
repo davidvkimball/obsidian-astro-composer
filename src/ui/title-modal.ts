@@ -2,6 +2,7 @@ import { App, Modal, TFile, Notice, Platform, MarkdownView } from "obsidian";
 import { AstroComposerPluginInterface, ContentTypeId } from "../types";
 import { FileOperations } from "../utils/file-operations";
 import { TemplateParser } from "../utils/template-parsing";
+import { toKebabCase } from "../utils/string-utils";
 
 export class TitleModal extends Modal {
 	file: TFile | null;
@@ -20,7 +21,7 @@ export class TitleModal extends Modal {
 		this.type = type;
 		this.isRename = isRename;
 		this.isNewNote = isNewNote;
-		
+
 		// Initialize utilities with current settings
 		// FileOperations will get fresh settings from plugin dynamically
 		const settings = plugin.settings;
@@ -32,13 +33,13 @@ export class TitleModal extends Modal {
 		if (!this.file) {
 			return "";
 		}
-		
+
 		// Read the file content directly to ensure we have the latest title
 		try {
 			const content = await this.app.vault.read(this.file);
 			const titleKey = this.fileOps.getTitleKey(this.type);
 			const { properties } = this.templateParser.parseFrontmatter(content);
-			
+
 			if (titleKey in properties) {
 				const titleValue = properties[titleKey];
 				if (Array.isArray(titleValue) && titleValue.length > 0) {
@@ -51,7 +52,7 @@ export class TitleModal extends Modal {
 		} catch (error) {
 			console.error("Error reading file for title:", error);
 		}
-		
+
 		// Fall back to filename-based title
 		return this.getFallbackTitle();
 	}
@@ -60,7 +61,7 @@ export class TitleModal extends Modal {
 		if (!this.file) {
 			return "";
 		}
-		
+
 		const titleKey = this.fileOps.getTitleKey(this.type);
 		const cache = this.app.metadataCache.getFileCache(this.file);
 
@@ -101,7 +102,7 @@ export class TitleModal extends Modal {
 		if (!this.file) {
 			return "";
 		}
-		
+
 		let basename = this.file.basename;
 		if (this.file.parent && this.type !== "note") {
 			const contentType = this.fileOps.getContentType(this.type);
@@ -150,7 +151,7 @@ export class TitleModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
-		
+
 		// Add mobile-friendly positioning class - check both width and platform
 		const isMobile = window.innerWidth <= 768 || Platform.isMobile;
 		if (isMobile) {
@@ -159,7 +160,7 @@ export class TitleModal extends Modal {
 
 		if (this.isRename) {
 			const typeName = this.getTypeDisplayName();
-			
+
 			if (this.type === "note") {
 				// For generic notes outside of any known content type
 				contentEl.createEl("h2", { text: "Rename content" });
@@ -168,20 +169,20 @@ export class TitleModal extends Modal {
 				contentEl.createEl("h2", { text: `Rename ${typeName} content` });
 				contentEl.createEl("p", { text: `Enter new title for your ${typeName} content:` });
 			}
-			
+
 			this.titleInput = contentEl.createEl("input", {
 				type: "text",
 				placeholder: "New Title",
 				cls: "astro-composer-title-input"
 			});
-			
+
 			// Async load the current title from file
 			void this.getCurrentTitleAsync().then(title => {
 				this.titleInput.value = title;
 			});
 		} else if (this.isNewNote) {
 			const typeName = this.getTypeDisplayName();
-			
+
 			if (this.type === "note") {
 				contentEl.createEl("h2", { text: "New content" });
 				contentEl.createEl("p", { text: "Enter a title for this content:" });
@@ -189,7 +190,7 @@ export class TitleModal extends Modal {
 				contentEl.createEl("h2", { text: `Create new ${typeName} content` });
 				contentEl.createEl("p", { text: `Enter a title for your new ${typeName} content:` });
 			}
-			
+
 			this.titleInput = contentEl.createEl("input", {
 				type: "text",
 				placeholder: "New Title",
@@ -198,7 +199,7 @@ export class TitleModal extends Modal {
 			// Leave input empty for new notes - user can type directly
 		} else {
 			const typeName = this.getTypeDisplayName();
-			
+
 			if (this.type === "note") {
 				contentEl.createEl("h2", { text: "New content" });
 				contentEl.createEl("p", { text: "Enter a title for this content:" });
@@ -206,7 +207,7 @@ export class TitleModal extends Modal {
 				contentEl.createEl("h2", { text: `Create new ${typeName} content` });
 				contentEl.createEl("p", { text: `Enter a title for your new ${typeName} content:` });
 			}
-			
+
 			this.titleInput = contentEl.createEl("input", {
 				type: "text",
 				placeholder: "New Title",
@@ -244,7 +245,7 @@ export class TitleModal extends Modal {
 
 	async submit() {
 		const title = this.titleInput.value.trim();
-		
+
 		if (!title) {
 			new Notice("Please enter a title.");
 			return;
@@ -254,7 +255,7 @@ export class TitleModal extends Modal {
 			let newFile: TFile | null = null;
 			if (this.isRename) {
 				newFile = await this.fileOps.renameFile({ file: this.file!, title, type: this.type });
-				
+
 				if (newFile) {
 					await this.templateParser.updateTitleInFrontmatter(newFile, title, this.type);
 				} else {
@@ -269,7 +270,7 @@ export class TitleModal extends Modal {
 					newFile = await this.fileOps.createFile({ file: this.file, title, type: this.type });
 					// Always insert properties when autoInsertProperties is enabled
 					const shouldInsertProperties = this.plugin.settings.autoInsertProperties;
-					
+
 					if (newFile && shouldInsertProperties) {
 						await this.addPropertiesToFile(newFile, title, this.type);
 						// Position cursor at end after properties are added
@@ -281,7 +282,7 @@ export class TitleModal extends Modal {
 				newFile = await this.fileOps.createFile({ file: this.file, title, type: this.type });
 				// Always insert properties when autoInsertProperties is enabled
 				const shouldInsertProperties = this.plugin.settings.autoInsertProperties;
-				
+
 				if (newFile && shouldInsertProperties) {
 					await this.addPropertiesToFile(newFile, title, this.type);
 					// Position cursor at end after properties are added
@@ -291,7 +292,7 @@ export class TitleModal extends Modal {
 				// Fallback - create new file
 				newFile = await this.createNewFile(title);
 			}
-			
+
 			if (!newFile) {
 				new Notice(`Failed to ${this.isRename ? "rename" : "create"} ${this.type}.`);
 				this.close();
@@ -319,10 +320,10 @@ export class TitleModal extends Modal {
 	private async createNewFile(title: string): Promise<TFile | null> {
 		// Determine the appropriate folder based on where the user created the file
 		let targetFolder: string;
-		
+
 		// Get the directory where the user created the file
 		const originalDir = this.file?.parent?.path || "";
-		
+
 		if (this.type !== "note") {
 			const contentType = this.fileOps.getContentType(this.type);
 			// For content types, respect the user's chosen location (subfolder)
@@ -345,8 +346,8 @@ export class TitleModal extends Modal {
 
 		// Track that this file will be created by the plugin BEFORE creating it
 		// This prevents the create event from triggering another modal
-		if (this.plugin && 'pluginCreatedFiles' in this.plugin) {
-			(this.plugin as { pluginCreatedFiles?: Set<string> }).pluginCreatedFiles?.add(filePath);
+		if (this.plugin) {
+			this.plugin.pluginCreatedFiles.set(filePath, Date.now());
 		}
 
 		// Create the file with initial content
@@ -358,11 +359,11 @@ export class TitleModal extends Modal {
 
 		try {
 			const newFile = await this.app.vault.create(filePath, initialContent);
-			
+
 			// Open the new file
 			const leaf = this.app.workspace.getLeaf();
 			await leaf.openFile(newFile);
-			
+
 			// Position cursor at the end of content after editor is ready
 			// Use multiple attempts to ensure it works even if editor isn't ready immediately
 			const positionCursor = () => {
@@ -382,7 +383,7 @@ export class TitleModal extends Modal {
 				}
 				return false;
 			};
-			
+
 			// Try immediately
 			setTimeout(() => {
 				if (!positionCursor()) {
@@ -392,7 +393,7 @@ export class TitleModal extends Modal {
 					}, 200);
 				}
 			}, 100);
-			
+
 			return newFile;
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error);
@@ -403,7 +404,7 @@ export class TitleModal extends Modal {
 	private generateInitialContent(title: string): string {
 		const now = new Date();
 		const dateString = window.moment(now).format(this.plugin.settings.dateFormat);
-		const slug = this.fileOps.toKebabCase(title);
+		const slug = toKebabCase(title);
 
 		let template: string;
 		if (this.type === "note") {
@@ -420,7 +421,7 @@ export class TitleModal extends Modal {
 				template = contentType.template;
 			}
 		}
-		
+
 		template = template.replace(/\{\{title\}\}/g, title);
 		template = template.replace(/\{\{date\}\}/g, dateString);
 		template = template.replace(/\{\{slug\}\}/g, slug);
@@ -431,7 +432,7 @@ export class TitleModal extends Modal {
 	private async addPropertiesToFile(file: TFile, title: string, type: ContentTypeId) {
 		const now = new Date();
 		const dateString = window.moment(now).format(this.plugin.settings.dateFormat);
-		const slug = this.fileOps.toKebabCase(title);
+		const slug = toKebabCase(title);
 
 		let template: string;
 		if (type === "note") {
@@ -448,7 +449,7 @@ export class TitleModal extends Modal {
 				template = contentType.template;
 			}
 		}
-		
+
 		template = template.replace(/\{\{title\}\}/g, title);
 		template = template.replace(/\{\{date\}\}/g, dateString);
 		template = template.replace(/\{\{slug\}\}/g, slug);
@@ -475,7 +476,7 @@ export class TitleModal extends Modal {
 			}
 			return false;
 		};
-		
+
 		setTimeout(() => {
 			if (!positionCursor()) {
 				// If it didn't work, try again after a longer delay

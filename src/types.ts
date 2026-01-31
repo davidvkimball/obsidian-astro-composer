@@ -1,4 +1,4 @@
-import { TFile } from "obsidian";
+import { TFile, PluginSettingTab } from "obsidian";
 
 export interface AstroComposerSettings {
 	defaultTemplate: string; // Kept temporarily for migration
@@ -98,7 +98,10 @@ export const CONSTANTS = {
 export interface AstroComposerPluginInterface {
 	settings: AstroComposerSettings;
 	saveSettings(): Promise<void>;
+	loadSettings(): Promise<void>;
 	registerCreateEvent(): void;
+	pluginCreatedFiles: Map<string, number>;
+	settingsTab?: PluginSettingTab;
 	registerRibbonIcons?(): void;
 	updateHelpButton?(): Promise<void>;
 }

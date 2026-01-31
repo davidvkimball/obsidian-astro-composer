@@ -2,10 +2,11 @@ import { Editor, TFile, Notice } from "obsidian";
 import { AstroComposerSettings } from "../types";
 
 import { matchesFolderPattern, sortByPatternSpecificity } from "./path-matching";
+import { toKebabCase } from "./string-utils";
 
 export class LinkConverter {
-	constructor(private settings: AstroComposerSettings, private plugin?: { settings?: AstroComposerSettings }) {}
-	
+	constructor(private settings: AstroComposerSettings, private plugin?: { settings?: AstroComposerSettings }) { }
+
 	// Get fresh settings from plugin if available, otherwise use stored settings
 	private getSettings(): AstroComposerSettings {
 		// Always prefer plugin settings (they're kept up to date)
@@ -15,15 +16,7 @@ export class LinkConverter {
 		return this.settings;
 	}
 
-	toKebabCase(str: string): string {
-		return str
-			.toLowerCase()
-			.replace(/[^a-z0-9\s-]/g, "")
-			.trim()
-			.replace(/\s+/g, "-")
-			.replace(/-+/g, "-")
-			.replace(/^-|-$/g, "");
-	}
+	// Local toKebabCase removed, using imported one instead
 
 	getAstroUrlFromInternalLink(link: string): string {
 		const hashIndex = link.indexOf('#');
@@ -49,13 +42,13 @@ export class LinkConverter {
 		}
 
 		let addTrailingSlash = false;
-		
+
 		// Smart detection: if the filename matches the index file name (regardless of creation mode),
 		// treat it as folder-based logic
 		// Note: We only set addTrailingSlash here; the final check will prevent it if there's an anchor
 		const parts = path.split('/');
 		const lastPart = parts[parts.length - 1];
-		
+
 		// Check if the last part matches the specified index file name
 		if (indexFileName && indexFileName.trim() !== "" && lastPart === indexFileName) {
 			parts.pop();
@@ -69,7 +62,7 @@ export class LinkConverter {
 			addTrailingSlash = true;
 		}
 
-		const slugParts = path.split('/').map(part => this.toKebabCase(part));
+		const slugParts = path.split('/').map(part => toKebabCase(part));
 		const slug = slugParts.join('/');
 
 		// Format base path
@@ -98,7 +91,7 @@ export class LinkConverter {
 	}
 
 	private getAstroUrlFromInternalLinkWithContext(link: string, currentFilePath: string, currentFileContentType: { basePath: string; creationMode: "file" | "folder"; indexFileName: string; contentFolder: string }): string {
-		
+
 		const hashIndex = link.indexOf('#');
 		let path = hashIndex >= 0 ? link.slice(0, hashIndex) : link;
 		const anchor = hashIndex >= 0 ? link.slice(hashIndex) : '';
@@ -106,7 +99,7 @@ export class LinkConverter {
 		// URL decode the path to handle encoded characters like %20
 		path = decodeURIComponent(path);
 		path = path.replace(/\.(md|mdx)$/, "");
-		
+
 
 		// Determine content type and appropriate base path
 		let basePath = "";
@@ -117,7 +110,7 @@ export class LinkConverter {
 		// Support both .md and .mdx extensions - try .mdx first if link suggests it
 		const fileExtension = link.endsWith('.mdx') ? '.mdx' : '.md';
 		const targetContentType = this.getContentTypeForPath(path + fileExtension);
-		
+
 		// If target link doesn't have a clear content type (no folder path), use current file's content type
 		if (!targetContentType.basePath && currentFileContentType.basePath) {
 			basePath = currentFileContentType.basePath;
@@ -135,13 +128,13 @@ export class LinkConverter {
 		}
 
 		let addTrailingSlash = false;
-		
+
 		// Smart detection: if the filename matches the index file name (regardless of creation mode),
 		// treat it as folder-based logic
 		// Note: We only set addTrailingSlash here; the final check will prevent it if there's an anchor
 		const parts = path.split('/');
 		const lastPart = parts[parts.length - 1];
-		
+
 		// Check if the last part matches the specified index file name
 		if (indexFileName && indexFileName.trim() !== "" && lastPart === indexFileName) {
 			parts.pop();
@@ -155,7 +148,7 @@ export class LinkConverter {
 			addTrailingSlash = true;
 		}
 
-		const slugParts = path.split('/').map(part => this.toKebabCase(part));
+		const slugParts = path.split('/').map(part => toKebabCase(part));
 		const slug = slugParts.join('/');
 
 		// Format base path
@@ -188,10 +181,10 @@ export class LinkConverter {
 		const settings = this.getSettings();
 		const contentTypes = settings.contentTypes || [];
 		const sortedTypes = sortByPatternSpecificity(contentTypes);
-		
+
 		for (const contentType of sortedTypes) {
 			if (!contentType.enabled) continue;
-			
+
 			// Handle blank folder (root) - matches files in vault root only
 			if (!contentType.folder || contentType.folder.trim() === "") {
 				if (!filePath.includes("/") || filePath.split("/").length === 1) {
@@ -204,7 +197,7 @@ export class LinkConverter {
 					const pathDepth = pathSegments.length;
 					const patternSegments = contentType.folder.split("/");
 					const expectedDepth = patternSegments.length;
-					
+
 					if (contentType.creationMode === "folder") {
 						// For folder-based creation, files are one level deeper (e.g., test/my-file/index.md)
 						// So we need to allow one extra level beyond the pattern depth
@@ -223,7 +216,7 @@ export class LinkConverter {
 				}
 			}
 		}
-		
+
 		return false;
 	}
 
@@ -232,10 +225,10 @@ export class LinkConverter {
 		const settings = this.getSettings();
 		const contentTypes = settings.contentTypes || [];
 		const sortedTypes = sortByPatternSpecificity(contentTypes);
-		
+
 		for (const contentType of sortedTypes) {
 			if (!contentType.enabled) continue;
-			
+
 			// Handle blank folder (root) - matches files in vault root only
 			if (!contentType.folder || contentType.folder.trim() === "") {
 				if (!filePath.includes("/") || filePath.split("/").length === 1) {
@@ -253,7 +246,7 @@ export class LinkConverter {
 					const pathDepth = pathSegments.length;
 					const patternSegments = contentType.folder.split("/");
 					const expectedDepth = patternSegments.length;
-					
+
 					if (contentType.creationMode === "folder") {
 						// For folder-based creation, files are one level deeper (e.g., test/my-file/index.md)
 						// So we need to allow one extra level beyond the pattern depth
@@ -287,7 +280,7 @@ export class LinkConverter {
 				}
 			}
 		}
-		
+
 		// Default fallback
 		return {
 			basePath: "",
@@ -349,14 +342,14 @@ export class LinkConverter {
 				// Default to .md if no extension specified
 				targetPath = linkText + '.md';
 			}
-			
+
 			// Check if it's in a configured content directory
 			const isInConfiguredDirectory = this.isInConfiguredContentDirectory(targetPath);
-			
+
 			// Also check if it's a simple filename (no path) and current file has a content type
 			const isSimpleFilename = !targetPath.includes('/');
 			const hasCurrentContentType = currentFileContentType.basePath !== "" || currentFileContentType.creationMode !== "file" || currentFileContentType.indexFileName !== "";
-			
+
 			return isInConfiguredDirectory || (isSimpleFilename && hasCurrentContentType);
 		};
 
@@ -445,15 +438,15 @@ export class LinkConverter {
 		});
 
 		editor.setValue(newContent);
-		
+
 		// Restore cursor position, adjusting for content changes
 		const newLineCount = newContent.split('\n').length;
 		const newLineLength = newContent.split('\n')[originalLine]?.length || 0;
-		
+
 		// Calculate new cursor position
 		let newLine = originalLine;
 		let newCh = originalCh;
-		
+
 		// If content length changed, adjust cursor position
 		if (newLineCount !== originalLineCount) {
 			// If lines were added/removed before cursor, adjust line number
@@ -462,7 +455,7 @@ export class LinkConverter {
 				newLine = Math.max(0, newLineCount - 1);
 			}
 		}
-		
+
 		// Adjust column position if line length changed
 		if (newLineLength !== originalLineLength) {
 			// If line got shorter, clamp to end of line
@@ -470,10 +463,10 @@ export class LinkConverter {
 				newCh = Math.max(0, newLineLength);
 			}
 		}
-		
+
 		// Restore cursor position
 		editor.setCursor({ line: newLine, ch: newCh });
-		
+
 		// Show appropriate notice based on results
 		if (convertedCount > 0 && skippedCount === 0) {
 			new Notice(`Converted ${convertedCount} internal link${convertedCount > 1 ? 's' : ''} for Astro.`);
