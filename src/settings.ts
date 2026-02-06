@@ -28,4 +28,10 @@ export const DEFAULT_SETTINGS: AstroComposerSettings = {
 	},
 	showMdxFilesInExplorer: false,
 	processBackgroundFileChanges: true,
+	syncDraftDate: false,
+	draftProperty: "",
+	draftLogic: "true-is-draft",
+	publishDateField: "",
+	updateModifiedDate: false,
+	modifiedDateField: "",
 };

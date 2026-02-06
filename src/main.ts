@@ -16,14 +16,15 @@ import { TemplateParser } from "./utils/template-parsing";
 import { HeadingLinkGenerator } from "./utils/heading-link-generator";
 import { MigrationService } from "./services/MigrationService";
 import { CreateEventService } from "./services/CreateEventService";
+import { FrontmatterService } from "./services/FrontmatterService";
 import { waitForElement } from "./utils/dom";
 
 export default class AstroComposerPlugin extends Plugin implements AstroComposerPluginInterface {
 	settings!: AstroComposerSettings;
 	private createEventRef?: EventRef;
-	private fileOps!: FileOperations;
-	private templateParser!: TemplateParser;
-	private headingLinkGenerator!: HeadingLinkGenerator;
+	public fileOps!: FileOperations;
+	public templateParser!: TemplateParser;
+	public headingLinkGenerator!: HeadingLinkGenerator;
 	public pluginCreatedFiles: Map<string, number> = new Map();
 	private processedFiles: Map<string, number> = new Map();
 	private terminalRibbonIcon: HTMLElement | null = null;
@@ -36,6 +37,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 	private migrationService!: MigrationService;
 	private createEventService!: CreateEventService;
+	public frontmatterService!: FrontmatterService;
 
 	/**
 	 * Migrate old posts/pages settings to unified content types
@@ -53,6 +55,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		// Initialize services and utilities
 		this.migrationService = new MigrationService(this.app, this);
 		this.createEventService = new CreateEventService(this.app, this);
+		this.frontmatterService = new FrontmatterService(this.app, this);
 		this.fileOps = new FileOperations(this.app, this.settings, this);
 		this.templateParser = new TemplateParser(this.app, this.settings);
 		this.headingLinkGenerator = new HeadingLinkGenerator(this.settings);

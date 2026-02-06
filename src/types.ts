@@ -20,6 +20,12 @@ export interface AstroComposerSettings {
 	migrationCompleted: boolean;
 	showMdxFilesInExplorer: boolean;
 	processBackgroundFileChanges: boolean;
+	syncDraftDate: boolean;
+	draftProperty: string;
+	draftLogic: 'true-is-draft' | 'false-is-draft';
+	publishDateField: string;
+	updateModifiedDate: boolean;
+	modifiedDateField: string;
 	// Legacy fields (kept for migration, ignored after migration)
 	enableUnderscorePrefix?: boolean;
 	postsFolder?: string;
@@ -100,7 +106,12 @@ export interface AstroComposerPluginInterface {
 	saveSettings(): Promise<void>;
 	loadSettings(): Promise<void>;
 	registerCreateEvent(): void;
+	registerEvent(eventRef: any): void;
+	registerExtensions(extensions: string[], viewType: string): void;
+	headingLinkGenerator: any;
+	frontmatterService: any;
 	pluginCreatedFiles: Map<string, number>;
+	fileOps: any;
 	settingsTab?: PluginSettingTab;
 	registerRibbonIcons?(): void;
 	updateHelpButton?(): Promise<void>;
