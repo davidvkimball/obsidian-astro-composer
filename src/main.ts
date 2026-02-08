@@ -50,51 +50,55 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	}
 
 	async onload() {
-		await this.loadSettings();
+		try {
+			await this.loadSettings();
 
-		// Initialize services and utilities
-		this.migrationService = new MigrationService(this.app, this);
-		this.createEventService = new CreateEventService(this.app, this);
-		this.frontmatterService = new FrontmatterService(this.app, this);
-		this.fileOps = new FileOperations(this.app, this.settings, this);
-		this.templateParser = new TemplateParser(this.app, this.settings);
-		this.headingLinkGenerator = new HeadingLinkGenerator(this.settings);
+			// Initialize services (order matters: fileOps first as it's a dependency)
+			this.fileOps = new FileOperations(this.app, this.settings, this);
+			this.migrationService = new MigrationService(this.app, this);
+			this.createEventService = new CreateEventService(this.app, this);
+			this.frontmatterService = new FrontmatterService(this.app, this);
+			this.templateParser = new TemplateParser(this.app, this.settings);
+			this.headingLinkGenerator = new HeadingLinkGenerator(this.settings);
 
-		// Register MDX file visibility if enabled
-		if (this.settings.showMdxFilesInExplorer) {
-			this.registerExtensions(["mdx"], "markdown");
-		}
-
-		// Wait for the vault to be fully loaded before registering the create event
-		this.app.workspace.onLayoutReady(() => {
-			this.registerCreateEvent();
-			// Initialize help button replacement (desktop only)
-			if (!Platform.isMobile) {
-				void this.updateHelpButton();
+			// Register MDX file visibility if enabled (safely handle if already registered)
+			if (this.settings.showMdxFilesInExplorer) {
+				try {
+					this.registerExtensions(["mdx"], "markdown");
+				} catch (error) {
+					console.warn("[Astro Composer] MDX extension already registered:", error);
+				}
 			}
 
-			// Run migration after plugin is fully loaded (non-blocking)
-			void this.migrateSettingsIfNeeded();
-		});
+			// Handle layout-ready initialization (desktop only)
+			this.app.workspace.onLayoutReady(() => {
+				this.registerCreateEvent();
+				// Initialize help button replacement (desktop only)
+				if (!Platform.isMobile) {
+					void this.updateHelpButton();
+				}
 
-		// Register commands
-		registerCommands(this, this.settings);
+				// Run migration after plugin is fully loaded (non-blocking)
+				void this.migrateSettingsIfNeeded();
+			});
 
-		// Register content type commands
-		registerContentTypeCommands(this, this.settings);
+			// Register commands
+			registerCommands(this, this.settings);
+			registerContentTypeCommands(this, this.settings);
 
-		// Add settings tab and store reference for refresh after migration
-		this.settingsTab = new AstroComposerSettingTab(this.app, this);
-		this.addSettingTab(this.settingsTab);
+			// Add settings tab
+			this.settingsTab = new AstroComposerSettingTab(this.app, this);
+			this.addSettingTab(this.settingsTab);
 
-		// Register context menu for copy heading links
-		this.registerContextMenu();
-
-		// Register ribbon icons if enabled
-		this.registerRibbonIcons();
-
-		// Setup ribbon context menu handling
-		this.setupRibbonContextMenuHandling();
+			// Register UI elements
+			this.registerContextMenu();
+			this.registerRibbonIcons();
+			this.setupRibbonContextMenuHandling();
+		} catch (error) {
+			console.error("[Astro Composer] Critical error during onload:", error);
+			new Notice("Astro Composer failed to load. Check console (Ctrl+Shift+I) for details.");
+			throw error;
+		}
 	}
 
 	public registerCreateEvent() {
@@ -146,15 +150,21 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				'automatePostCreation', 'creationMode', 'indexFileName', 'excludedDirectories',
 				'onlyAutomateInPostsFolder', 'enablePages', 'pagesFolder', 'pagesLinkBasePath',
 				'pagesCreationMode', 'pagesIndexFileName', 'pageTemplate', 'onlyAutomateInPagesFolder',
+				'linkBasePath', 'enableAutoRename', 'enableAutoInsertFrontmatter', 'draftStyle'
 			];
 
 			const settingsRecord = this.settings as unknown as Record<string, unknown>;
+			let fieldsRemoved = false;
 			for (const field of legacyFields) {
 				if (settingsRecord[field] !== undefined) {
 					delete settingsRecord[field];
+					fieldsRemoved = true;
 				}
 			}
-			await this.saveSettings();
+			// Only save if we actually cleaned up fields to avoid redundant writes
+			if (fieldsRemoved) {
+				await this.saveSettings();
+			}
 		}
 	}
 
@@ -259,7 +269,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		}
 
 		if (configShouldExist) {
-			this.configRibbonIcon = this.addRibbonIcon('wrench', 'Edit astro config', async () => {
+			this.configRibbonIcon = this.addRibbonIcon('rocket', 'Edit astro config', async () => {
 				if (!this.settings.enableOpenConfigFileCommand) {
 					new Notice("Edit config file command is disabled.");
 					return;
@@ -353,7 +363,9 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 		if (this.helpButtonObserver) this.helpButtonObserver.disconnect();
 
-		await this.loadSettings();
+		// REMOVED loadSettings() call here. It was causing redundant data.json writes.
+		// The plugin's this.settings is updated by the settings tab or other methods
+		// that correctly handle saving.
 		this.updateHelpButtonCSS();
 
 		if (!this.settings.helpButtonReplacement?.enabled) {
@@ -482,12 +494,13 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			if (svg) {
 				const iconName = svg.getAttribute('data-lucide') || svg.getAttribute('xmlns:lucide') ||
 					(svg.classList.contains('lucide-terminal-square') ? 'terminal-square' : null) ||
+					(svg.classList.contains('lucide-rocket') ? 'rocket' : null) ||
 					(svg.classList.contains('lucide-wrench') ? 'wrench' : null);
 
 				if (terminalShouldBeHidden && iconName === 'terminal-square') {
 					if (item.textContent?.toLowerCase().includes('terminal')) item.remove();
 				}
-				if (configShouldBeHidden && iconName === 'wrench') {
+				if (configShouldBeHidden && (iconName === 'rocket' || iconName === 'wrench')) {
 					if (item.textContent?.toLowerCase().includes('config')) item.remove();
 				}
 			}

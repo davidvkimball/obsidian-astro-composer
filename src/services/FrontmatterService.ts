@@ -9,8 +9,6 @@ export class FrontmatterService {
 
     constructor(private app: App, private plugin: AstroComposerPluginInterface) {
         this.registerEvents();
-        // Initialize draft status map immediately to catch early changes
-        this.initializeDraftStatusMap();
 
         // Also re-initialize when layout is ready just in case
         this.app.workspace.onLayoutReady(() => {

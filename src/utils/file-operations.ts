@@ -76,6 +76,17 @@ export class FileOperations {
 		return contentTypes.find(ct => ct.id === typeId) || null;
 	}
 
+	/**
+	 * Helper to get content type for a given file path
+	 */
+	getContentTypeByPath(filePath: string): ContentType | null {
+		// Create a dummy TFile for determineType
+		const dummyFile = { path: filePath } as TFile;
+		const typeId = this.determineType(dummyFile);
+		if (typeId === "note") return null;
+		return this.getContentType(typeId);
+	}
+
 	getTitleKey(type: ContentTypeId): string {
 		// For generic notes, always use "title"
 		if (type === "note") return "title";
