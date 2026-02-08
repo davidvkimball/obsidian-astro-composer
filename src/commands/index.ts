@@ -192,7 +192,7 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 		plugin.addCommand({
 			id: "edit-astro-config",
 			name: "Edit astro config",
-			icon: "wrench",
+			icon: "rocket",
 			callback: async () => {
 				const currentSettings = (plugin as unknown as AstroComposerPluginInterface).settings;
 				if (!currentSettings.enableOpenConfigFileCommand) {

@@ -518,7 +518,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 								settings.helpButtonReplacement = {
 									enabled: false,
 									commandId: 'edit-astro-config',
-									iconId: 'wrench',
+									iconId: 'rocket',
 								};
 							}
 							settings.helpButtonReplacement.enabled = value;
@@ -549,7 +549,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 											settings.helpButtonReplacement = {
 												enabled: true,
 												commandId: 'edit-astro-config',
-												iconId: 'wrench',
+												iconId: 'rocket',
 											};
 										}
 										settings.helpButtonReplacement.commandId = commandId;
@@ -581,7 +581,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 											settings.helpButtonReplacement = {
 												enabled: true,
 												commandId: 'edit-astro-config',
-												iconId: 'wrench',
+												iconId: 'rocket',
 											};
 										}
 										settings.helpButtonReplacement.iconId = iconId;

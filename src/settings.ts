@@ -24,7 +24,7 @@ export const DEFAULT_SETTINGS: AstroComposerSettings = {
 	helpButtonReplacement: {
 		enabled: false,
 		commandId: 'edit-astro-config',
-		iconId: 'wrench',
+		iconId: 'rocket',
 	},
 	showMdxFilesInExplorer: false,
 	processBackgroundFileChanges: true,
