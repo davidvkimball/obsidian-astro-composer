@@ -74,7 +74,9 @@ export class IconPickerModal extends FuzzySuggestModal<IconOption> {
 	}
 
 	onChooseItem(item: IconOption, evt: MouseEvent | KeyboardEvent): void {
-		this.onSelect(item.id);
+		// Standardize icon ID by removing lucide- prefix
+		const normalizedId = item.id.replace(/^lucide-/, '');
+		this.onSelect(normalizedId);
 	}
 
 	// Override to show icon preview
@@ -83,7 +85,7 @@ export class IconPickerModal extends FuzzySuggestModal<IconOption> {
 		el.addClass('mod-complex');
 		const content = el.createDiv({ cls: 'suggestion-content' });
 		content.createDiv({ cls: 'suggestion-title', text: item.name });
-		
+
 		// Create icon preview using Obsidian's setIcon
 		const aux = el.createDiv({ cls: 'suggestion-aux' });
 		setIcon(aux.createSpan({ cls: 'suggestion-flair' }), item.id);
