@@ -175,10 +175,6 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				);
 		});
 
-		let draftPropertySetting: Setting;
-		let draftLogicSetting: Setting;
-		let publishDateFieldSetting: Setting;
-
 		automationGroup.addSetting((setting) => {
 			setting
 				.setName("Update date on publish")
@@ -189,107 +185,60 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						.onChange(async (value: boolean) => {
 							settings.syncDraftDate = value;
 							await this.plugin.saveSettings();
-
-							// Fix for jumping: use individual class-based toggling
-							if (draftPropertySetting) draftPropertySetting.settingEl.classList.toggle('astro-composer-setting-container-hidden', !value);
-							if (draftLogicSetting) draftLogicSetting.settingEl.classList.toggle('astro-composer-setting-container-hidden', !value);
-							if (publishDateFieldSetting) publishDateFieldSetting.settingEl.classList.toggle('astro-composer-setting-container-hidden', !value);
+							this.display(); // Quick refresh to show/hide fields
 						})
 				);
 		});
 
-		automationGroup.addSetting((setting) => {
-			draftPropertySetting = setting;
-			setting.settingEl.classList.toggle('astro-composer-setting-container-hidden', !settings.syncDraftDate);
-			setting
-				.setName("Draft property name")
-				.setDesc("The property field to use for draft status.")
-				.addText((text) =>
-					text
-						.setPlaceholder("draft")
-						.setValue(settings.draftProperty || "")
-						.onChange(async (value: string) => {
-							settings.draftProperty = value;
-							await this.plugin.saveSettings();
-							// Refresh map with new property
-							this.plugin.frontmatterService?.initializeDraftStatusMap();
-						})
-				);
-		});
+		if (settings.syncDraftDate) {
+			automationGroup.addSetting((setting) => {
+				setting
+					.setName("Draft property name")
+					.setDesc("The property field to use for draft status.")
+					.addText((text) =>
+						text
+							.setPlaceholder("draft")
+							.setValue(settings.draftProperty || "")
+							.onChange(async (value: string) => {
+								settings.draftProperty = value;
+								await this.plugin.saveSettings();
+								this.plugin.frontmatterService?.initializeDraftStatusMap();
+							})
+					);
+			});
 
-		automationGroup.addSetting((setting) => {
-			draftLogicSetting = setting;
-			setting.settingEl.classList.toggle('astro-composer-setting-container-hidden', !settings.syncDraftDate);
-			setting
-				.setName("Draft logic")
-				.setDesc("Whether the property value 'true' means it is a draft or published.")
-				.addDropdown((dropdown) =>
-					dropdown
-						.addOption("true-is-draft", "True = Draft")
-						.addOption("false-is-draft", "True = Published")
-						.setValue(settings.draftLogic || "true-is-draft")
-						.onChange(async (value) => {
-							settings.draftLogic = value as 'true-is-draft' | 'false-is-draft';
-							await this.plugin.saveSettings();
-							// Refresh map with new logic
-							this.plugin.frontmatterService?.initializeDraftStatusMap();
-						})
-				);
-		});
+			automationGroup.addSetting((setting) => {
+				setting
+					.setName("Draft logic")
+					.setDesc("Whether the property value 'true' means it is a draft or published.")
+					.addDropdown((dropdown) =>
+						dropdown
+							.addOption("true-is-draft", "True = Draft")
+							.addOption("false-is-draft", "True = Published")
+							.setValue(settings.draftLogic || "true-is-draft")
+							.onChange(async (value) => {
+								settings.draftLogic = value as 'true-is-draft' | 'false-is-draft';
+								await this.plugin.saveSettings();
+								this.plugin.frontmatterService?.initializeDraftStatusMap();
+							})
+					);
+			});
 
-		automationGroup.addSetting((setting) => {
-			publishDateFieldSetting = setting;
-			setting.settingEl.classList.toggle('astro-composer-setting-container-hidden', !settings.syncDraftDate);
-			setting
-				.setName("Published date property name")
-				.setDesc("The property field to update when published (e.g., 'date' or 'pubDate').")
-				.addText((text) =>
-					text
-						.setPlaceholder("date")
-						.setValue(settings.publishDateField || "")
-						.onChange(async (value: string) => {
-							settings.publishDateField = value;
-							await this.plugin.saveSettings();
-						})
-				);
-		});
-
-		let modifiedDateFieldSetting: Setting;
-
-		automationGroup.addSetting((setting) => {
-			setting
-				.setName("Update modified date")
-				.setDesc("Automatically update a property with current date when a file is edited.")
-				.addToggle((toggle) =>
-					toggle
-						.setValue(settings.updateModifiedDate)
-						.onChange(async (value: boolean) => {
-							settings.updateModifiedDate = value;
-							await this.plugin.saveSettings();
-							// Fix for jumping: use CSS class instead of this.display()
-							if (modifiedDateFieldSetting) {
-								modifiedDateFieldSetting.settingEl.classList.toggle('astro-composer-setting-container-hidden', !value);
-							}
-						})
-				);
-		});
-
-		automationGroup.addSetting((setting) => {
-			modifiedDateFieldSetting = setting;
-			setting.settingEl.classList.toggle('astro-composer-setting-container-hidden', !settings.updateModifiedDate);
-			setting
-				.setName("Modified date property name")
-				.setDesc("The property field to update with the modified date.")
-				.addText((text) =>
-					text
-						.setPlaceholder("modified")
-						.setValue(settings.modifiedDateField || "")
-						.onChange(async (value: string) => {
-							settings.modifiedDateField = value;
-							await this.plugin.saveSettings();
-						})
-				);
-		});
+			automationGroup.addSetting((setting) => {
+				setting
+					.setName("Published date property name")
+					.setDesc("The property field to update when published (e.g., 'date' or 'pubDate').")
+					.addText((text) =>
+						text
+							.setPlaceholder("date")
+							.setValue(settings.publishDateField || "")
+							.onChange(async (value: string) => {
+								settings.publishDateField = value;
+								await this.plugin.saveSettings();
+							})
+					);
+			});
+		}
 
 		// Content types
 		const contentTypesGroup = createSettingsGroup(containerEl, "Content types", 'astro-composer');
@@ -726,6 +675,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			ignoreSubfolders: false,
 			enableUnderscorePrefix: false,
 			useMdxExtension: false,
+			modifiedDateField: "",
 		};
 		contentTypes.push(newType);
 		settings.contentTypes = contentTypes;
@@ -987,6 +937,23 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						})
 				);
 
+			// Index file name (only show for folder-based)
+			const indexFileContainer = settingsContainer.createDiv({ cls: "custom-index-file-field" });
+			indexFileContainer.classList.toggle("astro-composer-setting-container-visible", customType.creationMode === "folder");
+			indexFileContainer.classList.toggle("astro-composer-setting-container-hidden", customType.creationMode !== "folder");
+			new Setting(indexFileContainer)
+				.setName("Index file name")
+				.setDesc("Name for index files in folder-based content (without .md extension). Defaults to 'index' if left blank.")
+				.addText((text) =>
+					text
+						.setPlaceholder("index")
+						.setValue(customType.indexFileName)
+						.onChange(async (value: string) => {
+							customType.indexFileName = value;
+							await this.plugin.saveSettings();
+						})
+				);
+
 			// Use MDX extension
 			const useMdxContainer = settingsContainer.createDiv();
 			new Setting(useMdxContainer)
@@ -1002,19 +969,17 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						})
 				);
 
-			// Index file name (only show for folder-based)
-			const indexFileContainer = settingsContainer.createDiv({ cls: "custom-index-file-field" });
-			indexFileContainer.classList.toggle("astro-composer-setting-container-visible", customType.creationMode === "folder");
-			indexFileContainer.classList.toggle("astro-composer-setting-container-hidden", customType.creationMode !== "folder");
-			new Setting(indexFileContainer)
-				.setName("Index file name")
-				.setDesc("Name for index files in folder-based content (without .md extension). Defaults to 'index' if left blank.")
+			// Modified date property
+			const modifiedDateContainer = settingsContainer.createDiv();
+			new Setting(modifiedDateContainer)
+				.setName("Modified date property")
+				.setDesc("The property field to update with the modified date for this content type. Leave blank to disable.")
 				.addText((text) =>
 					text
-						.setPlaceholder("Index")
-						.setValue(customType.indexFileName)
+						.setPlaceholder("modified")
+						.setValue(customType.modifiedDateField || "")
 						.onChange(async (value: string) => {
-							customType.indexFileName = value;
+							customType.modifiedDateField = value;
 							await this.plugin.saveSettings();
 						})
 				);

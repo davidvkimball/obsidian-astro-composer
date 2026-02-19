@@ -97,6 +97,7 @@ export class MigrationService {
                 ignoreSubfolders: settings.onlyAutomateInPostsFolder || false,
                 enableUnderscorePrefix: settings.enableUnderscorePrefix || false,
                 useMdxExtension: false,
+                modifiedDateField: "",
             };
             migratedTypes.push(postsType);
         }
@@ -115,6 +116,7 @@ export class MigrationService {
                 ignoreSubfolders: settings.onlyAutomateInPagesFolder || false,
                 enableUnderscorePrefix: false,
                 useMdxExtension: false,
+                modifiedDateField: "",
             };
             migratedTypes.push(pagesType);
         }

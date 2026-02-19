@@ -24,8 +24,6 @@ export interface AstroComposerSettings {
 	draftProperty: string;
 	draftLogic: 'true-is-draft' | 'false-is-draft';
 	publishDateField: string;
-	updateModifiedDate: boolean;
-	modifiedDateField: string;
 	// Legacy fields (kept for migration, ignored after migration)
 	enableUnderscorePrefix?: boolean;
 	postsFolder?: string;
@@ -77,6 +75,7 @@ export interface ContentType {
 	ignoreSubfolders: boolean;
 	enableUnderscorePrefix: boolean;
 	useMdxExtension: boolean;
+	modifiedDateField: string;
 	collapsed?: boolean;
 }
 

@@ -1,5 +1,5 @@
 import { App, TFile, moment, TAbstractFile } from "obsidian";
-import { AstroComposerPluginInterface } from "../types";
+import { AstroComposerPluginInterface, ContentType } from "../types";
 
 export class FrontmatterService {
     private lastProcessedFile: string = "";
@@ -85,7 +85,12 @@ export class FrontmatterService {
 
     private onMetadataChange(file: TFile) {
         const settings = this.plugin.settings;
-        if (!settings.syncDraftDate && !settings.updateModifiedDate) {
+
+        // Need to check content type to see if modified date is enabled for THIS type
+        const contentType = this.plugin.fileOps?.getContentTypeByPath(file.path);
+        const hasModifiedField = !!contentType?.modifiedDateField;
+
+        if (!settings.syncDraftDate && !hasModifiedField) {
             return;
         }
 
@@ -114,8 +119,8 @@ export class FrontmatterService {
         // Update the map for next time
         this.draftStatusMap.set(file.path, isCurrentlyDraft);
 
-        // If no publication change and not updating modified date, skip processing
-        if (!draftStatusChangedToPublished && !settings.updateModifiedDate) {
+        // If no publication change and no modified field to update, skip processing
+        if (!draftStatusChangedToPublished && !hasModifiedField) {
             return;
         }
 
@@ -131,7 +136,7 @@ export class FrontmatterService {
         }
 
         this.debounceTimeout = window.setTimeout(() => {
-            void this.processFile(file, draftStatusChangedToPublished);
+            void this.processFile(file, draftStatusChangedToPublished, contentType);
         }, 500);
     }
 
@@ -149,7 +154,7 @@ export class FrontmatterService {
         });
     }
 
-    private async processFile(file: TFile, draftStatusChangedToPublished: boolean) {
+    private async processFile(file: TFile, draftStatusChangedToPublished: boolean, contentType: ContentType | null | undefined) {
         const settings = this.plugin.settings;
         const publishDateField = settings.publishDateField || "date";
 
@@ -166,8 +171,8 @@ export class FrontmatterService {
             }
 
             // Handle Modified Date Sync
-            const modifiedField = settings.modifiedDateField || "modified";
-            if (settings.updateModifiedDate) {
+            const modifiedField = contentType?.modifiedDateField;
+            if (modifiedField) {
                 const now = moment().format(settings.dateFormat);
                 if (frontmatter[modifiedField] !== now) {
                     frontmatter[modifiedField] = now;

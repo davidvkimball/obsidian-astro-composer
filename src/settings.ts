@@ -32,6 +32,4 @@ export const DEFAULT_SETTINGS: AstroComposerSettings = {
 	draftProperty: "",
 	draftLogic: "true-is-draft",
 	publishDateField: "",
-	updateModifiedDate: false,
-	modifiedDateField: "",
 };
