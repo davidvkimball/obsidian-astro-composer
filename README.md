@@ -15,7 +15,7 @@ Part of the [Vault CMS](https://github.com/davidvkimball/vault-cms) project.
 ## Features
 
 - **New Post Dialog**: When enabled, prompts for a title when creating a new Markdown file via Obsidian's "New note" action, auto-generating a kebab-case filename (e.g., "My Blog Post" → `my-blog-post.md`) and optionally inserting properties with `title`, `date`, etc.
-- **Partial MDX Support**: The plugin can process existing `.mdx` files (link conversion, property standardization), but file creation currently only supports `.md` files.
+- **MDX Support**: Full `.mdx` file support including file creation (per content type via the `useMdxExtension` setting), link conversion, and property standardization.
 - **Property Standardization**: Updates a note's properties to match a customizable template using the "Standardize Properties" command. Preserves existing property values, adds missing properties from the template in the specified order, and appends unrecognized properties at the end.
 - **Draft Management**: Optionally adds an underscore prefix (e.g., `_my-post.md`) to hide drafts from Astro, configurable via settings.
 - **Internal Link Conversion**: Converts Obsidian wikilinks and markdown internal links (`[[My Post]] or [My Post](my-post)`) to Astro-friendly Markdown links (`[My Post](/blog/my-post/)`), supporting both file-based and folder-based post structures.
@@ -42,7 +42,7 @@ Astro Composer is not yet available in the Community plugins section. Install us
 ## Usage
 
 1. **Customize Settings**: In **Settings > Astro Composer**, configure:
-   - **Automate post creation**: Toggle to enable the title dialog for new `.md` files created via Obsidian's "New note" action (ensure your default new note location matches your post location in Obsidian settings). Note: The plugin can process existing `.mdx` files, but currently only creates `.md` files.
+   - **Automate post creation**: Toggle to enable the title dialog for new files created via Obsidian's "New note" action (ensure your default new note location matches your post location in Obsidian settings). Each content type can be configured to create `.mdx` files instead of `.md` via the `useMdxExtension` setting.
    - **Auto-insert properties**: Enable to automatically apply the properties template when creating new files (requires "Automate post creation" to be enabled).
    - **Posts folder**: Set the folder for blog posts (leave blank to use the vault root). Specify the default location for new notes in Obsidian's **Settings > Files and links**.
    - **Ignore subfolders**: Restrict automation to the specified posts folder and its subfolders.
@@ -56,9 +56,6 @@ Astro Composer is not yet available in the Community plugins section. Install us
 3. **Standardize Properties**: Use the `Astro Composer: Standardize Properties` command to update a note's properties to the relevant content type, preserving existing values, adding missing properties, and maintaining the template's order with unrecognized properties at the end.
 4. **Convert Internal Links**: Use the `Astro Composer: Convert internal links for Astro` command to transform Obsidian wikilinks and internal Markdown links into Astro-compatible Markdown links.
 5. **Rename Content**: Using the `Astro Composer: Rename Current Note` command, set the title of your content and have the file or parent folder get automatically renamed with the kebab-case version.
-
-## Roadmap
-- Full MDX Support: Complete MDX file creation support with per-content-type file extension settings (`.md` vs `.mdx`)
 
 ## Contributing
 
