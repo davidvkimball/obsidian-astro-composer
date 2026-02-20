@@ -6,6 +6,7 @@ export class FrontmatterService {
     private lastProcessedTime: number = 0;
     private debounceTimeout: number | null = null;
     private draftStatusMap: Map<string, boolean> = new Map();
+    private contentHashCache: Map<string, string> = new Map();
 
     constructor(private app: App, private plugin: AstroComposerPluginInterface) {
         this.registerEvents();
@@ -27,6 +28,16 @@ export class FrontmatterService {
             const cache = this.app.metadataCache.getFileCache(file);
             const rawValue = cache?.frontmatter?.[draftProp];
             this.draftStatusMap.set(file.path, this.calculateIsDraft(rawValue, settings));
+
+            // Populate initial content hashes to prevent unnecessary updates on first change
+            void (async () => {
+                try {
+                    const content = await this.app.vault.read(file);
+                    this.contentHashCache.set(file.path, this.getContentHash(content));
+                } catch (e) {
+                    console.error(`Failed to initialize content hash for ${file.path}:`, e);
+                }
+            })();
         }
     }
 
@@ -135,9 +146,60 @@ export class FrontmatterService {
             window.clearTimeout(this.debounceTimeout);
         }
 
-        this.debounceTimeout = window.setTimeout(() => {
+        this.debounceTimeout = window.setTimeout(async () => {
+            // Check if content (excluding frontmatter) has actually changed
+            try {
+                const content = await this.app.vault.read(file);
+                const currentHash = this.getContentHash(content);
+                const previousHash = this.contentHashCache.get(file.path);
+
+                // Update cache immediately to prevent re-processing even if we skip
+                this.contentHashCache.set(file.path, currentHash);
+
+                if (previousHash === currentHash) {
+                    // Only sub-publication changes (like metadata) happened, skip modified date update
+                    if (!draftStatusChangedToPublished) {
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.error(`Failed to check content hash for ${file.path}:`, e);
+                // Fallback to processing if read fails, or return? 
+                // Better to return to be safe against accidental updates
+                return;
+            }
+
             void this.processFile(file, draftStatusChangedToPublished, contentType);
         }, 500);
+    }
+
+    private getContentHash(content: string): string {
+        // 1. Strip frontmatter
+        let body = content;
+        if (content.startsWith('---')) {
+            const end = content.indexOf('\n---', 3);
+            if (end !== -1) {
+                body = content.slice(end + 4);
+            }
+        }
+
+        // 2. Normalize whitespace: collapse all whitespace into single spaces and trim
+        const normalized = body.replace(/\s+/g, ' ').trim();
+
+        // 3. Simple hashing (concatenating length and first/last bits is usually enough for local change detection, 
+        // but let's do a slightly better one if we want to be robust, or just use the normalized string if memory allows)
+        // Given Obsidian vaults can be large, a small hash is safer.
+        return this.simpleHash(normalized);
+    }
+
+    private simpleHash(str: string): string {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash |= 0; // Convert to 32bit integer
+        }
+        return hash.toString() + "_" + str.length;
     }
 
     private async updateDate(file: TFile) {
