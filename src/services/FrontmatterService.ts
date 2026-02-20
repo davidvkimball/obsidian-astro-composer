@@ -28,16 +28,6 @@ export class FrontmatterService {
             const cache = this.app.metadataCache.getFileCache(file);
             const rawValue = cache?.frontmatter?.[draftProp];
             this.draftStatusMap.set(file.path, this.calculateIsDraft(rawValue, settings));
-
-            // Populate initial content hashes to prevent unnecessary updates on first change
-            void (async () => {
-                try {
-                    const content = await this.app.vault.read(file);
-                    this.contentHashCache.set(file.path, this.getContentHash(content));
-                } catch (e) {
-                    console.error(`Failed to initialize content hash for ${file.path}:`, e);
-                }
-            })();
         }
     }
 
@@ -75,6 +65,22 @@ export class FrontmatterService {
                 }
             })
         );
+
+        // Watch for file open to lazily populate hash cache for the active file
+        this.plugin.registerEvent(
+            this.app.workspace.on("file-open", (file) => {
+                if (file instanceof TFile) {
+                    void (async () => {
+                        try {
+                            const content = await this.app.vault.read(file);
+                            this.contentHashCache.set(file.path, this.getContentHash(content));
+                        } catch (e) {
+                            console.error(`Failed to lazily initialize content hash for ${file.path}:`, e);
+                        }
+                    })();
+                }
+            })
+        );
     }
 
     private onRename(file: TFile, oldPath: string) {
@@ -96,6 +102,13 @@ export class FrontmatterService {
 
     private onMetadataChange(file: TFile) {
         const settings = this.plugin.settings;
+
+        // Check background processing
+        const activeFile = this.app.workspace.getActiveFile();
+        const isActiveFile = activeFile && activeFile.path === file.path;
+        if (!settings.processBackgroundFileChanges && !isActiveFile) {
+            return;
+        }
 
         // Need to check content type to see if modified date is enabled for THIS type
         const contentType = this.plugin.fileOps?.getContentTypeByPath(file.path);
@@ -156,12 +169,20 @@ export class FrontmatterService {
                 // Update cache immediately to prevent re-processing even if we skip
                 this.contentHashCache.set(file.path, currentHash);
 
-                if (previousHash === currentHash) {
+                if (previousHash === undefined) {
+                    // First time we're seeing the content of an existing file (lazy init via event)
+                    // If we missed the file-open (e.g. it was already open on start), 
+                    // we'll treat this first change as the baseline unless it's a publication change.
+                    if (!draftStatusChangedToPublished) {
+                        return;
+                    }
+                } else if (previousHash === currentHash) {
                     // Only sub-publication changes (like metadata) happened, skip modified date update
                     if (!draftStatusChangedToPublished) {
                         return;
                     }
                 }
+                // If hashes differ, or it's a publication change, we proceed to processFile
             } catch (e) {
                 console.error(`Failed to check content hash for ${file.path}:`, e);
                 // Fallback to processing if read fails, or return? 

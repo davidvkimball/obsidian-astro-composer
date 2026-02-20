@@ -47,13 +47,6 @@ export class CreateEventService {
                 }
             }
 
-            // Check background processing
-            const activeFile = this.app.workspace.getActiveFile();
-            const isActiveFile = activeFile && activeFile.path === file.path;
-            if (!this.plugin.settings.processBackgroundFileChanges && !isActiveFile) {
-                return;
-            }
-
             const contentTypes = this.plugin.settings.contentTypes || [];
             const hasEnabledContentTypes = contentTypes.some(ct => ct.enabled);
 
@@ -117,6 +110,15 @@ export class CreateEventService {
             const isNewNote = stat?.mtime && (now - stat.mtime < CONSTANTS.STAT_MTIME_THRESHOLD);
 
             if (!isNewNote) {
+                return;
+            }
+
+            // CHECK BACKGROUND PROCESSING ONLY FOR NON-CREATION EVENTS
+            // Actually, handleCreate is ONLY for creation. 
+            // The check was preventing the modal from opening if the active file was not yet set to the new file.
+            const activeFile = this.app.workspace.getActiveFile();
+            const isActiveFile = activeFile && activeFile.path === file.path;
+            if (!this.plugin.settings.processBackgroundFileChanges && !isActiveFile) {
                 return;
             }
 

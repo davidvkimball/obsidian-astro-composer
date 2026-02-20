@@ -95,7 +95,7 @@ export const KNOWN_ARRAY_KEYS = ['tags', 'aliases', 'cssclasses'] as const;
 
 export const CONSTANTS = {
 	DEBOUNCE_MS: 500,
-	STAT_MTIME_THRESHOLD: 1000,
+	STAT_MTIME_THRESHOLD: 5000,
 	EDITOR_STABILIZE_DELAY: 100,
 	FILE_EXPLORER_REVEAL_DELAY: 200,
 } as const;
