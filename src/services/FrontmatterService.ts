@@ -234,7 +234,7 @@ export class FrontmatterService {
 
             // Handle Modified Date Sync
             const modifiedField = contentType?.modifiedDateField;
-            if (modifiedField) {
+            if (modifiedField && frontmatter[modifiedField] !== undefined) {
                 const now = moment().format(settings.dateFormat);
                 if (frontmatter[modifiedField] !== now) {
                     frontmatter[modifiedField] = now;
