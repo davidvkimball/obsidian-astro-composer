@@ -1,10 +1,19 @@
 import { TFile, HeadingCache, App } from "obsidian";
-import { AstroComposerSettings } from "../types";
+import { AstroComposerSettings, AstroComposerPluginInterface } from "../types";
 import { matchesFolderPattern, sortByPatternSpecificity } from "./path-matching";
 import { toKebabCase } from "./string-utils";
 
 export class HeadingLinkGenerator {
-	constructor(private settings: AstroComposerSettings) { }
+	constructor(private settings: AstroComposerSettings, private plugin?: AstroComposerPluginInterface) { }
+
+	// Get fresh settings from plugin if available, otherwise use stored settings
+	private getSettings(): AstroComposerSettings {
+		// Always prefer plugin settings (they're kept up to date)
+		if (this.plugin?.settings) {
+			return this.plugin.settings;
+		}
+		return this.settings;
+	}
 
 	/**
 	 * Converts text to kebab-case slug for URLs
@@ -28,7 +37,8 @@ export class HeadingLinkGenerator {
 		let indexFileName = "";
 
 		// Check all content types, sorted by pattern specificity (more specific first)
-		const contentTypes = this.settings.contentTypes || [];
+		const settings = this.getSettings();
+		const contentTypes = settings.contentTypes || [];
 		const sortedTypes = sortByPatternSpecificity(contentTypes);
 
 		for (const contentType of sortedTypes) {
@@ -96,7 +106,7 @@ export class HeadingLinkGenerator {
 		// CRITICAL: Never add trailing slash before an anchor (e.g., /about#heading not /about/#heading)
 		// This is especially important for anchor links from copy heading URL functionality
 		// Anchor links should NEVER have trailing slashes, regardless of settings
-		const shouldAddTrailingSlash = (this.settings.addTrailingSlashToLinks || addTrailingSlash) && !anchor;
+		const shouldAddTrailingSlash = (settings.addTrailingSlashToLinks || addTrailingSlash) && !anchor;
 
 		return `${basePath}${slug}${shouldAddTrailingSlash ? '/' : ''}${anchor}`;
 	}
@@ -201,7 +211,8 @@ export class HeadingLinkGenerator {
 	 * Generates the appropriate link format based on settings
 	 */
 	generateLink(app: App, file: TFile, heading: HeadingCache): string {
-		if (this.settings.copyHeadingLinkFormat === "astro") {
+		const settings = this.getSettings();
+		if (settings.copyHeadingLinkFormat === "astro") {
 			// Astro format always uses markdown links (wikilinks with Astro URLs don't make sense)
 			return this.generateAstroLink(file, heading);
 		} else {

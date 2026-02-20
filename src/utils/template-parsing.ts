@@ -1,8 +1,17 @@
 import { App, TFile, Notice } from "obsidian";
-import { AstroComposerSettings, ParsedFrontmatter, TemplateValues, KNOWN_ARRAY_KEYS, ContentTypeId } from "../types";
+import { AstroComposerSettings, ParsedFrontmatter, TemplateValues, KNOWN_ARRAY_KEYS, ContentTypeId, AstroComposerPluginInterface } from "../types";
 
 export class TemplateParser {
-	constructor(private app: App, private settings: AstroComposerSettings) {}
+	constructor(private app: App, private settings: AstroComposerSettings, private plugin?: AstroComposerPluginInterface) { }
+
+	// Get fresh settings from plugin if available, otherwise use stored settings
+	private getSettings(): AstroComposerSettings {
+		// Always prefer plugin settings (they're kept up to date)
+		if (this.plugin?.settings) {
+			return this.plugin.settings;
+		}
+		return this.settings;
+	}
 
 	/**
 	 * Convert a string to kebab-case for slug generation
@@ -31,21 +40,21 @@ export class TemplateParser {
 				propertiesEnd += 4; // Move past the second ---
 			}
 			propertiesText = content.slice(4, propertiesEnd - 4).trim();
-			
+
 			try {
 				let currentKey: string | null = null;
 				const arrayKeys = new Set<string>(); // Track which keys are arrays
-				
+
 				propertiesText.split("\n").forEach((line) => {
 					const trimmedLine = line.trim();
-					
+
 					// Match property lines - more flexible regex to handle various property names
 					const match = trimmedLine.match(/^([a-zA-Z_][a-zA-Z0-9_-]*):\s*(.*)$/);
 					if (match) {
 						const [, key, value] = match;
 						currentKey = key;
 						const trimmedValue = value ? value.trim() : "";
-						
+
 						// Check for bracket-syntax arrays: [item] or ["item1", "item2"] or [item1, item2]
 						const bracketArrayMatch = trimmedValue.match(/^\[(.*)\]$/);
 						if (bracketArrayMatch) {
@@ -53,7 +62,7 @@ export class TemplateParser {
 							const arrayContent = bracketArrayMatch[1].trim();
 							existingProperties[key] = [];
 							arrayKeys.add(key); // Mark this key as an array
-							
+
 							if (arrayContent) {
 								// Parse array items - handle both quoted and unquoted values
 								// Split by comma, but respect quotes
@@ -61,10 +70,10 @@ export class TemplateParser {
 								let currentItem = "";
 								let inQuotes = false;
 								let quoteChar = '';
-								
+
 								for (let i = 0; i < arrayContent.length; i++) {
 									const char = arrayContent[i];
-									
+
 									if (!inQuotes && (char === '"' || char === "'")) {
 										inQuotes = true;
 										quoteChar = char;
@@ -89,14 +98,14 @@ export class TemplateParser {
 										currentItem += char;
 									}
 								}
-								
+
 								// Add the last item
 								if (currentItem.trim()) {
 									const trimmedItem = currentItem.trim();
 									const unquoted = trimmedItem.replace(/^["']|["']$/g, '');
 									items.push(unquoted);
 								}
-								
+
 								existingProperties[key] = items;
 							}
 						} else {
@@ -104,7 +113,7 @@ export class TemplateParser {
 							const isKnownArrayKey = KNOWN_ARRAY_KEYS.includes(key as typeof KNOWN_ARRAY_KEYS[number]);
 							const isEmptyArray = !trimmedValue || trimmedValue === "";
 							const isArrayProperty = isKnownArrayKey || isEmptyArray;
-							
+
 							if (isArrayProperty) {
 								existingProperties[key] = [];
 								arrayKeys.add(key); // Mark this key as an array
@@ -117,7 +126,7 @@ export class TemplateParser {
 					} else if (currentKey && trimmedLine.startsWith("- ")) {
 						// Check if current key is an array property
 						const isArrayProperty = arrayKeys.has(currentKey);
-						
+
 						if (isArrayProperty) {
 							const item = trimmedLine.replace(/^-\s*/, "");
 							if (item) existingProperties[currentKey].push(item);
@@ -175,13 +184,13 @@ export class TemplateParser {
 				if (match) {
 					const [, key, value] = match;
 					templateProps.push(key);
-					
+
 					// Check if this is an array property (known array keys or YAML list format)
 					const isKnownArrayKey = KNOWN_ARRAY_KEYS.includes(key as typeof KNOWN_ARRAY_KEYS[number]);
 					// Check if it's a YAML list format (no value after colon, empty brackets, or empty value means it's an array)
 					const isEmptyArray = !value || value.trim() === "" || value.trim() === "[]";
 					const isArrayProperty = isKnownArrayKey || isEmptyArray;
-					
+
 					if (isArrayProperty) {
 						// Handle array properties
 						if (value && value.startsWith("[")) {
@@ -215,9 +224,10 @@ export class TemplateParser {
 					} else {
 						// This is a string property, not an array
 						const slug = this.toKebabCase(title);
+						const settings = this.getSettings();
 						const stringValue = (value || "")
 							.replace(/\{\{title\}\}/g, title)
-							.replace(/\{\{date\}\}/g, window.moment(new Date()).format(this.settings.dateFormat))
+							.replace(/\{\{date\}\}/g, window.moment(new Date()).format(settings.dateFormat))
 							.replace(/\{\{slug\}\}/g, slug);
 						// Store as a single string value, not in an array
 						templateValues[key] = stringValue;
@@ -233,9 +243,9 @@ export class TemplateParser {
 		let newContent = "---\n";
 		for (const key in finalProps) {
 			// Check if this is an array property
-			const isArrayProperty = KNOWN_ARRAY_KEYS.includes(key as typeof KNOWN_ARRAY_KEYS[number]) || 
+			const isArrayProperty = KNOWN_ARRAY_KEYS.includes(key as typeof KNOWN_ARRAY_KEYS[number]) ||
 				(arrayKeys && arrayKeys.has(key));
-			
+
 			if (isArrayProperty) {
 				newContent += `${key}:\n`;
 				if (finalProps[key].length > 0) {
@@ -255,12 +265,12 @@ export class TemplateParser {
 		// Check if template has {{title}} - if not, don't update frontmatter at all
 		const titleKey = this.getTitleKey(type);
 		const hasTitleInTemplate = this.templateHasTitle(type);
-		
+
 		// If template doesn't have {{title}}, don't modify frontmatter
 		if (!hasTitleInTemplate) {
 			return;
 		}
-		
+
 		const content = await this.app.vault.read(file);
 		let propertiesEnd = 0;
 		let propertiesText = "";
@@ -283,26 +293,26 @@ export class TemplateParser {
 		let titleKeyPosition = -1; // Track the original position of the title key
 
 		const arrayKeys = new Set<string>(); // Track which keys are arrays
-		
+
 		propertiesText.split("\n").forEach((line, index) => {
 			const trimmedLine = line.trim();
-			
+
 			// Match property lines - more flexible regex to handle various property names
 			const match = trimmedLine.match(/^([a-zA-Z_][a-zA-Z0-9_-]*):\s*(.*)$/);
 			if (match) {
 				const [, key, value] = match;
 				propOrder.push(key);
 				currentKey = key;
-				
+
 				// Track the original position of the title key
 				if (key === titleKey) {
 					titleKeyPosition = index;
 				}
-				
+
 				const isKnownArrayKey = KNOWN_ARRAY_KEYS.includes(key as typeof KNOWN_ARRAY_KEYS[number]);
 				const isEmptyArray = !value || value.trim() === "" || value.trim() === "[]";
 				const isArrayProperty = isKnownArrayKey || isEmptyArray;
-				
+
 				if (isArrayProperty) {
 					existing[key] = [];
 					arrayKeys.add(key); // Mark this key as an array
@@ -341,7 +351,7 @@ export class TemplateParser {
 			titleVal = newTitle;
 		}
 		existing[titleKey] = titleVal;
-		
+
 		// Also update slug if it exists in frontmatter
 		if ("slug" in existing) {
 			const newSlug = this.toKebabCase(newTitle);
@@ -390,11 +400,12 @@ export class TemplateParser {
 
 	private getTitleKey(type: ContentTypeId): string {
 		if (type === "note") return "title";
-		
-		const contentTypes = this.settings.contentTypes || [];
+
+		const settings = this.getSettings();
+		const contentTypes = settings.contentTypes || [];
 		const contentType = contentTypes.find(ct => ct.id === type);
 		if (!contentType) return "title";
-		
+
 		const template = contentType.template;
 		const lines = template.split("\n");
 		let inProperties = false;
@@ -417,15 +428,16 @@ export class TemplateParser {
 		}
 		return "title";
 	}
-	
+
 	// Check if the template for this content type has {{title}}
 	private templateHasTitle(type: ContentTypeId): boolean {
 		if (type === "note") return true; // Notes always have title
-		
-		const contentTypes = this.settings.contentTypes || [];
+
+		const settings = this.getSettings();
+		const contentTypes = settings.contentTypes || [];
 		const contentType = contentTypes.find(ct => ct.id === type);
 		if (!contentType) return true; // Default to true for safety
-		
+
 		const template = contentType.template;
 		return template.includes("{{title}}");
 	}

@@ -47,9 +47,6 @@ export class CreateEventService {
                 }
             }
 
-            // Reload settings to ensure we have the latest
-            await this.plugin.loadSettings();
-
             // Check background processing
             const activeFile = this.app.workspace.getActiveFile();
             const isActiveFile = activeFile && activeFile.path === file.path;

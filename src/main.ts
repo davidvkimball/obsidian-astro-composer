@@ -58,8 +58,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			this.migrationService = new MigrationService(this.app, this);
 			this.createEventService = new CreateEventService(this.app, this);
 			this.frontmatterService = new FrontmatterService(this.app, this);
-			this.templateParser = new TemplateParser(this.app, this.settings);
-			this.headingLinkGenerator = new HeadingLinkGenerator(this.settings);
+			this.templateParser = new TemplateParser(this.app, this.settings, this);
+			this.headingLinkGenerator = new HeadingLinkGenerator(this.settings, this);
 
 			// Register MDX file visibility if enabled (safely handle if already registered)
 			if (this.settings.showMdxFilesInExplorer) {
@@ -129,7 +129,11 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 	async loadSettings() {
 		const loadedData = (await this.loadData()) as unknown;
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData as Partial<AstroComposerSettings> | null | undefined);
+		if (!this.settings) {
+			this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData as Partial<AstroComposerSettings> | null | undefined);
+		} else {
+			Object.assign(this.settings, loadedData as Partial<AstroComposerSettings> | null | undefined);
+		}
 
 		// Ensure contentTypes is always an array (never undefined or null)
 		if (!this.settings.contentTypes || !Array.isArray(this.settings.contentTypes)) {
