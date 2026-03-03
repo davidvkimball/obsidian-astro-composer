@@ -61,12 +61,12 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		// Global settings (first group - no heading)
 		const generalGroup = new SettingGroup(containerEl);
-		generalGroup.addSetting((setting: any) => {
+		generalGroup.addSetting(setting => {
 			setting
 				.setName("Date format")
 				// Date format codes (MMMM, yyyy, etc.) are technical notation, not UI text
 				.setDesc("Format for the date in properties (e.g., yyyy-mm-dd, MMMM D, yyyy, yyyy-mm-dd HH:mm)")
-				.addText((text: any) =>
+				.addText(text =>
 					text
 						// "YYYY-MM-DD" is a date format placeholder, not UI text
 						.setPlaceholder("YYYY-MM-DD")
@@ -78,11 +78,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				);
 		});
 
-		generalGroup.addSetting((setting: any) => {
+		generalGroup.addSetting(setting => {
 			setting
 				.setName("Enable copy heading links")
 				.setDesc("Add right-click context menu option to copy heading links in various formats.")
-				.addToggle((toggle: any) =>
+				.addToggle(toggle =>
 					toggle
 						.setValue(settings.enableCopyHeadingLink)
 						.onChange(async (value: boolean) => {
@@ -93,12 +93,12 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				);
 		});
 
-		generalGroup.addSetting((setting: any) => {
+		generalGroup.addSetting(setting => {
 			setting
 				.setName("Default heading link format")
 				// "Astro" is a proper noun (framework name) and should be capitalized
 				.setDesc("Choose the default format for copied heading links. Obsidian format respects your Obsidian settings for wikilink vs markdown preference. Astro link uses your link base path from above and converts the heading into kebab-case format as an anchor link")
-				.addDropdown((dropdown: any) =>
+				.addDropdown(dropdown =>
 					dropdown
 						.addOption("obsidian", "Obsidian link")
 						.addOption("astro", "Astro link")
@@ -113,11 +113,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			setting.settingEl.classList.toggle("astro-composer-setting-container-hidden", !settings.enableCopyHeadingLink);
 		});
 
-		generalGroup.addSetting((setting: any) => {
+		generalGroup.addSetting(setting => {
 			setting
 				.setName("Add trailing slash to links")
 				.setDesc("Add trailing slashes to all converted internal links (e.g., /about/ instead of /about).")
-				.addToggle((toggle: any) =>
+				.addToggle(toggle =>
 					toggle
 						.setValue(settings.addTrailingSlashToLinks)
 						.onChange(async (value: boolean) => {
@@ -127,12 +127,12 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				);
 		});
 
-		generalGroup.addSetting((setting: any) => {
+		generalGroup.addSetting(setting => {
 			setting
 				.setName("Process background file changes")
 				// Technical terms like "Obsidian", "git" are proper nouns in this context
 				.setDesc("Automatically process new files when they're changed in the background (by Git or other plugins). Disable to prevent modal spam when files are already processed on other devices during a sync.")
-				.addToggle((toggle: any) =>
+				.addToggle(toggle =>
 					toggle
 						.setValue(settings.processBackgroundFileChanges)
 						.onChange(async (value: boolean) => {
@@ -142,12 +142,12 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				);
 		});
 
-		generalGroup.addSetting((setting: any) => {
+		generalGroup.addSetting(setting => {
 			setting
 				// "MDX" is a proper noun (file format) and should be capitalized
 				.setName("Show MDX files in file explorer")
 				.setDesc("Make .mdx files visible in Obsidian's file explorer. Requires reload to take effect.")
-				.addToggle((toggle: any) =>
+				.addToggle(toggle =>
 					toggle
 						.setValue(settings.showMdxFilesInExplorer)
 						.onChange(async (value: boolean) => {
@@ -161,11 +161,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		const automationGroup = new SettingGroup(containerEl).setHeading("Property automation");
 
 		// Auto-insert properties (moved from generalGroup)
-		automationGroup.addSetting((setting: any) => {
+		automationGroup.addSetting(setting => {
 			setting
 				.setName("Auto-insert properties")
 				.setDesc("Automatically insert the properties template when creating new files.")
-				.addToggle((toggle: any) =>
+				.addToggle(toggle =>
 					toggle
 						.setValue(settings.autoInsertProperties)
 						.onChange(async (value: boolean) => {
@@ -175,11 +175,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				);
 		});
 
-		automationGroup.addSetting((setting: any) => {
+		automationGroup.addSetting(setting => {
 			setting
 				.setName("Update date on publish")
 				.setDesc("Update 'date' property when switching from draft to published status.")
-				.addToggle((toggle: any) =>
+				.addToggle(toggle =>
 					toggle
 						.setValue(settings.syncDraftDate)
 						.onChange(async (value: boolean) => {
@@ -191,11 +191,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		});
 
 		if (settings.syncDraftDate) {
-			automationGroup.addSetting((setting: any) => {
+			automationGroup.addSetting(setting => {
 				setting
 					.setName("Draft property name")
 					.setDesc("The property field to use for draft status.")
-					.addText((text: any) =>
+					.addText(text =>
 						text
 							.setPlaceholder("draft")
 							.setValue(settings.draftProperty || "")
@@ -207,16 +207,16 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					);
 			});
 
-			automationGroup.addSetting((setting: any) => {
+			automationGroup.addSetting(setting => {
 				setting
 					.setName("Draft logic")
 					.setDesc("Whether the property value 'true' means it is a draft or published.")
-					.addDropdown((dropdown: any) =>
+					.addDropdown(dropdown =>
 						dropdown
 							.addOption("true-is-draft", "True = Draft")
 							.addOption("false-is-draft", "True = Published")
 							.setValue(settings.draftLogic || "true-is-draft")
-							.onChange(async (value: any) => {
+							.onChange(async value => {
 								settings.draftLogic = value as 'true-is-draft' | 'false-is-draft';
 								await this.plugin.saveSettings();
 								this.plugin.frontmatterService?.initializeDraftStatusMap();
@@ -224,11 +224,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 					);
 			});
 
-			automationGroup.addSetting((setting: any) => {
+			automationGroup.addSetting(setting => {
 				setting
 					.setName("Published date property name")
 					.setDesc("The property field to update when published (e.g., 'date' or 'pubDate').")
-					.addText((text: any) =>
+					.addText(text =>
 						text
 							.setPlaceholder("date")
 							.setValue(settings.publishDateField || "")
@@ -244,7 +244,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		const contentTypesGroup = new SettingGroup(containerEl).setHeading("Content types");
 
 		// Add container as a setting - hide the setting's default UI, add our container inside
-		contentTypesGroup.addSetting((setting: any) => {
+		contentTypesGroup.addSetting(setting => {
 			// Hide the setting's default UI elements using CSS classes
 			setting.settingEl.addClass("astro-composer-setting-hidden-elements");
 			setting.settingEl.addClass("astro-composer-setting-container-full-width");
@@ -263,11 +263,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			const developerGroup = new SettingGroup(containerEl).setHeading("Developer commands");
 
 			// Terminal command settings
-			developerGroup.addSetting((setting: any) => {
+			developerGroup.addSetting(setting => {
 				setting
 					.setName("Enable open terminal command")
 					.setDesc("Enable command to open terminal in project root directory.")
-					.addToggle((toggle: any) =>
+					.addToggle(toggle =>
 						toggle
 							.setValue(settings.enableOpenTerminalCommand)
 							.onChange(async (value: boolean) => {
@@ -288,7 +288,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenTerminalCommand);
 			this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenTerminalCommand);
 
-			developerGroup.addSetting((setting: any) => {
+			developerGroup.addSetting(setting => {
 				const descFragment = document.createDocumentFragment();
 				// Text is already in sentence case; "Obsidian" is a proper noun
 				descFragment.createEl("div", { text: "Path relative to the Obsidian vault root folder. Use ../.. for two levels up. Leave blank to use the vault folder" });
@@ -296,7 +296,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				setting
 					.setName("Project root directory path")
 					.setDesc(descFragment)
-					.addText((text: any) =>
+					.addText(text =>
 						text
 							.setPlaceholder("../..")
 							.setValue(settings.terminalProjectRootPath)
@@ -310,7 +310,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				setting.settingEl.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenTerminalCommand);
 			});
 
-			developerGroup.addSetting((setting: any) => {
+			developerGroup.addSetting(setting => {
 				const descFragment = document.createDocumentFragment();
 				// Text is already in sentence case; proper nouns or product names like "macOS", "Windows", "Linux"
 				descFragment.createEl("div", { text: "Leave blank to use platform defaults. On macOS, the default is Terminal. On Windows, it's Windows Terminal (Win 11) or cmd.exe (Win 10). On Linux, it's gnome-terminal, konsole, or xterm" });
@@ -319,7 +319,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				setting
 					.setName("Terminal application name")
 					.setDesc(descFragment)
-					.addText((text: any) =>
+					.addText(text =>
 						text
 							.setPlaceholder("Terminal")
 							.setValue(settings.terminalApplicationName)
@@ -333,11 +333,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				setting.settingEl.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenTerminalCommand);
 			});
 
-			developerGroup.addSetting((setting: any) => {
+			developerGroup.addSetting(setting => {
 				setting
 					.setName("Enable debug logging")
 					.setDesc("Log terminal launch commands and platform decisions to the developer console for troubleshooting.")
-					.addToggle((toggle: any) =>
+					.addToggle(toggle =>
 						toggle
 							.setValue(settings.enableTerminalDebugLogging)
 							.onChange(async (value: boolean) => {
@@ -350,11 +350,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				setting.settingEl.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenTerminalCommand);
 			});
 
-			developerGroup.addSetting((setting: any) => {
+			developerGroup.addSetting(setting => {
 				setting
 					.setName("Show open terminal ribbon icon")
 					.setDesc("Add a ribbon icon to launch the terminal command.")
-					.addToggle((toggle: any) => {
+					.addToggle(toggle => {
 						this.terminalRibbonToggleComponent = toggle;
 						toggle
 							.setValue(settings.enableTerminalRibbonIcon)
@@ -380,11 +380,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			});
 
 			// Config file command settings
-			developerGroup.addSetting((setting: any) => {
+			developerGroup.addSetting(setting => {
 				setting
 					.setName("Enable edit config file command")
 					.setDesc("Enable command to open astro config file in default editor.")
-					.addToggle((toggle: any) =>
+					.addToggle(toggle =>
 						toggle
 							.setValue(settings.enableOpenConfigFileCommand)
 							.onChange(async (value: boolean) => {
@@ -405,14 +405,14 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			this.configCommandContainer.classList.toggle("astro-composer-setting-container-visible", settings.enableOpenConfigFileCommand);
 			this.configCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenConfigFileCommand);
 
-			developerGroup.addSetting((setting: any) => {
+			developerGroup.addSetting(setting => {
 				const descFragment = document.createDocumentFragment();
 				descFragment.createEl("div", { text: "Path to the config file relative to the vault root. Use ../config.ts or ../../astro.config.mjs." });
 				descFragment.createEl("div", { text: "Absolute paths work also." });
 				setting
 					.setName("Config file path")
 					.setDesc(descFragment)
-					.addText((text: any) =>
+					.addText(text =>
 						text
 							.setPlaceholder("../config.ts")
 							.setValue(settings.configFilePath)
@@ -426,11 +426,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				setting.settingEl.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenConfigFileCommand);
 			});
 
-			developerGroup.addSetting((setting: any) => {
+			developerGroup.addSetting(setting => {
 				setting
 					.setName("Show open config ribbon icon")
 					.setDesc("Add a ribbon icon to launch the config file command.")
-					.addToggle((toggle: any) => {
+					.addToggle(toggle => {
 						this.configRibbonToggleComponent = toggle;
 						toggle
 							.setValue(settings.enableConfigRibbonIcon)
@@ -456,13 +456,13 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			});
 
 			// Help button replacement toggle (part of developer commands group)
-			developerGroup.addSetting((setting: any) => {
+			developerGroup.addSetting(setting => {
 				setting
 					.setName('Swap out help button for custom action')
 					.setDesc('Replace the help button in the vault profile area with a custom action.')
-					.addToggle((toggle: any) => toggle
+					.addToggle(toggle => toggle
 						.setValue(settings.helpButtonReplacement?.enabled ?? false)
-						.onChange(async (value: any) => {
+						.onChange(async value => {
 							if (!settings.helpButtonReplacement) {
 								settings.helpButtonReplacement = {
 									enabled: false,
@@ -485,11 +485,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			if (settings.helpButtonReplacement?.enabled) {
 				// Command picker
 				const commandName = this.getCommandName(settings.helpButtonReplacement.commandId);
-				developerGroup.addSetting((setting: any) => {
+				developerGroup.addSetting(setting => {
 					setting
 						.setName('Command')
 						.setDesc('Select the command to execute when the button is clicked.')
-						.addButton((button: any) => button
+						.addButton(button => button
 							.setButtonText(commandName || 'Select command')
 							.onClick(() => {
 								const modal = new CommandPickerModal(this.app, (commandId) => {
@@ -517,11 +517,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 				// Icon picker
 				const iconName = this.getIconName(settings.helpButtonReplacement.iconId);
-				developerGroup.addSetting((setting: any) => {
+				developerGroup.addSetting(setting => {
 					setting
 						.setName('Icon')
 						.setDesc('Select the icon to display on the button.')
-						.addButton((button: any) => button
+						.addButton(button => button
 							.setButtonText(iconName || 'Select icon...')
 							.onClick(() => {
 								const modal = new IconPickerModal(this.app, (iconId) => {
@@ -836,7 +836,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			new Setting(nameContainer)
 				.setName("Content type name")
 				.setDesc("Display name for this content type (e.g., 'projects', 'notes', 'tutorials')")
-				.addText((text: any) => {
+				.addText(text => {
 					text
 						.setPlaceholder("Enter content type name")
 						.setValue(customType.name)
@@ -853,7 +853,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			const folderSetting = new Setting(folderContainer)
 				.setName("Folder location")
 				.setDesc("Folder path where this content type will be created. Leave blank to use the vault folder. Supports wildcards like directory/* or directory/*/* to match specific folder depths.")
-				.addText((text: any) => {
+				.addText(text => {
 					text
 						.setPlaceholder("Enter folder path (e.g., 'docs', 'docs/*', 'docs/*/*') or leave blank for vault root")
 						.setValue(customType.folder)
@@ -882,7 +882,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			new Setting(ignoreSubfoldersContainer)
 				.setName("Ignore subfolders")
 				.setDesc("When enabled, automation will only trigger for new .md files within this content type's folder and one level down (for folder-based content). Files in deeper subfolders will be ignored.")
-				.addToggle((toggle: any) =>
+				.addToggle(toggle =>
 					toggle
 						.setValue(customType.ignoreSubfolders || false)
 						.onChange(async (value: boolean) => {
@@ -896,7 +896,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			new Setting(underscorePrefixContainer)
 				.setName("Use underscore prefix for drafts")
 				.setDesc("Add an underscore prefix (_content-title) to new notes by default when enabled. This hides them from astro, which can be helpful for drafts")
-				.addToggle((toggle: any) =>
+				.addToggle(toggle =>
 					toggle
 						.setValue(customType.enableUnderscorePrefix || false)
 						.onChange(async (value: boolean) => {
@@ -910,7 +910,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			new Setting(linkContainer)
 				.setName("Link base path")
 				.setDesc("Base path for converted links (e.g., '/projects/', '/notes/tutorials/', leave blank for root /).")
-				.addText((text: any) => {
+				.addText(text => {
 					text
 						.setPlaceholder("Enter link base path")
 						.setValue(customType.linkBasePath || "")
@@ -925,7 +925,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			new Setting(creationModeContainer)
 				.setName("Creation mode")
 				.setDesc("How to create new entries: file-based or folder-based with an index file.")
-				.addDropdown((dropdown: any) =>
+				.addDropdown(dropdown =>
 					dropdown
 						.addOption("file", "File-based (content-title.md)")
 						.addOption("folder", "Folder-based (content-title/index.md)")
@@ -944,7 +944,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			new Setting(indexFileContainer)
 				.setName("Index file name")
 				.setDesc("Name for index files in folder-based content (without .md extension). Defaults to 'index' if left blank.")
-				.addText((text: any) =>
+				.addText(text =>
 					text
 						.setPlaceholder("index")
 						.setValue(customType.indexFileName)
@@ -960,7 +960,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				// "MDX" is a proper noun (file format) and should be capitalized
 				.setName("Use MDX instead of MD")
 				.setDesc("Create files with .mdx extension instead of .md extension.")
-				.addToggle((toggle: any) =>
+				.addToggle(toggle =>
 					toggle
 						.setValue(customType.useMdxExtension || false)
 						.onChange(async (value: boolean) => {
@@ -974,7 +974,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			new Setting(modifiedDateContainer)
 				.setName("Modified date property")
 				.setDesc("The property field to update with the modified date for this content type. Leave blank to disable.")
-				.addText((text: any) =>
+				.addText(text =>
 					text
 						.setPlaceholder("modified")
 						.setValue(customType.modifiedDateField || "")
@@ -988,7 +988,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			const templateContainer = settingsContainer.createDiv();
 			new Setting(templateContainer)
 				.setName("Properties template")
-				.addTextArea((text: any) => {
+				.addTextArea(text => {
 					text
 						.setPlaceholder('---\ntitle: "{{title}}"\ndate: {{date}}\n---\n')
 						.setValue(customType.template)
@@ -1011,7 +1011,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			const removeContainer = settingsContainer.createDiv();
 			const removeSetting = new Setting(removeContainer)
 				.setName("")
-				.addButton((button: any) => {
+				.addButton(button => {
 					button
 						.setButtonText("Remove")
 						.setWarning()
