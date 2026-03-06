@@ -24,6 +24,7 @@ export interface AstroComposerSettings {
 	draftProperty: string;
 	draftLogic: 'true-is-draft' | 'false-is-draft';
 	publishDateField: string;
+	renameOnTitleClick: boolean;
 	// Legacy fields (kept for migration, ignored after migration)
 	enableUnderscorePrefix?: boolean;
 	postsFolder?: string;

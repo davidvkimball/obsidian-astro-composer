@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting, Platform, setIcon , SettingGroup} from "obsidian";
+import { App, PluginSettingTab, Setting, Platform, setIcon, SettingGroup } from "obsidian";
 import { Plugin } from "obsidian";
 import { ContentType, AstroComposerPluginInterface, AstroComposerSettings } from "../types";
 import { CommandPickerModal } from "./components/CommandPickerModal";
@@ -170,6 +170,20 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						.setValue(settings.autoInsertProperties)
 						.onChange(async (value: boolean) => {
 							settings.autoInsertProperties = value;
+							await this.plugin.saveSettings();
+						})
+				);
+		});
+
+		automationGroup.addSetting(setting => {
+			setting
+				.setName("Rename file on title property click")
+				.setDesc("When enabled, clicking into the title property will trigger the rename file command, keeping the file slug in sync.")
+				.addToggle(toggle =>
+					toggle
+						.setValue(settings.renameOnTitleClick)
+						.onChange(async (value: boolean) => {
+							settings.renameOnTitleClick = value;
 							await this.plugin.saveSettings();
 						})
 				);

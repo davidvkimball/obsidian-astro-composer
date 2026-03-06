@@ -78,6 +78,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 					this.startHelpButtonMonitor();
 				}
 
+				this.registerTitlePropertyClickListener();
+
 				// Run migration after plugin is fully loaded (non-blocking)
 				void this.migrateSettingsIfNeeded();
 			});
@@ -115,6 +117,31 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		});
 		this.registerEvent(createEventRef);
 		this.createEventRef = createEventRef;
+	}
+
+	private registerTitlePropertyClickListener() {
+		this.registerDomEvent(document, "click", (evt: MouseEvent) => {
+			if (!this.settings.renameOnTitleClick) return;
+
+			const target = evt.target as HTMLElement;
+			const propertyEl = target.closest(".metadata-property");
+			if (!propertyEl) return;
+
+			const propertyKey = propertyEl.getAttribute("data-property-key");
+			if (!propertyKey) return;
+
+			const activeFile = this.app.workspace.getActiveFile();
+			if (!activeFile) return;
+
+			const typeId = this.fileOps.determineType(activeFile);
+			const titleKey = this.fileOps.getTitleKey(typeId);
+
+			if (propertyKey === titleKey) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.renameContentByPath(activeFile.path);
+			}
+		}, true); // use capture phase
 	}
 
 	private cleanupPluginCreatedFiles() {
