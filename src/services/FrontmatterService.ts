@@ -17,17 +17,26 @@ export class FrontmatterService {
         });
     }
 
+    public destroy() {
+        // No-op, kept for interface compatibility
+    }
+
     public initializeDraftStatusMap() {
         this.draftStatusMap.clear();
         const settings = this.plugin.settings;
+        const isUnderscoreMode = settings.draftDetectionMode === 'underscore-prefix';
         const draftProp = settings.draftProperty || "draft";
         // Include both .md and .mdx files
         const files = this.app.vault.getFiles().filter(f => f instanceof TFile && (f.extension === 'md' || f.extension === 'mdx')) as TFile[];
 
         for (const file of files) {
-            const cache = this.app.metadataCache.getFileCache(file);
-            const rawValue = cache?.frontmatter?.[draftProp];
-            this.draftStatusMap.set(file.path, this.calculateIsDraft(rawValue, settings));
+            if (isUnderscoreMode) {
+                this.draftStatusMap.set(file.path, file.name.startsWith('_'));
+            } else {
+                const cache = this.app.metadataCache.getFileCache(file);
+                const rawValue = cache?.frontmatter?.[draftProp];
+                this.draftStatusMap.set(file.path, this.calculateIsDraft(rawValue, settings));
+            }
         }
     }
 
@@ -92,16 +101,36 @@ export class FrontmatterService {
 
         // Check if it was an underscore draft and is now not
         if (oldName.startsWith("_") && !newName.startsWith("_")) {
-            // Need to check content type to see if underscore prefix is enabled
-            const contentType = this.plugin.fileOps?.getContentTypeByPath(file.path);
-            if (contentType?.enableUnderscorePrefix) {
+            // Check global setting or per-content-type setting
+            if (settings.draftDetectionMode === 'underscore-prefix') {
                 void this.updateDate(file);
+            } else {
+                const contentType = this.plugin.fileOps?.getContentTypeByPath(file.path);
+                if (contentType?.enableUnderscorePrefix) {
+                    void this.updateDate(file);
+                }
             }
         }
     }
 
     private onMetadataChange(file: TFile) {
         const settings = this.plugin.settings;
+
+        // In underscore-prefix mode, draft transitions are handled by onRename, not metadata changes.
+        // Skip property-based draft detection entirely to avoid phantom transitions.
+        if (settings.draftDetectionMode === 'underscore-prefix') {
+            // Still handle modified date sync if applicable
+            const contentType = this.plugin.fileOps?.getContentTypeByPath(file.path);
+            const hasModifiedField = !!contentType?.modifiedDateField;
+            if (!hasModifiedField) return;
+
+            const activeFile = this.app.workspace.getActiveFile();
+            const isActiveFile = activeFile && activeFile.path === file.path;
+            if (!settings.processBackgroundFileChanges && !isActiveFile) return;
+
+            void this.processFile(file, false, contentType);
+            return;
+        }
 
         // Check background processing
         const activeFile = this.app.workspace.getActiveFile();
@@ -118,7 +147,7 @@ export class FrontmatterService {
             return;
         }
 
-        // Track draft status changes
+        // Track draft status changes (property-based only)
         const cache = this.app.metadataCache.getFileCache(file);
         const draftProp = settings.draftProperty || "draft";
         const rawValue = cache?.frontmatter?.[draftProp];

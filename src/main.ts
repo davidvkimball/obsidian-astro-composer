@@ -315,6 +315,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	}
 
 	onunload() {
+		this.frontmatterService?.destroy();
 		if (this.terminalRibbonIcon) {
 			this.terminalRibbonIcon.remove();
 			this.terminalRibbonIcon = null;

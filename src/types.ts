@@ -21,6 +21,7 @@ export interface AstroComposerSettings {
 	showMdxFilesInExplorer: boolean;
 	processBackgroundFileChanges: boolean;
 	syncDraftDate: boolean;
+	draftDetectionMode: 'property' | 'underscore-prefix';
 	draftProperty: string;
 	draftLogic: 'true-is-draft' | 'false-is-draft';
 	publishDateField: string;

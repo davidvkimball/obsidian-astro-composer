@@ -199,7 +199,9 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						.onChange(async (value: boolean) => {
 							settings.syncDraftDate = value;
 							await this.plugin.saveSettings();
-							this.display(); // Quick refresh to show/hide fields
+							const scrollTop = this.containerEl.scrollTop;
+							this.display();
+							this.containerEl.scrollTop = scrollTop;
 						})
 				);
 		});
@@ -207,36 +209,58 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		if (settings.syncDraftDate) {
 			automationGroup.addSetting(setting => {
 				setting
-					.setName("Draft property name")
-					.setDesc("The property field to use for draft status.")
-					.addText(text =>
-						text
-							.setPlaceholder("draft")
-							.setValue(settings.draftProperty || "")
-							.onChange(async (value: string) => {
-								settings.draftProperty = value;
+					.setName("Draft detection mode")
+					.setDesc("How draft status is determined. Property-based uses a boolean property (e.g. draft: true). Underscore prefix uses the filename (e.g. _my-post.md = draft).")
+					.addDropdown(dropdown =>
+						dropdown
+							.addOption("property", "Property-based")
+							.addOption("underscore-prefix", "Underscore prefix")
+							.setValue(settings.draftDetectionMode || "property")
+							.onChange(async value => {
+								settings.draftDetectionMode = value as 'property' | 'underscore-prefix';
 								await this.plugin.saveSettings();
 								this.plugin.frontmatterService?.initializeDraftStatusMap();
+								const scrollTop = this.containerEl.scrollTop;
+								this.display();
+								this.containerEl.scrollTop = scrollTop;
 							})
 					);
 			});
 
-			automationGroup.addSetting(setting => {
-				setting
-					.setName("Draft logic")
-					.setDesc("Whether the property value 'true' means it is a draft or published.")
-					.addDropdown(dropdown =>
-						dropdown
-							.addOption("true-is-draft", "True = Draft")
-							.addOption("false-is-draft", "True = Published")
-							.setValue(settings.draftLogic || "true-is-draft")
-							.onChange(async value => {
-								settings.draftLogic = value as 'true-is-draft' | 'false-is-draft';
-								await this.plugin.saveSettings();
-								this.plugin.frontmatterService?.initializeDraftStatusMap();
-							})
-					);
-			});
+			if (settings.draftDetectionMode !== 'underscore-prefix') {
+				automationGroup.addSetting(setting => {
+					setting
+						.setName("Draft property name")
+						.setDesc("The property field to use for draft status.")
+						.addText(text =>
+							text
+								.setPlaceholder("draft")
+								.setValue(settings.draftProperty || "")
+								.onChange(async (value: string) => {
+									settings.draftProperty = value;
+									await this.plugin.saveSettings();
+									this.plugin.frontmatterService?.initializeDraftStatusMap();
+								})
+						);
+				});
+
+				automationGroup.addSetting(setting => {
+					setting
+						.setName("Draft logic")
+						.setDesc("Whether the property value 'true' means it is a draft or published.")
+						.addDropdown(dropdown =>
+							dropdown
+								.addOption("true-is-draft", "True = Draft")
+								.addOption("false-is-draft", "True = Published")
+								.setValue(settings.draftLogic || "true-is-draft")
+								.onChange(async value => {
+									settings.draftLogic = value as 'true-is-draft' | 'false-is-draft';
+									await this.plugin.saveSettings();
+									this.plugin.frontmatterService?.initializeDraftStatusMap();
+								})
+						);
+				});
+			}
 
 			automationGroup.addSetting(setting => {
 				setting
