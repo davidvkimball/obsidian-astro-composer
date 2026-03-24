@@ -65,7 +65,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			setting
 				.setName("Date format")
 				// Date format codes (MMMM, yyyy, etc.) are technical notation, not UI text
-				.setDesc("Format for the date in properties (e.g., yyyy-mm-dd, MMMM D, yyyy, yyyy-mm-dd HH:mm)")
+				.setDesc("Format for the date in properties (yyyy-mm-dd, MMMM D, yyyy, yyyy-mm-dd HH:mm)")
 				.addText(text =>
 					text
 						// "YYYY-MM-DD" is a date format placeholder, not UI text
@@ -116,7 +116,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 		generalGroup.addSetting(setting => {
 			setting
 				.setName("Add trailing slash to links")
-				.setDesc("Add trailing slashes to all converted internal links (e.g., /about/ instead of /about).")
+				.setDesc("Add trailing slashes to all converted internal links (/about/ instead of /about).")
 				.addToggle(toggle =>
 					toggle
 						.setValue(settings.addTrailingSlashToLinks)
@@ -210,7 +210,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			automationGroup.addSetting(setting => {
 				setting
 					.setName("Draft detection mode")
-					.setDesc("How draft status is determined. Property-based uses a boolean property (e.g. draft: true). Underscore prefix uses the filename (e.g. _my-post.md = draft).")
+					.setDesc("How draft status is determined. Property-based uses a boolean property (draft: true). Underscore prefix uses the file name (_my-post.md = draft).")
 					.addDropdown(dropdown =>
 						dropdown
 							.addOption("property", "Property-based")
@@ -265,7 +265,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			automationGroup.addSetting(setting => {
 				setting
 					.setName("Published date property name")
-					.setDesc("The property field to update when published (e.g., 'date' or 'pubDate').")
+					.setDesc("The property field to update when published ('date' or 'pubDate').")
 					.addText(text =>
 						text
 							.setPlaceholder("date")
@@ -873,7 +873,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			const nameContainer = settingsContainer.createDiv();
 			new Setting(nameContainer)
 				.setName("Content type name")
-				.setDesc("Display name for this content type (e.g., 'projects', 'notes', 'tutorials')")
+				.setDesc("Display name for this content type ('projects', 'notes', 'tutorials')")
 				.addText(text => {
 					text
 						.setPlaceholder("Enter content type name")
@@ -893,7 +893,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				.setDesc("Folder path where this content type will be created. Leave blank to use the vault folder. Supports wildcards like directory/* or directory/*/* to match specific folder depths.")
 				.addText(text => {
 					text
-						.setPlaceholder("Enter folder path (e.g., 'docs', 'docs/*', 'docs/*/*') or leave blank for vault root")
+						.setPlaceholder("Enter folder path ('docs', 'docs/*', 'docs/*/*') or leave blank for vault root")
 						.setValue(customType.folder)
 						.onChange(async (value: string) => {
 							customType.folder = value;
@@ -947,7 +947,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			const linkContainer = settingsContainer.createDiv();
 			new Setting(linkContainer)
 				.setName("Link base path")
-				.setDesc("Base path for converted links (e.g., '/projects/', '/notes/tutorials/', leave blank for root /).")
+				.setDesc("Base path for converted links ('/projects/', '/notes/tutorials/', leave blank for root /).")
 				.addText(text => {
 					text
 						.setPlaceholder("Enter link base path")
