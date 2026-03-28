@@ -106,55 +106,46 @@ export class CreateEventService {
                 return;
             }
 
-            const stat = await this.app.vault.adapter.stat(file.path);
-            const isNewNote = stat?.mtime && (now - stat.mtime < CONSTANTS.STAT_MTIME_THRESHOLD);
+            // Primary check: Is this an "Untitled" file? (user clicked new note)
+            // Git-synced files always have real names, so this reliably distinguishes
+            // user-created notes from background sync.
+            const fileName = file.basename;
+            const isUntitled = /^Untitled(\s\d+)?$/.test(fileName);
 
-            if (!isNewNote) {
-                return;
-            }
-
-            // CHECK BACKGROUND PROCESSING ONLY FOR NON-CREATION EVENTS
-            // Actually, handleCreate is ONLY for creation. 
-            // The check was preventing the modal from opening if the active file was not yet set to the new file.
-            const activeFile = this.app.workspace.getActiveFile();
-            const isActiveFile = activeFile && activeFile.path === file.path;
-            if (!this.plugin.settings.processBackgroundFileChanges && !isActiveFile) {
-                return;
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 50));
-
-            let content: string;
-            try {
-                content = await this.app.vault.read(file);
-            } catch (error) {
-                console.error("Error reading file for create detection:", error);
-                return;
-            }
-
-            if (content.trim().length > 0) {
-                if (content.startsWith('---')) {
-                    const frontmatterEnd = content.indexOf('\n---', 3);
-                    if (frontmatterEnd !== -1) {
-                        const frontmatterText = content.slice(4, frontmatterEnd).trim();
-                        const lines = frontmatterText.split('\n').filter(line => line.trim().length > 0);
-
-                        if (!this.plugin.settings.processBackgroundFileChanges && lines.length > 0) {
-                            return;
-                        }
-
-                        if (lines.length > 1 || (lines.length === 1 && !lines[0].startsWith('title:'))) {
-                            return;
-                        }
-                    }
-                }
-                const contentWithoutFrontmatter = content.startsWith('---')
-                    ? content.slice(content.indexOf('\n---', 3) + 4).trim()
-                    : content.trim();
-                if (contentWithoutFrontmatter.length > 0) {
+            if (!isUntitled) {
+                // Not an Untitled file. Only process if background processing is enabled.
+                if (!this.plugin.settings.processBackgroundFileChanges) {
                     return;
                 }
+
+                // Even with background processing, skip files that have real content
+                // (they were synced from git, not freshly created)
+                const stat = await this.app.vault.adapter.stat(file.path);
+                const isRecent = stat?.mtime && (now - stat.mtime < CONSTANTS.STAT_MTIME_THRESHOLD);
+                if (!isRecent) {
+                    return;
+                }
+
+                let content: string;
+                try {
+                    content = await this.app.vault.read(file);
+                } catch {
+                    return;
+                }
+
+                // If file has content beyond an empty template, it's not new
+                if (content.trim().length > 0) {
+                    const contentWithoutFrontmatter = content.startsWith('---')
+                        ? content.slice(content.indexOf('\n---', 3) + 4).trim()
+                        : content.trim();
+                    if (contentWithoutFrontmatter.length > 0) {
+                        return;
+                    }
+                }
             }
+
+            // Small delay to let Obsidian finish switching to the file
+            await new Promise(resolve => setTimeout(resolve, 100));
 
             this.lastProcessedFiles.set(file.path, now);
 
