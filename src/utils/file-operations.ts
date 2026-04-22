@@ -15,10 +15,52 @@ export class FileOperations {
 		return this.settings;
 	}
 
+	private createSafeStem(title: string): string {
+		return toKebabCase(title) || "untitled";
+	}
+
+	private getUniqueFilePath(path: string, currentPathToIgnore?: string): string {
+		const extIndex = path.lastIndexOf(".");
+		const hasExt = extIndex > path.lastIndexOf("/");
+		const extension = hasExt ? path.slice(extIndex) : "";
+		const pathWithoutExt = hasExt ? path.slice(0, extIndex) : path;
+		const slashIndex = pathWithoutExt.lastIndexOf("/");
+		const baseDir = slashIndex >= 0 ? pathWithoutExt.slice(0, slashIndex + 1) : "";
+		const baseName = slashIndex >= 0 ? pathWithoutExt.slice(slashIndex + 1) : pathWithoutExt;
+		let candidate = `${baseDir}${baseName}${extension}`;
+		let suffix = 2;
+
+		while (true) {
+			const existing = this.app.vault.getAbstractFileByPath(candidate);
+			const isCurrentPath = currentPathToIgnore && candidate === currentPathToIgnore;
+			if (!existing || isCurrentPath) {
+				return candidate;
+			}
+			candidate = `${baseDir}${baseName}-${suffix}${extension}`;
+			suffix += 1;
+		}
+	}
+
+	private getUniqueFolderPath(path: string, currentPathToIgnore?: string): string {
+		const slashIndex = path.lastIndexOf("/");
+		const baseDir = slashIndex >= 0 ? path.slice(0, slashIndex + 1) : "";
+		const baseName = slashIndex >= 0 ? path.slice(slashIndex + 1) : path;
+		let candidate = `${baseDir}${baseName}`;
+		let suffix = 2;
+
+		while (true) {
+			const existing = this.app.vault.getAbstractFileByPath(candidate);
+			const isCurrentPath = currentPathToIgnore && candidate === currentPathToIgnore;
+			if (!existing || isCurrentPath) {
+				return candidate;
+			}
+			candidate = `${baseDir}${baseName}-${suffix}`;
+			suffix += 1;
+		}
+	}
+
 	generateFilename(title: string, enableUnderscorePrefix: boolean = false): string {
-		const kebabTitle = toKebabCase(title);
-		// If kebab case results in empty string, use a fallback
-		const safeKebabTitle = kebabTitle || "untitled";
+		const safeKebabTitle = this.createSafeStem(title);
 		const prefix = enableUnderscorePrefix ? "_" : "";
 		return `${prefix}${safeKebabTitle}`;
 	}
@@ -132,7 +174,7 @@ export class FileOperations {
 			return null;
 		}
 
-		const kebabTitle = toKebabCase(title);
+		const kebabTitle = this.createSafeStem(title);
 		const enableUnderscorePrefix = contentType?.enableUnderscorePrefix || false;
 		const prefix = enableUnderscorePrefix ? "_" : "";
 
@@ -169,7 +211,7 @@ export class FileOperations {
 	}
 
 	private async createFolderStructure(file: TFile, kebabTitle: string, prefix: string, targetFolder: string, type: ContentTypeId, contentType: ContentType | null): Promise<TFile | null> {
-		const folderName = `${prefix}${kebabTitle}`;
+		const folderName = `${prefix}${kebabTitle || "untitled"}`;
 		let folderPath: string;
 
 		if (targetFolder) {
@@ -186,6 +228,8 @@ export class FileOperations {
 			}
 		}
 
+		folderPath = this.getUniqueFolderPath(folderPath);
+
 		try {
 			const folder = this.app.vault.getAbstractFileByPath(folderPath);
 			if (!(folder instanceof TFolder)) {
@@ -198,13 +242,8 @@ export class FileOperations {
 		const indexFileName = contentType?.indexFileName || "index";
 		const extension = contentType?.useMdxExtension ? ".mdx" : ".md";
 		const fileName = `${indexFileName}${extension}`;
-		const newPath = `${folderPath}/${fileName}`;
-
-		const existingFile = this.app.vault.getAbstractFileByPath(newPath);
-		if (existingFile instanceof TFile) {
-			new Notice(`File already exists at ${newPath}.`);
-			return null;
-		}
+		const desiredPath = `${folderPath}/${fileName}`;
+		const newPath = this.getUniqueFilePath(desiredPath);
 
 		// Track that this file will be created by the plugin BEFORE renaming
 		// This prevents the create event from triggering another modal
@@ -273,7 +312,8 @@ export class FileOperations {
 
 	private async createFileStructure(file: TFile, kebabTitle: string, prefix: string, targetFolder: string, contentType: ContentType | null): Promise<TFile | null> {
 		const extension = contentType?.useMdxExtension ? ".mdx" : ".md";
-		const newName = `${prefix}${kebabTitle}${extension}`;
+		const safeStem = kebabTitle || "untitled";
+		const newName = `${prefix}${safeStem}${extension}`;
 		let newPath: string;
 
 		if (targetFolder) {
@@ -290,11 +330,7 @@ export class FileOperations {
 			}
 		}
 
-		const existingFile = this.app.vault.getAbstractFileByPath(newPath);
-		if (existingFile instanceof TFile && existingFile !== file) {
-			new Notice(`File with name "${newName}" already exists.`);
-			return null;
-		}
+		newPath = this.getUniqueFilePath(newPath, file.path);
 
 		// Track that this file will be created by the plugin BEFORE renaming
 		// This prevents the create event from triggering another modal
@@ -366,7 +402,7 @@ export class FileOperations {
 			return null;
 		}
 
-		const kebabTitle = toKebabCase(title);
+		const kebabTitle = this.createSafeStem(title);
 		const prefix = "";
 
 		const creationMode = contentType?.creationMode || "file";
@@ -388,7 +424,7 @@ export class FileOperations {
 				return null;
 			}
 			prefix = file.parent.name.startsWith("_") ? "_" : "";
-			const newFolderName = `${prefix}${kebabTitle}`;
+			const newFolderName = `${prefix}${kebabTitle || "untitled"}`;
 			const parentFolder = file.parent.parent;
 			if (!parentFolder) {
 				new Notice("Cannot rename: parent folder has no parent.");
@@ -404,11 +440,7 @@ export class FileOperations {
 				newFolderPath = `${parentFolder.path}/${newFolderName}`;
 			}
 
-			const existingFolder = this.app.vault.getAbstractFileByPath(newFolderPath);
-			if (existingFolder instanceof TFolder) {
-				new Notice(`Folder already exists at ${newFolderPath}.`);
-				return null;
-			}
+			newFolderPath = this.getUniqueFolderPath(newFolderPath, file.parent.path);
 
 			try {
 				await this.app.fileManager.renameFile(file.parent, newFolderPath);
@@ -435,14 +467,10 @@ export class FileOperations {
 			prefix = file.basename.startsWith("_") ? "_" : "";
 			// Preserve the original file extension
 			const extension = file.extension;
-			const newName = `${prefix}${kebabTitle}.${extension}`;
-			const newPath = `${file.parent.path}/${newName}`;
-
-			const existingFile = this.app.vault.getAbstractFileByPath(newPath);
-			if (existingFile instanceof TFile && existingFile !== file) {
-				new Notice(`File already exists at ${newPath}.`);
-				return null;
-			}
+			const safeStem = kebabTitle || "untitled";
+			const newName = `${prefix}${safeStem}.${extension}`;
+			const desiredPath = `${file.parent.path}/${newName}`;
+			const newPath = this.getUniqueFilePath(desiredPath, file.path);
 
 			// Use fileManager.renameFile() which automatically updates links
 			await this.app.fileManager.renameFile(file, newPath);
@@ -472,7 +500,7 @@ export class FileOperations {
 
 		if (isIndex) {
 			prefix = file.parent.name.startsWith("_") ? "_" : "";
-			const newFolderName = `${prefix}${kebabTitle}`;
+			const newFolderName = `${prefix}${kebabTitle || "untitled"}`;
 			const parentFolder = file.parent.parent;
 			if (!parentFolder) {
 				new Notice("Cannot rename: parent folder has no parent.");
@@ -488,11 +516,7 @@ export class FileOperations {
 				newFolderPath = `${parentFolder.path}/${newFolderName}`;
 			}
 
-			const existingFolder = this.app.vault.getAbstractFileByPath(newFolderPath);
-			if (existingFolder instanceof TFolder) {
-				new Notice(`Folder already exists at ${newFolderPath}.`);
-				return null;
-			}
+			newFolderPath = this.getUniqueFolderPath(newFolderPath, file.parent.path);
 
 			// Calculate the new file path before renaming
 			const newFilePath = `${newFolderPath}/${file.name}`;
@@ -525,7 +549,8 @@ export class FileOperations {
 		prefix = file.basename.startsWith("_") ? "_" : "";
 		// Preserve the original file extension
 		const extension = file.extension;
-		const newName = `${prefix}${kebabTitle}.${extension}`;
+		const safeStem = kebabTitle || "untitled";
+		const newName = `${prefix}${safeStem}.${extension}`;
 
 		// Fix path construction to avoid double slashes
 		let newPath: string;
@@ -537,11 +562,7 @@ export class FileOperations {
 			newPath = `${file.parent.path}/${newName}`;
 		}
 
-		const existingFile = this.app.vault.getAbstractFileByPath(newPath);
-		if (existingFile instanceof TFile && existingFile !== file) {
-			new Notice(`File already exists at ${newPath}.`);
-			return null;
-		}
+		newPath = this.getUniqueFilePath(newPath, file.path);
 
 		// Track that this file will be created by the plugin BEFORE renaming
 		// This prevents the create event from triggering another modal

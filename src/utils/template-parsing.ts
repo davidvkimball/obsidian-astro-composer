@@ -1,5 +1,6 @@
 import { App, TFile, Notice } from "obsidian";
 import { AstroComposerSettings, ParsedFrontmatter, TemplateValues, KNOWN_ARRAY_KEYS, ContentTypeId, AstroComposerPluginInterface } from "../types";
+import { toKebabCase } from "./string-utils";
 
 export class TemplateParser {
 	constructor(private app: App, private settings: AstroComposerSettings, private plugin?: AstroComposerPluginInterface) { }
@@ -11,19 +12,6 @@ export class TemplateParser {
 			return this.plugin.settings;
 		}
 		return this.settings;
-	}
-
-	/**
-	 * Convert a string to kebab-case for slug generation
-	 */
-	private toKebabCase(str: string): string {
-		return str
-			.toLowerCase()
-			.replace(/[^a-z0-9\s-]/g, "")
-			.trim()
-			.replace(/\s+/g, "-")
-			.replace(/-+/g, "-")
-			.replace(/^-|-$/g, "");
 	}
 
 	parseFrontmatter(content: string): ParsedFrontmatter {
@@ -223,7 +211,7 @@ export class TemplateParser {
 						}
 					} else {
 						// This is a string property, not an array
-						const slug = this.toKebabCase(title);
+						const slug = toKebabCase(title);
 						const settings = this.getSettings();
 						const stringValue = (value || "")
 							.replace(/\{\{title\}\}/g, title)
@@ -354,7 +342,7 @@ export class TemplateParser {
 
 		// Also update slug if it exists in frontmatter
 		if ("slug" in existing) {
-			const newSlug = this.toKebabCase(newTitle);
+			const newSlug = toKebabCase(newTitle);
 			existing["slug"] = newSlug;
 		}
 
