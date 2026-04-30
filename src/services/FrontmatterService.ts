@@ -21,6 +21,35 @@ export class FrontmatterService {
         // No-op, kept for interface compatibility
     }
 
+    private getNestedProperty(obj: any, path: string): any {
+        if (!obj || !path) return undefined;
+        if (!path.includes('.')) return obj[path];
+        const parts = path.split('.');
+        let current = obj;
+        for (const part of parts) {
+            if (current === undefined || current === null) return undefined;
+            current = current[part];
+        }
+        return current;
+    }
+
+    private setNestedProperty(obj: any, path: string, value: any): void {
+        if (!path.includes('.')) {
+            obj[path] = value;
+            return;
+        }
+        const parts = path.split('.');
+        const lastProp = parts.pop()!;
+        let current = obj;
+        for (const part of parts) {
+            if (current[part] === undefined || current[part] === null || typeof current[part] !== 'object') {
+                current[part] = {};
+            }
+            current = current[part];
+        }
+        current[lastProp] = value;
+    }
+
     public initializeDraftStatusMap() {
         this.draftStatusMap.clear();
         const settings = this.plugin.settings;
@@ -34,7 +63,7 @@ export class FrontmatterService {
                 this.draftStatusMap.set(file.path, file.name.startsWith('_'));
             } else {
                 const cache = this.app.metadataCache.getFileCache(file);
-                const rawValue = cache?.frontmatter?.[draftProp];
+                const rawValue = this.getNestedProperty(cache?.frontmatter, draftProp);
                 this.draftStatusMap.set(file.path, this.calculateIsDraft(rawValue, settings));
             }
         }
@@ -150,7 +179,7 @@ export class FrontmatterService {
         // Track draft status changes (property-based only)
         const cache = this.app.metadataCache.getFileCache(file);
         const draftProp = settings.draftProperty || "draft";
-        const rawValue = cache?.frontmatter?.[draftProp];
+        const rawValue = this.getNestedProperty(cache?.frontmatter, draftProp);
 
         // Logic: true-is-draft vs false-is-draft
         const isCurrentlyDraft = this.calculateIsDraft(rawValue, settings);
@@ -258,8 +287,8 @@ export class FrontmatterService {
 
         await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
             const today = moment().format(settings.dateFormat);
-            if (frontmatter[dateField] !== today) {
-                frontmatter[dateField] = today;
+            if (this.getNestedProperty(frontmatter, dateField) !== today) {
+                this.setNestedProperty(frontmatter, dateField, today);
                 this.lastProcessedFile = file.path;
                 this.lastProcessedTime = Date.now();
             }
@@ -276,18 +305,18 @@ export class FrontmatterService {
             // Handle Draft Sync (triggered only on the specific transition)
             if (settings.syncDraftDate && draftStatusChangedToPublished) {
                 const today = moment().format(settings.dateFormat);
-                if (frontmatter[publishDateField] !== today) {
-                    frontmatter[publishDateField] = today;
+                if (this.getNestedProperty(frontmatter, publishDateField) !== today) {
+                    this.setNestedProperty(frontmatter, publishDateField, today);
                     changed = true;
                 }
             }
 
             // Handle Modified Date Sync
             const modifiedField = contentType?.modifiedDateField;
-            if (modifiedField && frontmatter[modifiedField] !== undefined) {
+            if (modifiedField && this.getNestedProperty(frontmatter, modifiedField) !== undefined) {
                 const now = moment().format(settings.dateFormat);
-                if (frontmatter[modifiedField] !== now) {
-                    frontmatter[modifiedField] = now;
+                if (this.getNestedProperty(frontmatter, modifiedField) !== now) {
+                    this.setNestedProperty(frontmatter, modifiedField, now);
                     changed = true;
                 }
             }
