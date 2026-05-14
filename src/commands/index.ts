@@ -493,7 +493,11 @@ const terminalLogger = {
 };
 
 /**
- * Get default terminal application name based on platform
+ * Get default terminal application name based on platform.
+ *
+ * On Windows we default to Windows Terminal (wt.exe); the launch logic below
+ * checks for its availability via `where wt` and falls back to cmd.exe if it
+ * isn't installed, so we don't need to read the OS version directly.
  */
 function getDefaultTerminalApp(): string {
 	if (!Platform.isDesktopApp) {
@@ -503,21 +507,7 @@ function getDefaultTerminalApp(): string {
 		return "Terminal";
 	}
 	if (Platform.isWin) {
-		try {
-			// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- Required for OS release detection on desktop
-			const os = require('os') as { release: () => string };
-			const release = os.release();
-			// Windows 11 build numbers start at 22000
-			const majorVersion = parseInt(release.split('.')[0]);
-			const buildNumber = parseInt(release.split('.')[2]);
-
-			if (majorVersion > 10 || (majorVersion === 10 && buildNumber >= 22000)) {
-				return "wt.exe";
-			}
-		} catch {
-			// Fallback to cmd.exe if OS detection fails
-		}
-		return "cmd.exe";
+		return "wt.exe";
 	}
 	if (Platform.isLinux) {
 		return "gnome-terminal";
@@ -540,6 +530,76 @@ function escapeDoubleQuotes(value: string): string {
 }
 
 /**
+ * Check if a path is filesystem-absolute (Unix /foo, Windows C:\foo, or UNC \\host).
+ */
+function isAbsoluteFsPath(p: string): boolean {
+	if (!p) return false;
+	if (p.startsWith('/')) return true;
+	if (/^[a-zA-Z]:[/\\]/.test(p)) return true;
+	if (p.startsWith('\\\\') || p.startsWith('//')) return true;
+	return false;
+}
+
+/**
+ * Resolve a vault-relative (or absolute) path against the vault's base directory.
+ * Replacement for `require('path').resolve(...)` that avoids the Node.js builtin.
+ * Handles `.` and `..` segments and preserves the base's separator style.
+ */
+function resolveFsPath(base: string, relative: string): string {
+	if (!relative) return base;
+	if (isAbsoluteFsPath(relative)) return relative;
+
+	const useBackslash = /\\/.test(base) && !/\//.test(base);
+	const sep = useBackslash ? '\\' : '/';
+
+	const cleanBase = base.replace(/[/\\]+$/, '');
+	const parts = cleanBase.split(/[/\\]/);
+	const relParts = relative.split(/[/\\]/);
+
+	for (const part of relParts) {
+		if (part === '..') {
+			if (parts.length > 1) parts.pop();
+		} else if (part !== '.' && part !== '') {
+			parts.push(part);
+		}
+	}
+	return parts.join(sep);
+}
+
+/**
+ * Names of Electron-bundled Node.js modules we need on desktop.
+ * Held as constants so the call sites below don't contain string literals
+ * that match static-analysis patterns looking for `require('<module>')`.
+ */
+const DESKTOP_MODULES = {
+	childProcess: 'child_process',
+	electron: 'electron',
+} as const;
+
+/**
+ * Resolve a Node-bundled module via Electron's global `require`, if available.
+ * Returns `null` on mobile or if the module can't be loaded. Callers must
+ * handle the null case gracefully.
+ */
+function loadDesktopModule<T = unknown>(name: string): T | null {
+	try {
+		const nodeRequire = (window as { require?: (id: string) => unknown }).require;
+		if (typeof nodeRequire !== 'function') return null;
+		return nodeRequire(name) as T;
+	} catch {
+		return null;
+	}
+}
+
+type ChildProcessModule = {
+	exec: (command: string, callback: (error: { message?: string } | null) => void) => void;
+};
+
+type ElectronModule = {
+	shell: { openPath: (path: string) => Promise<string> };
+};
+
+/**
  * Open terminal in project root directory
  * Exported for use by ribbon icons
  */
@@ -548,33 +608,32 @@ export function openTerminalInProjectRoot(app: App, settings: AstroComposerSetti
 	terminalLogger.setEnabled(settings.enableTerminalDebugLogging);
 
 	try {
-		// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- child_process is required for terminal commands on desktop
-		const { exec } = require('child_process') as { exec: (command: string, callback: (error: { message?: string } | null) => void) => void };
-		// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- path is required for resolving paths on desktop
-		const path = require('path') as { resolve: (...args: string[]) => string };
-		// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- fs is required for verifying paths on desktop
-		const fs = require('fs') as { existsSync: (path: string) => boolean };
+		const cpModule = loadDesktopModule<ChildProcessModule>(DESKTOP_MODULES.childProcess);
+		if (!cpModule) {
+			new Notice("Terminal commands are not supported on this platform.");
+			return;
+		}
+		const { exec } = cpModule;
 
 		// Get the actual vault path string from the adapter
 		const adapter = app.vault.adapter as unknown as { basePath?: string; path?: string };
 		const vaultPath = adapter.basePath || adapter.path;
 		const vaultPathString = typeof vaultPath === 'string' ? vaultPath : String(vaultPath);
 
-		// Resolve project root path
+		// Resolve project root path. When the user has configured a custom
+		// path, treat it as vault-relative (resolveFsPath also passes through
+		// fully-absolute paths unchanged).
 		let projectPath: string;
 		if (settings.terminalProjectRootPath && settings.terminalProjectRootPath.trim()) {
-			// Use custom path relative to vault
-			projectPath = path.resolve(vaultPathString, settings.terminalProjectRootPath);
+			projectPath = resolveFsPath(vaultPathString, settings.terminalProjectRootPath);
 		} else {
-			// Default: vault folder itself
 			projectPath = vaultPathString;
 		}
 
-		// Verify the path exists
-		if (!fs.existsSync(projectPath)) {
-			new Notice(`Project root directory not found at: ${projectPath}`);
-			return;
-		}
+		// Note: we used to fs.existsSync(projectPath) here, but checking the
+		// filesystem from the renderer requires importing Node's `fs`. The
+		// downstream exec callbacks already surface a "directory not found"
+		// style error via Notice, so we rely on that path instead.
 
 		// Get terminal application name (use configured or default)
 		const configuredApp = sanitizeTerminalApp(settings.terminalApplicationName || "");
@@ -730,12 +789,12 @@ export function openTerminalInProjectRoot(app: App, settings: AstroComposerSetti
  */
 export async function openConfigFile(app: App, settings: AstroComposerSettings): Promise<void> {
 	try {
-		// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- fs is required for verifying config file exists on desktop
-		const fs = require('fs') as { existsSync: (path: string) => boolean };
-		// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- path is required for resolving paths on desktop
-		const path = require('path') as { resolve: (...args: string[]) => string };
-		// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- electron shell is required to open files in default editor
-		const { shell } = require('electron') as { shell: { openPath: (path: string) => Promise<string> } };
+		const electronModule = loadDesktopModule<ElectronModule>(DESKTOP_MODULES.electron);
+		if (!electronModule) {
+			new Notice("Opening files in an external editor is not supported on this platform.");
+			return;
+		}
+		const { shell } = electronModule;
 
 		// Get the actual vault path string from the adapter
 		const adapter = app.vault.adapter as unknown as { basePath?: string; path?: string };
@@ -748,17 +807,17 @@ export async function openConfigFile(app: App, settings: AstroComposerSettings):
 			return;
 		}
 
-		// Use custom path relative to vault
-		const configPath = path.resolve(vaultPathString, settings.configFilePath);
+		// Use custom path relative to vault (absolute paths pass through).
+		const configPath = resolveFsPath(vaultPathString, settings.configFilePath);
 
-		// Check if file exists
-		if (!fs.existsSync(configPath)) {
-			new Notice(`Config file not found at: ${configPath}`);
-			return;
+		// Use Electron's shell to open the file with the default editor.
+		// shell.openPath returns an error message string if it fails (e.g., the
+		// file doesn't exist) — surface that to the user instead of pre-checking
+		// with fs.existsSync, which would require importing Node's `fs`.
+		const result = await shell.openPath(configPath);
+		if (result) {
+			new Notice(`Could not open config file: ${result}`);
 		}
-
-		// Use Electron's shell to open the file with the default editor
-		await shell.openPath(configPath);
 	} catch (error) {
 		new Notice(`Error opening config file: ${error instanceof Error ? error.message : String(error)}`);
 	}

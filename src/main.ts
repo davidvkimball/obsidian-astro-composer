@@ -457,11 +457,16 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		const existingReplacement = originalHelpButton.parentElement?.querySelector('[data-astro-composer-help-replacement="true"]');
 		if (existingReplacement) {
 			this.customHelpButton = existingReplacement as HTMLElement;
+			// Make sure the original is tagged so CSS hides it.
+			originalHelpButton.addClass('astro-composer-original-help-button');
 			return;
 		}
 
-		// 5. Create and inject the replacement
+		// 5. Create and inject the replacement. Clone FIRST so the clone doesn't
+		//    inherit the hiding marker class, then tag the original.
 		const customButton = originalHelpButton.cloneNode(true) as HTMLElement;
+		originalHelpButton.addClass('astro-composer-original-help-button');
+		customButton.removeClass('astro-composer-original-help-button');
 		customButton.addClass("astro-composer-help-replacement");
 		customButton.removeAttribute('aria-label');
 		customButton.setAttribute('data-astro-composer-help-replacement', 'true');
@@ -499,6 +504,9 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			this.customHelpButton.remove();
 			this.customHelpButton = undefined;
 		}
+		// Untag any originals so they show again when the feature is disabled.
+		const tagged = activeDocument.querySelectorAll('.astro-composer-original-help-button');
+		tagged.forEach((el) => el.removeClass('astro-composer-original-help-button'));
 		this.helpButtonElement = undefined;
 	}
 
@@ -518,11 +526,19 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 				if (iconName) iconName = iconName.replace(/^lucide-/, '');
 
+				// Tagging with the marker class hides the item via CSS even if the
+				// subsequent .remove() is delayed for any reason (defense-in-depth).
 				if (terminalShouldBeHidden && iconName === 'terminal-square') {
-					if (item.textContent?.toLowerCase().includes('terminal')) item.remove();
+					if (item.textContent?.toLowerCase().includes('terminal')) {
+						item.addClass('astro-composer-hidden-menu-item');
+						item.remove();
+					}
 				}
 				if (configShouldBeHidden && (iconName === 'rocket' || iconName === 'wrench')) {
-					if (item.textContent?.toLowerCase().includes('config')) item.remove();
+					if (item.textContent?.toLowerCase().includes('config')) {
+						item.addClass('astro-composer-hidden-menu-item');
+						item.remove();
+					}
 				}
 			}
 		}
