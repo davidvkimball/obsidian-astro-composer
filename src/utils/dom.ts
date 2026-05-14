@@ -6,26 +6,26 @@
  */
 export function waitForElement(selector: string, timeout = 5000): Promise<Element> {
 	return new Promise((resolve, reject) => {
-		const element = document.querySelector(selector);
+		const element = activeDocument.querySelector(selector);
 		if (element) {
 			return resolve(element);
 		}
 
 		const observer = new MutationObserver((mutations) => {
-			const targetElement = document.querySelector(selector);
+			const targetElement = activeDocument.querySelector(selector);
 			if (targetElement) {
 				resolve(targetElement);
 				observer.disconnect();
-				clearTimeout(timer);
+				window.clearTimeout(timer);
 			}
 		});
 
-		observer.observe(document.body, {
+		observer.observe(activeDocument.body, {
 			childList: true,
 			subtree: true,
 		});
 
-		const timer = setTimeout(() => {
+		const timer = window.setTimeout(() => {
 			observer.disconnect();
 			reject(new Error(`Timeout waiting for element matching selector: ${selector}`));
 		}, timeout);

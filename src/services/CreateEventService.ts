@@ -145,11 +145,11 @@ export class CreateEventService {
             }
 
             // Small delay to let Obsidian finish switching to the file
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => window.setTimeout(resolve, 100));
 
             this.lastProcessedFiles.set(file.path, now);
 
-            setTimeout(() => {
+            window.setTimeout(() => {
                 this.lastProcessedFiles.delete(file.path);
             }, CONSTANTS.DEBOUNCE_MS + 100);
 

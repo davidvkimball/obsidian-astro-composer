@@ -66,7 +66,10 @@ export class FileOperations {
 	}
 
 	determineType(file: TFile): ContentTypeId {
-		const filePath = file.path;
+		return this.determineTypeByPath(file.path);
+	}
+
+	determineTypeByPath(filePath: string): ContentTypeId {
 		const settings = this.getSettings();
 
 		// Check all content types, sorted by pattern specificity (more specific first)
@@ -122,9 +125,7 @@ export class FileOperations {
 	 * Helper to get content type for a given file path
 	 */
 	getContentTypeByPath(filePath: string): ContentType | null {
-		// Create a dummy TFile for determineType
-		const dummyFile = { path: filePath } as TFile;
-		const typeId = this.determineType(dummyFile);
+		const typeId = this.determineTypeByPath(filePath);
 		if (typeId === "note") return null;
 		return this.getContentType(typeId);
 	}
@@ -258,7 +259,7 @@ export class FileOperations {
 				return null;
 			}
 
-			setTimeout(() => {
+			window.setTimeout(() => {
 				const fileExplorer = this.app.workspace.getLeavesOfType("file-explorer")[0];
 				if (fileExplorer && fileExplorer.view) {
 					const view = fileExplorer.view;
@@ -294,9 +295,9 @@ export class FileOperations {
 				return false;
 			};
 
-			setTimeout(() => {
+			window.setTimeout(() => {
 				if (!positionCursor()) {
-					setTimeout(() => {
+					window.setTimeout(() => {
 						positionCursor();
 					}, 200);
 				}
@@ -371,9 +372,9 @@ export class FileOperations {
 				return false;
 			};
 
-			setTimeout(() => {
+			window.setTimeout(() => {
 				if (!positionCursor()) {
-					setTimeout(() => {
+					window.setTimeout(() => {
 						positionCursor();
 					}, 200);
 				}

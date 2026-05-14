@@ -97,7 +97,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			setting
 				.setName("Default heading link format")
 				// "Astro" is a proper noun (framework name) and should be capitalized
-				.setDesc("Choose the default format for copied heading links. Obsidian format respects your Obsidian settings for wikilink vs markdown preference. Astro link uses your link base path from above and converts the heading into kebab-case format as an anchor link")
+				.setDesc("Choose the default format for copied heading links. Obsidian format respects your Obsidian settings for wikilink vs Markdown preference. Astro link uses your link base path from above and converts the heading into kebab-case format as an anchor link")
 				.addDropdown(dropdown =>
 					dropdown
 						.addOption("obsidian", "Obsidian link")
@@ -234,7 +234,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						.setDesc("The property field to use for draft status.")
 						.addText(text =>
 							text
-								.setPlaceholder("draft")
+								.setPlaceholder("Draft")
 								.setValue(settings.draftProperty || "")
 								.onChange(async (value: string) => {
 									settings.draftProperty = value;
@@ -250,8 +250,8 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						.setDesc("Whether the property value 'true' means it is a draft or published.")
 						.addDropdown(dropdown =>
 							dropdown
-								.addOption("true-is-draft", "True = Draft")
-								.addOption("false-is-draft", "True = Published")
+								.addOption("true-is-draft", "True = draft")
+								.addOption("false-is-draft", "True = published")
 								.setValue(settings.draftLogic || "true-is-draft")
 								.onChange(async value => {
 									settings.draftLogic = value as 'true-is-draft' | 'false-is-draft';
@@ -265,10 +265,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			automationGroup.addSetting(setting => {
 				setting
 					.setName("Published date property name")
-					.setDesc("The property field to update when published ('date' or 'pubDate').")
+					.setDesc("The property field to update when published ('date' or 'pubdate').")
 					.addText(text =>
 						text
-							.setPlaceholder("date")
+							.setPlaceholder("Date")
 							.setValue(settings.publishDateField || "")
 							.onChange(async (value: string) => {
 								settings.publishDateField = value;
@@ -327,9 +327,9 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenTerminalCommand);
 
 			developerGroup.addSetting(setting => {
-				const descFragment = document.createDocumentFragment();
+				const descFragment = activeDocument.createDocumentFragment();
 				// Text is already in sentence case; "Obsidian" is a proper noun
-				descFragment.createEl("div", { text: "Path relative to the Obsidian vault root folder. Use ../.. for two levels up. Leave blank to use the vault folder" });
+				descFragment.createEl("div", { text: "Path relative to the Obsidian vault root folder. For two levels up, use \"../..\". Leave blank to use the vault folder" });
 				descFragment.createEl("div", { text: "This is where the terminal will open. Absolute paths work also." });
 				setting
 					.setName("Project root directory path")
@@ -349,11 +349,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			});
 
 			developerGroup.addSetting(setting => {
-				const descFragment = document.createDocumentFragment();
+				const descFragment = activeDocument.createDocumentFragment();
 				// Text is already in sentence case; proper nouns or product names like "macOS", "Windows", "Linux"
 				descFragment.createEl("div", { text: "Leave blank to use platform defaults. On macOS, the default is Terminal. On Windows, it's Windows Terminal (Win 11) or cmd.exe (Win 10). On Linux, it's gnome-terminal, konsole, or xterm" });
 				// Text is already in sentence case; proper nouns like "Terminal", "iTerm", "PowerShell"
-				descFragment.createEl("div", { text: "Examples include Terminal, iTerm, PowerShell, and Alacritty" });
+				descFragment.createEl("div", { text: "Examples include terminal, iTerm, PowerShell, and Alacritty" });
 				setting
 					.setName("Terminal application name")
 					.setDesc(descFragment)
@@ -403,7 +403,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 								settings.enableTerminalRibbonIcon = value;
 								await this.plugin.saveSettings();
 								// Small delay to ensure settings are saved, then re-register
-								setTimeout(() => {
+								window.setTimeout(() => {
 									if (this.plugin.registerRibbonIcons) {
 										this.plugin.registerRibbonIcons();
 									}
@@ -421,7 +421,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			developerGroup.addSetting(setting => {
 				setting
 					.setName("Enable edit config file command")
-					.setDesc("Enable command to open astro config file in default editor.")
+					.setDesc("Enable command to open Astro config file in default editor.")
 					.addToggle(toggle =>
 						toggle
 							.setValue(settings.enableOpenConfigFileCommand)
@@ -444,7 +444,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			this.configCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenConfigFileCommand);
 
 			developerGroup.addSetting(setting => {
-				const descFragment = document.createDocumentFragment();
+				const descFragment = activeDocument.createDocumentFragment();
 				descFragment.createEl("div", { text: "Path to the config file relative to the vault root. Use ../config.ts or ../../astro.config.mjs." });
 				descFragment.createEl("div", { text: "Absolute paths work also." });
 				setting
@@ -479,7 +479,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 								settings.enableConfigRibbonIcon = value;
 								await this.plugin.saveSettings();
 								// Small delay to ensure settings are saved, then re-register
-								setTimeout(() => {
+								window.setTimeout(() => {
 									if (this.plugin.registerRibbonIcons) {
 										this.plugin.registerRibbonIcons();
 									}
@@ -933,7 +933,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			const underscorePrefixContainer = settingsContainer.createDiv();
 			new Setting(underscorePrefixContainer)
 				.setName("Use underscore prefix for drafts")
-				.setDesc("Add an underscore prefix (_content-title) to new notes by default when enabled. This hides them from astro, which can be helpful for drafts")
+				.setDesc("Add an underscore prefix (_content-title) to new notes by default when enabled. This hides them from Astro, which can be helpful for drafts")
 				.addToggle(toggle =>
 					toggle
 						.setValue(customType.enableUnderscorePrefix || false)
@@ -984,7 +984,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				.setDesc("Name for index files in folder-based content (without .md extension). Defaults to 'index' if left blank.")
 				.addText(text =>
 					text
-						.setPlaceholder("index")
+						.setPlaceholder("Index")
 						.setValue(customType.indexFileName)
 						.onChange(async (value: string) => {
 							customType.indexFileName = value;
@@ -996,7 +996,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			const useMdxContainer = settingsContainer.createDiv();
 			new Setting(useMdxContainer)
 				// "MDX" is a proper noun (file format) and should be capitalized
-				.setName("Use MDX instead of MD")
+				.setName("Use MDX instead of md")
 				.setDesc("Create files with .mdx extension instead of .md extension.")
 				.addToggle(toggle =>
 					toggle
@@ -1014,7 +1014,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				.setDesc("The property field to update with the modified date for this content type. Leave blank to disable.")
 				.addText(text =>
 					text
-						.setPlaceholder("modified")
+						.setPlaceholder("Modified")
 						.setValue(customType.modifiedDateField || "")
 						.onChange(async (value: string) => {
 							customType.modifiedDateField = value;

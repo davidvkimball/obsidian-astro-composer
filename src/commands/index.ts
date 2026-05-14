@@ -36,7 +36,7 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 
 		plugin.addCommand({
 			id: "convert-wikilinks-astro",
-			name: "Convert internal links for astro",
+			name: "Convert internal links for Astro",
 			icon: "link-2",
 			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 				const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
@@ -127,7 +127,7 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 	// Convert Wikilinks command
 	plugin.addCommand({
 		id: "convert-wikilinks-astro",
-		name: "Convert internal links for astro",
+		name: "Convert internal links for Astro",
 		icon: "link-2",
 		editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 			const file = ctx instanceof MarkdownView ? ctx.file : ctx.file;
@@ -191,7 +191,7 @@ export function registerCommands(plugin: Plugin, settings: AstroComposerSettings
 	if (!isMobile) {
 		plugin.addCommand({
 			id: "edit-astro-config",
-			name: "Edit astro config",
+			name: "Edit Astro config",
 			icon: "rocket",
 			callback: async () => {
 				const currentSettings = (plugin as unknown as AstroComposerPluginInterface).settings;
@@ -246,7 +246,7 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 	templateString = contentType.template;
 
 	// Wait briefly to allow editor state to stabilize
-	await new Promise(resolve => setTimeout(resolve, 100));
+	await new Promise(resolve => window.setTimeout(resolve, 100));
 
 	// Re-read content to ensure latest state after editor changes
 	const content = await app.vault.read(file);
@@ -322,7 +322,7 @@ async function standardizeProperties(app: App, settings: AstroComposerSettings, 
 	// Restore cursor position if editor was provided and file is still open
 	if (editor && cursorPosition) {
 		// Wait for Obsidian to reload the file in the editor
-		await new Promise(resolve => setTimeout(resolve, 50));
+		await new Promise(resolve => window.setTimeout(resolve, 50));
 
 		// Try to get the active editor for this file
 		const activeView = app.workspace.getActiveViewOfType(MarkdownView);
@@ -504,7 +504,7 @@ function getDefaultTerminalApp(): string {
 	}
 	if (Platform.isWin) {
 		try {
-			// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef -- Required for OS release detection on desktop
+			// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- Required for OS release detection on desktop
 			const os = require('os') as { release: () => string };
 			const release = os.release();
 			// Windows 11 build numbers start at 22000
@@ -548,11 +548,11 @@ export function openTerminalInProjectRoot(app: App, settings: AstroComposerSetti
 	terminalLogger.setEnabled(settings.enableTerminalDebugLogging);
 
 	try {
-		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef -- child_process is required for terminal commands on desktop
+		// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- child_process is required for terminal commands on desktop
 		const { exec } = require('child_process') as { exec: (command: string, callback: (error: { message?: string } | null) => void) => void };
-		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef -- path is required for resolving paths on desktop
+		// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- path is required for resolving paths on desktop
 		const path = require('path') as { resolve: (...args: string[]) => string };
-		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef -- fs is required for verifying paths on desktop
+		// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- fs is required for verifying paths on desktop
 		const fs = require('fs') as { existsSync: (path: string) => boolean };
 
 		// Get the actual vault path string from the adapter
@@ -730,9 +730,9 @@ export function openTerminalInProjectRoot(app: App, settings: AstroComposerSetti
  */
 export async function openConfigFile(app: App, settings: AstroComposerSettings): Promise<void> {
 	try {
-		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef -- fs is required for verifying config file exists on desktop
+		// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- fs is required for verifying config file exists on desktop
 		const fs = require('fs') as { existsSync: (path: string) => boolean };
-		// eslint-disable-next-line import/no-nodejs-modules, @typescript-eslint/no-require-imports, no-undef -- path is required for resolving paths on desktop
+		// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- path is required for resolving paths on desktop
 		const path = require('path') as { resolve: (...args: string[]) => string };
 		// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- electron shell is required to open files in default editor
 		const { shell } = require('electron') as { shell: { openPath: (path: string) => Promise<string> } };

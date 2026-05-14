@@ -17,8 +17,6 @@ import { HeadingLinkGenerator } from "./utils/heading-link-generator";
 import { MigrationService } from "./services/MigrationService";
 import { CreateEventService } from "./services/CreateEventService";
 import { FrontmatterService } from "./services/FrontmatterService";
-import { waitForElement } from "./utils/dom";
-
 export default class AstroComposerPlugin extends Plugin implements AstroComposerPluginInterface {
 	settings!: AstroComposerSettings;
 	private createEventRef?: EventRef;
@@ -120,7 +118,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	}
 
 	private registerTitlePropertyClickListener() {
-		this.registerDomEvent(document, "click", (evt: MouseEvent) => {
+		this.registerDomEvent(activeDocument, "click", (evt: MouseEvent) => {
 			if (!this.settings.renameOnTitleClick) return;
 
 			const target = evt.target as HTMLElement;
@@ -262,9 +260,9 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				this.configRibbonIcon = null;
 			}
 			try {
-				const terminalIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Open project terminal"]');
+				const terminalIcons = activeDocument.querySelectorAll('.side-dock-ribbon-action[aria-label="Open project terminal"]');
 				terminalIcons.forEach((icon: Element) => icon.remove());
-				const configIcons = document.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit astro config"]');
+				const configIcons = activeDocument.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit Astro config"]');
 				configIcons.forEach((icon: Element) => icon.remove());
 			} catch { /* Ignore */ }
 			return;
@@ -284,8 +282,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		}
 
 		try {
-			document.querySelectorAll('.side-dock-ribbon-action[aria-label="Open project terminal"]').forEach(el => el.remove());
-			document.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit astro config"]').forEach(el => el.remove());
+			activeDocument.querySelectorAll('.side-dock-ribbon-action[aria-label="Open project terminal"]').forEach(el => el.remove());
+			activeDocument.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit Astro config"]').forEach(el => el.remove());
 		} catch { /* Ignore */ }
 
 		if (terminalShouldExist) {
@@ -300,7 +298,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		}
 
 		if (configShouldExist) {
-			this.configRibbonIcon = this.addRibbonIcon('rocket', 'Edit astro config', async () => {
+			this.configRibbonIcon = this.addRibbonIcon('rocket', 'Edit Astro config', async () => {
 				if (!this.settings.enableOpenConfigFileCommand) {
 					new Notice("Edit config file command is disabled.");
 					return;
@@ -328,8 +326,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			this.ribbonContextMenuObserver.disconnect();
 			this.ribbonContextMenuObserver = undefined;
 		}
-		document.body.removeClass('astro-composer-hide-terminal-icon');
-		document.body.removeClass('astro-composer-hide-config-icon');
+		activeDocument.body.removeClass('astro-composer-hide-terminal-icon');
+		activeDocument.body.removeClass('astro-composer-hide-config-icon');
 		if (this.helpButtonObserver) {
 			this.helpButtonObserver.disconnect();
 			this.helpButtonObserver = undefined;
@@ -350,11 +348,11 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		const terminalShouldBeHidden = !this.settings.enableTerminalRibbonIcon || !this.settings.enableOpenTerminalCommand;
 		const configShouldBeHidden = !this.settings.enableConfigRibbonIcon || !this.settings.enableOpenConfigFileCommand;
 
-		if (terminalShouldBeHidden) document.body.addClass('astro-composer-hide-terminal-icon');
-		else document.body.removeClass('astro-composer-hide-terminal-icon');
+		if (terminalShouldBeHidden) activeDocument.body.addClass('astro-composer-hide-terminal-icon');
+		else activeDocument.body.removeClass('astro-composer-hide-terminal-icon');
 
-		if (configShouldBeHidden) document.body.addClass('astro-composer-hide-config-icon');
-		else document.body.removeClass('astro-composer-hide-config-icon');
+		if (configShouldBeHidden) activeDocument.body.addClass('astro-composer-hide-config-icon');
+		else activeDocument.body.removeClass('astro-composer-hide-config-icon');
 	}
 
 	private setupRibbonContextMenuObserver() {
@@ -369,7 +367,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			for (const mutation of mutations) {
 				if (mutation.addedNodes.length > 0) {
 					for (const node of Array.from(mutation.addedNodes)) {
-						if (node instanceof HTMLElement) {
+						if (node.instanceOf(HTMLElement)) {
 							if (node.classList.contains('menu') || node.querySelector('.menu')) {
 								this.removeRibbonIconsFromContextMenu(node);
 							}
@@ -379,7 +377,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			}
 		});
 
-		this.ribbonContextMenuObserver.observe(document.body, { childList: true, subtree: true });
+		this.ribbonContextMenuObserver.observe(activeDocument.body, { childList: true, subtree: true });
 	}
 
 	/**
@@ -410,7 +408,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		});
 
 		// Observe body with subtree and attributes (in case icons/classes change)
-		this.helpButtonObserver.observe(document.body, {
+		this.helpButtonObserver.observe(activeDocument.body, {
 			childList: true,
 			subtree: true,
 			attributes: true,
@@ -425,8 +423,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		const enabled = this.settings.helpButtonReplacement?.enabled;
 
 		// 1. Manage the CSS class for hiding the original button
-		if (enabled) document.body.addClass('astro-composer-hide-help-button');
-		else document.body.removeClass('astro-composer-hide-help-button');
+		if (enabled) activeDocument.body.addClass('astro-composer-hide-help-button');
+		else activeDocument.body.removeClass('astro-composer-hide-help-button');
 
 		// 2. Clear custom button if disabled
 		if (!enabled) {
@@ -447,7 +445,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 		let helpButtonSvg: SVGElement | null = null;
 		for (const selector of selectors) {
-			helpButtonSvg = document.querySelector(selector);
+			helpButtonSvg = activeDocument.querySelector(selector);
 			if (helpButtonSvg) break;
 		}
 
@@ -471,8 +469,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 		const iconContainer = customButton.querySelector('svg')?.parentElement || customButton;
 		try {
-			if (iconContainer instanceof HTMLElement) {
-				setIcon(iconContainer, this.settings.helpButtonReplacement!.iconId);
+			if (iconContainer.instanceOf(HTMLElement)) {
+				setIcon(iconContainer, this.settings.helpButtonReplacement.iconId);
 			}
 		} catch (error) {
 			console.warn('[Astro Composer] Error setting replacement icon:', error);
@@ -496,7 +494,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	}
 
 	private restoreHelpButton() {
-		document.body.removeClass('astro-composer-hide-help-button');
+		activeDocument.body.removeClass('astro-composer-hide-help-button');
 		if (this.customHelpButton) {
 			this.customHelpButton.remove();
 			this.customHelpButton = undefined;

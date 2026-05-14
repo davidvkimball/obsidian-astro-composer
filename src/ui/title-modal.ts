@@ -225,7 +225,7 @@ export class TitleModal extends Modal {
 		this.titleInput.focus();
 		// For new notes, ensure cursor is at the start (position 0)
 		if (this.isNewNote) {
-			setTimeout(() => {
+			window.setTimeout(() => {
 				this.titleInput.setSelectionRange(0, 0);
 			}, 0);
 		}
@@ -385,10 +385,10 @@ export class TitleModal extends Modal {
 			};
 
 			// Try immediately
-			setTimeout(() => {
+			window.setTimeout(() => {
 				if (!positionCursor()) {
 					// If it didn't work, try again after a longer delay
-					setTimeout(() => {
+					window.setTimeout(() => {
 						positionCursor();
 					}, 200);
 				}
@@ -477,10 +477,10 @@ export class TitleModal extends Modal {
 			return false;
 		};
 
-		setTimeout(() => {
+		window.setTimeout(() => {
 			if (!positionCursor()) {
 				// If it didn't work, try again after a longer delay
-				setTimeout(() => {
+				window.setTimeout(() => {
 					positionCursor();
 				}, 200);
 			}

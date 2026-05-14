@@ -102,17 +102,28 @@ export const CONSTANTS = {
 	FILE_EXPLORER_REVEAL_DELAY: 200,
 } as const;
 
+// Minimal structural types for plugin services, declared here to keep types.ts
+// free of service-layer imports while giving consumers a typed API surface.
+export interface FrontmatterServiceLike {
+	initializeDraftStatusMap(): void;
+	destroy(): void;
+}
+
+export interface FileOperationsLike {
+	getContentTypeByPath(filePath: string): ContentType | null;
+}
+
 export interface AstroComposerPluginInterface {
 	settings: AstroComposerSettings;
 	saveSettings(): Promise<void>;
 	loadSettings(): Promise<void>;
 	registerCreateEvent(): void;
-	registerEvent(eventRef: any): void;
+	registerEvent(eventRef: unknown): void;
 	registerExtensions(extensions: string[], viewType: string): void;
-	headingLinkGenerator: any;
-	frontmatterService: any;
+	headingLinkGenerator: unknown;
+	frontmatterService: FrontmatterServiceLike;
 	pluginCreatedFiles: Map<string, number>;
-	fileOps: any;
+	fileOps: FileOperationsLike;
 	settingsTab?: PluginSettingTab;
 	registerRibbonIcons?(): void;
 	updateHelpButton?(): Promise<void>;

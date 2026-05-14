@@ -1,5 +1,11 @@
-import { App, TFile, moment, TAbstractFile } from "obsidian";
-import { AstroComposerPluginInterface, ContentType } from "../types";
+import { App, TFile, moment } from "obsidian";
+import { AstroComposerPluginInterface, AstroComposerSettings, ContentType } from "../types";
+
+type Indexable = Record<string, unknown>;
+function asIndexable(obj: unknown): Indexable | null {
+    if (obj === null || obj === undefined || typeof obj !== 'object') return null;
+    return obj as Indexable;
+}
 
 export class FrontmatterService {
     private lastProcessedFile: string = "";
@@ -21,31 +27,37 @@ export class FrontmatterService {
         // No-op, kept for interface compatibility
     }
 
-    private getNestedProperty(obj: any, path: string): any {
-        if (!obj || !path) return undefined;
-        if (!path.includes('.')) return obj[path];
+    private getNestedProperty(obj: unknown, path: string): unknown {
+        const root = asIndexable(obj);
+        if (!root || !path) return undefined;
+        if (!path.includes('.')) return root[path];
         const parts = path.split('.');
-        let current = obj;
+        let current: Indexable | null = root;
         for (const part of parts) {
-            if (current === undefined || current === null) return undefined;
-            current = current[part];
+            if (!current) return undefined;
+            current = asIndexable(current[part]);
+            if (current === null) return undefined;
         }
         return current;
     }
 
-    private setNestedProperty(obj: any, path: string, value: any): void {
+    private setNestedProperty(obj: Indexable, path: string, value: unknown): void {
         if (!path.includes('.')) {
             obj[path] = value;
             return;
         }
         const parts = path.split('.');
         const lastProp = parts.pop()!;
-        let current = obj;
+        let current: Indexable = obj;
         for (const part of parts) {
-            if (current[part] === undefined || current[part] === null || typeof current[part] !== 'object') {
-                current[part] = {};
+            const next = asIndexable(current[part]);
+            if (next === null) {
+                const fresh: Indexable = {};
+                current[part] = fresh;
+                current = fresh;
+            } else {
+                current = next;
             }
-            current = current[part];
         }
         current[lastProp] = value;
     }
@@ -56,7 +68,7 @@ export class FrontmatterService {
         const isUnderscoreMode = settings.draftDetectionMode === 'underscore-prefix';
         const draftProp = settings.draftProperty || "draft";
         // Include both .md and .mdx files
-        const files = this.app.vault.getFiles().filter(f => f instanceof TFile && (f.extension === 'md' || f.extension === 'mdx')) as TFile[];
+        const files = this.app.vault.getFiles().filter(f => f instanceof TFile && (f.extension === 'md' || f.extension === 'mdx'));
 
         for (const file of files) {
             if (isUnderscoreMode) {
@@ -69,12 +81,15 @@ export class FrontmatterService {
         }
     }
 
-    private calculateIsDraft(rawValue: any, settings: any): boolean {
+    private calculateIsDraft(rawValue: unknown, settings: AstroComposerSettings): boolean {
         // If undefined/null, assume it's NOT a draft unless logic says otherwise
         if (rawValue === undefined || rawValue === null) return false;
 
-        // Convert to string for easier matching if it's not a boolean
-        const val = String(rawValue).toLowerCase();
+        // Convert to string for easier matching if it's not a boolean.
+        // Restrict to primitives so the rawValue toString cannot produce
+        // "[object Object]" by accident.
+        const stringifiable = typeof rawValue === 'string' || typeof rawValue === 'number' || typeof rawValue === 'boolean';
+        const val = stringifiable ? String(rawValue).toLowerCase() : '';
 
         if (settings.draftLogic === 'false-is-draft') {
             // "False = Published", so it's a draft if it is false, "false", "0", etc.
@@ -217,7 +232,7 @@ export class FrontmatterService {
             window.clearTimeout(this.debounceTimeout);
         }
 
-        this.debounceTimeout = window.setTimeout(async () => {
+        this.debounceTimeout = window.setTimeout(() => void (async () => {
             // Check if content (excluding frontmatter) has actually changed
             try {
                 const content = await this.app.vault.read(file);
@@ -249,7 +264,7 @@ export class FrontmatterService {
             }
 
             void this.processFile(file, draftStatusChangedToPublished, contentType);
-        }, 500);
+        })(), 500);
     }
 
     private getContentHash(content: string): string {
@@ -285,7 +300,7 @@ export class FrontmatterService {
         const settings = this.plugin.settings;
         const dateField = settings.publishDateField || "date";
 
-        await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+        await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
             const today = moment().format(settings.dateFormat);
             if (this.getNestedProperty(frontmatter, dateField) !== today) {
                 this.setNestedProperty(frontmatter, dateField, today);
@@ -299,7 +314,7 @@ export class FrontmatterService {
         const settings = this.plugin.settings;
         const publishDateField = settings.publishDateField || "date";
 
-        await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+        await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
             let changed = false;
 
             // Handle Draft Sync (triggered only on the specific transition)

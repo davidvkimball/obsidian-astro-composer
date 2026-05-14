@@ -44,12 +44,12 @@ export class MigrationService {
         // If conflicts exist, prompt user
         if (conflicts.length > 0) {
             await new Promise<void>((resolve) => {
-                setTimeout(() => {
+                window.setTimeout(() => {
                     void (async () => {
                         try {
                             const modal = new MigrationModal(this.app, conflicts);
                             const timeoutPromise = new Promise<MigrationConflictResult>((timeoutResolve) => {
-                                setTimeout(() => {
+                                window.setTimeout(() => {
                                     timeoutResolve({ action: "skip" });
                                 }, 30000); // 30 second timeout
                             });
@@ -158,7 +158,7 @@ export class MigrationService {
         if (migratedTypes.length > 0) {
             new Notice(`Migration completed: ${migratedTypes.length} content type(s) migrated.`);
 
-            setTimeout(() => {
+            window.setTimeout(() => {
                 if (this.plugin.settingsTab instanceof AstroComposerSettingTab) {
                     const settingsTab = this.plugin.settingsTab;
                     try {
