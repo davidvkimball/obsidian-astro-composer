@@ -22,6 +22,12 @@ export class TitleModal extends Modal {
 		this.isRename = isRename;
 		this.isNewNote = isNewNote;
 
+		// Mark our modal-container so the pre-emptive suppressor in
+		// CreateEventService can tell our modal apart from Obsidian's
+		// auto-rename modal (which fires when both inline title and tab title
+		// bar are hidden in Appearance settings).
+		this.modalEl.addClass('astro-composer-title-modal');
+
 		// Initialize utilities with current settings
 		// FileOperations will get fresh settings from plugin dynamically
 		const settings = plugin.settings;
