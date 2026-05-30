@@ -37,6 +37,15 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	private createEventService!: CreateEventService;
 	public frontmatterService!: FrontmatterService;
 
+	// The main app window's document. Obsidian 1.13.0+ opens Settings in a
+	// separate window, so `activeDocument` (the focused window) points at the
+	// Settings window while a setting is being changed — which would apply our
+	// ribbon/help-button body classes and inject the swapped button into the
+	// wrong window. The workspace container always lives in the main window.
+	private get doc(): Document {
+		return this.app.workspace.containerEl.ownerDocument;
+	}
+
 	/**
 	 * Migrate old posts/pages settings to unified content types
 	 */
@@ -118,7 +127,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	}
 
 	private registerTitlePropertyClickListener() {
-		this.registerDomEvent(activeDocument, "click", (evt: MouseEvent) => {
+		this.registerDomEvent(this.doc, "click", (evt: MouseEvent) => {
 			if (!this.settings.renameOnTitleClick) return;
 
 			const target = evt.target as HTMLElement;
@@ -260,9 +269,9 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				this.configRibbonIcon = null;
 			}
 			try {
-				const terminalIcons = activeDocument.querySelectorAll('.side-dock-ribbon-action[aria-label="Open project terminal"]');
+				const terminalIcons = this.doc.querySelectorAll('.side-dock-ribbon-action[aria-label="Open project terminal"]');
 				terminalIcons.forEach((icon: Element) => icon.remove());
-				const configIcons = activeDocument.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit Astro config"]');
+				const configIcons = this.doc.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit Astro config"]');
 				configIcons.forEach((icon: Element) => icon.remove());
 			} catch { /* Ignore */ }
 			return;
@@ -282,8 +291,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		}
 
 		try {
-			activeDocument.querySelectorAll('.side-dock-ribbon-action[aria-label="Open project terminal"]').forEach(el => el.remove());
-			activeDocument.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit Astro config"]').forEach(el => el.remove());
+			this.doc.querySelectorAll('.side-dock-ribbon-action[aria-label="Open project terminal"]').forEach(el => el.remove());
+			this.doc.querySelectorAll('.side-dock-ribbon-action[aria-label="Edit Astro config"]').forEach(el => el.remove());
 		} catch { /* Ignore */ }
 
 		if (terminalShouldExist) {
@@ -326,8 +335,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			this.ribbonContextMenuObserver.disconnect();
 			this.ribbonContextMenuObserver = undefined;
 		}
-		activeDocument.body.removeClass('astro-composer-hide-terminal-icon');
-		activeDocument.body.removeClass('astro-composer-hide-config-icon');
+		this.doc.body.removeClass('astro-composer-hide-terminal-icon');
+		this.doc.body.removeClass('astro-composer-hide-config-icon');
 		if (this.helpButtonObserver) {
 			this.helpButtonObserver.disconnect();
 			this.helpButtonObserver = undefined;
@@ -348,11 +357,11 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		const terminalShouldBeHidden = !this.settings.enableTerminalRibbonIcon || !this.settings.enableOpenTerminalCommand;
 		const configShouldBeHidden = !this.settings.enableConfigRibbonIcon || !this.settings.enableOpenConfigFileCommand;
 
-		if (terminalShouldBeHidden) activeDocument.body.addClass('astro-composer-hide-terminal-icon');
-		else activeDocument.body.removeClass('astro-composer-hide-terminal-icon');
+		if (terminalShouldBeHidden) this.doc.body.addClass('astro-composer-hide-terminal-icon');
+		else this.doc.body.removeClass('astro-composer-hide-terminal-icon');
 
-		if (configShouldBeHidden) activeDocument.body.addClass('astro-composer-hide-config-icon');
-		else activeDocument.body.removeClass('astro-composer-hide-config-icon');
+		if (configShouldBeHidden) this.doc.body.addClass('astro-composer-hide-config-icon');
+		else this.doc.body.removeClass('astro-composer-hide-config-icon');
 	}
 
 	private setupRibbonContextMenuObserver() {
@@ -377,7 +386,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			}
 		});
 
-		this.ribbonContextMenuObserver.observe(activeDocument.body, { childList: true, subtree: true });
+		this.ribbonContextMenuObserver.observe(this.doc.body, { childList: true, subtree: true });
 	}
 
 	/**
@@ -408,7 +417,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		});
 
 		// Observe body with subtree and attributes (in case icons/classes change)
-		this.helpButtonObserver.observe(activeDocument.body, {
+		this.helpButtonObserver.observe(this.doc.body, {
 			childList: true,
 			subtree: true,
 			attributes: true,
@@ -423,8 +432,8 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 		const enabled = this.settings.helpButtonReplacement?.enabled;
 
 		// 1. Manage the CSS class for hiding the original button
-		if (enabled) activeDocument.body.addClass('astro-composer-hide-help-button');
-		else activeDocument.body.removeClass('astro-composer-hide-help-button');
+		if (enabled) this.doc.body.addClass('astro-composer-hide-help-button');
+		else this.doc.body.removeClass('astro-composer-hide-help-button');
 
 		// 2. Clear custom button if disabled
 		if (!enabled) {
@@ -445,7 +454,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 		let helpButtonSvg: SVGElement | null = null;
 		for (const selector of selectors) {
-			helpButtonSvg = activeDocument.querySelector(selector);
+			helpButtonSvg = this.doc.querySelector(selector);
 			if (helpButtonSvg) break;
 		}
 
@@ -499,13 +508,13 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	}
 
 	private restoreHelpButton() {
-		activeDocument.body.removeClass('astro-composer-hide-help-button');
+		this.doc.body.removeClass('astro-composer-hide-help-button');
 		if (this.customHelpButton) {
 			this.customHelpButton.remove();
 			this.customHelpButton = undefined;
 		}
 		// Untag any originals so they show again when the feature is disabled.
-		const tagged = activeDocument.querySelectorAll('.astro-composer-original-help-button');
+		const tagged = this.doc.querySelectorAll('.astro-composer-original-help-button');
 		tagged.forEach((el) => el.removeClass('astro-composer-original-help-button'));
 		this.helpButtonElement = undefined;
 	}
