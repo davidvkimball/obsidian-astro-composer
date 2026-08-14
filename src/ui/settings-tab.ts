@@ -153,6 +153,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						control: { type: 'toggle' as const, key: 'renameOnTitleClick' },
 					},
 					{
+						name: 'Show folder name in inline title',
+						desc: 'For folder-based content, show the parent folder name in the inline title instead of the index file name. Clicking it opens the rename dialog, which renames the folder.',
+						control: { type: 'toggle' as const, key: 'showFolderNameAsInlineTitle' },
+					},
+					{
 						name: 'Update date on publish',
 						desc: 'Update \'date\' property when switching from draft to published status.',
 						// Render: toggling this shows or hides the draft detection rows below,
@@ -683,6 +688,21 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						.onChange(async (value: boolean) => {
 							settings.renameOnTitleClick = value;
 							await this.plugin.saveSettings();
+						})
+				);
+		});
+
+		automationGroup.addSetting(setting => {
+			setting
+				.setName("Show folder name in inline title")
+				.setDesc("For folder-based content, show the parent folder name in the inline title instead of the index file name. Clicking it opens the rename dialog, which renames the folder.")
+				.addToggle(toggle =>
+					toggle
+						.setValue(settings.showFolderNameAsInlineTitle)
+						.onChange(async (value: boolean) => {
+							settings.showFolderNameAsInlineTitle = value;
+							await this.plugin.saveSettings();
+							this.plugin.inlineTitleService?.refresh();
 						})
 				);
 		});

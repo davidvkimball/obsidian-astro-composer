@@ -34,4 +34,5 @@ export const DEFAULT_SETTINGS: AstroComposerSettings = {
 	draftLogic: "true-is-draft",
 	publishDateField: "",
 	renameOnTitleClick: false,
+	showFolderNameAsInlineTitle: false,
 };

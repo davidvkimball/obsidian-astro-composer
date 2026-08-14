@@ -339,3 +339,10 @@ body .astro-composer-hidden-menu-item.astro-composer-hidden-menu-item {
 body .astro-composer-original-help-button.astro-composer-original-help-button {
 	display: none;
 }
+
+/* Folder-based inline title: read-only, because editing it natively would
+   rename the index file instead of the folder. Clicking opens the rename
+   dialog, so it needs to read as clickable. */
+.inline-title.astro-composer-folder-inline-title {
+	cursor: pointer;
+}

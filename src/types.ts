@@ -26,6 +26,7 @@ export interface AstroComposerSettings {
 	draftLogic: 'true-is-draft' | 'false-is-draft';
 	publishDateField: string;
 	renameOnTitleClick: boolean;
+	showFolderNameAsInlineTitle: boolean;
 	// Legacy fields (kept for migration, ignored after migration)
 	enableUnderscorePrefix?: boolean;
 	postsFolder?: string;
@@ -119,12 +120,15 @@ export interface AstroComposerPluginInterface {
 	loadSettings(): Promise<void>;
 	registerCreateEvent(): void;
 	registerEvent(eventRef: unknown): void;
+	registerDomEvent(el: Document, type: "click", callback: (evt: MouseEvent) => void, options?: boolean | AddEventListenerOptions): void;
 	registerExtensions(extensions: string[], viewType: string): void;
+	renameContentByPath(filePath: string): void;
 	headingLinkGenerator: unknown;
 	frontmatterService: FrontmatterServiceLike;
 	pluginCreatedFiles: Map<string, number>;
 	fileOps: FileOperationsLike;
 	settingsTab?: PluginSettingTab;
+	inlineTitleService?: { refresh(): void };
 	registerRibbonIcons?(): void;
 	updateHelpButton?(): Promise<void>;
 }

@@ -17,6 +17,7 @@ import { HeadingLinkGenerator } from "./utils/heading-link-generator";
 import { MigrationService } from "./services/MigrationService";
 import { CreateEventService } from "./services/CreateEventService";
 import { FrontmatterService } from "./services/FrontmatterService";
+import { InlineTitleService } from "./services/InlineTitleService";
 export default class AstroComposerPlugin extends Plugin implements AstroComposerPluginInterface {
 	settings!: AstroComposerSettings;
 	private createEventRef?: EventRef;
@@ -36,6 +37,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 	private migrationService!: MigrationService;
 	private createEventService!: CreateEventService;
 	public frontmatterService!: FrontmatterService;
+	public inlineTitleService!: InlineTitleService;
 
 	// The main app window's document. Obsidian 1.13.0+ opens Settings in a
 	// separate window, so `activeDocument` (the focused window) points at the
@@ -65,6 +67,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 			this.migrationService = new MigrationService(this.app, this);
 			this.createEventService = new CreateEventService(this.app, this);
 			this.frontmatterService = new FrontmatterService(this.app, this);
+			this.inlineTitleService = new InlineTitleService(this.app, this);
 			this.templateParser = new TemplateParser(this.app, this.settings, this);
 			this.headingLinkGenerator = new HeadingLinkGenerator(this.settings, this);
 
@@ -86,6 +89,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 				}
 
 				this.registerTitlePropertyClickListener();
+				this.inlineTitleService.register();
 
 				// Run migration after plugin is fully loaded (non-blocking)
 				void this.migrateSettingsIfNeeded();
@@ -323,6 +327,7 @@ export default class AstroComposerPlugin extends Plugin implements AstroComposer
 
 	onunload() {
 		this.frontmatterService?.destroy();
+		this.inlineTitleService?.destroy();
 		if (this.terminalRibbonIcon) {
 			this.terminalRibbonIcon.remove();
 			this.terminalRibbonIcon = null;
