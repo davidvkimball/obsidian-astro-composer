@@ -112,6 +112,7 @@ export interface FrontmatterServiceLike {
 
 export interface FileOperationsLike {
 	getContentTypeByPath(filePath: string): ContentType | null;
+	renameFolderSlug(file: TFile, rawSlug: string): Promise<TFile | null>;
 }
 
 export interface AstroComposerPluginInterface {

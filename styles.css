@@ -340,9 +340,10 @@ body .astro-composer-original-help-button.astro-composer-original-help-button {
 	display: none;
 }
 
-/* Folder-based inline title: read-only, because editing it natively would
-   rename the index file instead of the folder. Clicking opens the rename
-   dialog, so it needs to read as clickable. */
-.inline-title.astro-composer-folder-inline-title {
-	cursor: pointer;
+/* Folder-based inline title. Obsidian's own element is hidden rather than
+   reused, because committing an edit there renames the index file instead of
+   the folder. The editable twin carries .inline-title so it inherits the
+   theme's title styling. */
+.inline-title.astro-composer-native-title-hidden {
+	display: none;
 }

@@ -414,6 +414,59 @@ export class FileOperations {
 		}
 	}
 
+	/**
+	 * Renames the parent folder of a folder-based index file to an explicit slug.
+	 *
+	 * Unlike renameFile, this takes the slug verbatim rather than deriving it
+	 * from a title, and it deliberately leaves frontmatter alone. Editing the
+	 * inline title changes the URL, not the headline, so rewriting `title:`
+	 * here would silently change something the user did not ask to change.
+	 */
+	async renameFolderSlug(file: TFile, rawSlug: string): Promise<TFile | null> {
+		const parent = file.parent;
+		if (!parent) {
+			new Notice("Cannot rename: file has no parent folder.");
+			return null;
+		}
+		const grandparent = parent.parent;
+		if (!grandparent) {
+			new Notice("Cannot rename: parent folder has no parent.");
+			return null;
+		}
+
+		// A leading underscore marks a draft. The name is edited raw, so honor
+		// whichever prefix was typed rather than the one the folder started with,
+		// which lets the same edit promote a draft or demote a published post.
+		const trimmed = rawSlug.trim();
+		const prefix = trimmed.startsWith("_") ? "_" : "";
+		const stem = this.createSafeStem(prefix ? trimmed.slice(1) : trimmed);
+		const newFolderName = `${prefix}${stem}`;
+
+		if (newFolderName === parent.name) return file;
+
+		const newFolderPath = this.getUniqueFolderPath(
+			grandparent.path === "" || grandparent.path === "/"
+				? newFolderName
+				: `${grandparent.path}/${newFolderName}`,
+			parent.path,
+		);
+
+		try {
+			await this.app.fileManager.renameFile(parent, newFolderPath);
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			new Notice(`Failed to rename folder: ${errorMessage}.`);
+			return null;
+		}
+
+		const newFile = this.app.vault.getAbstractFileByPath(`${newFolderPath}/${file.name}`);
+		if (!(newFile instanceof TFile)) {
+			new Notice("Failed to locate renamed file.");
+			return null;
+		}
+		return newFile;
+	}
+
 	private async renameFolderStructure(file: TFile, kebabTitle: string, prefix: string, type: ContentTypeId, contentType: ContentType | null): Promise<TFile | null> {
 		// Smart detection: treat as index if filename matches the index file name
 		// Default to "index" when indexFileName is blank
