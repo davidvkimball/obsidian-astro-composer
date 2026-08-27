@@ -299,10 +299,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						visible: () => settings.enableOpenTerminalCommand,
 						// Render: multi-line description built as a document fragment.
 						render: (setting: Setting) => {
-							const descFragment = activeDocument.createDocumentFragment();
+							const descFragment = createFragment();
 							// Text is already in sentence case; "Obsidian" is a proper noun
-							descFragment.createEl('div', { text: 'Path relative to the Obsidian vault root folder. For two levels up, use "../..". Leave blank to use the vault folder' });
-							descFragment.createEl('div', { text: 'This is where the terminal will open. Absolute paths work also.' });
+							descFragment.createDiv({ text: 'Path relative to the Obsidian vault root folder. For two levels up, use "../..". Leave blank to use the vault folder' });
+							descFragment.createDiv({ text: 'This is where the terminal will open. Absolute paths work also.' });
 							setting
 								.setDesc(descFragment)
 								.addText(text =>
@@ -322,11 +322,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						visible: () => settings.enableOpenTerminalCommand,
 						// Render: multi-line description built as a document fragment.
 						render: (setting: Setting) => {
-							const descFragment = activeDocument.createDocumentFragment();
+							const descFragment = createFragment();
 							// Text is already in sentence case; proper nouns or product names like "macOS", "Windows", "Linux"
-							descFragment.createEl('div', { text: 'Leave blank to use platform defaults. On macOS, the default is Terminal. On Windows, it\'s Windows Terminal (Win 11) or cmd.exe (Win 10). On Linux, it\'s gnome-terminal, konsole, or xterm' });
+							descFragment.createDiv({ text: 'Leave blank to use platform defaults. On macOS, the default is Terminal. On Windows, it\'s Windows Terminal (Win 11) or cmd.exe (Win 10). On Linux, it\'s gnome-terminal, konsole, or xterm' });
 							// Text is already in sentence case; proper nouns like "Terminal", "iTerm", "PowerShell"
-							descFragment.createEl('div', { text: 'Examples include terminal, iTerm, PowerShell, and Alacritty' });
+							descFragment.createDiv({ text: 'Examples include terminal, iTerm, PowerShell, and Alacritty' });
 							setting
 								.setDesc(descFragment)
 								.addText(text =>
@@ -400,9 +400,9 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						visible: () => settings.enableOpenConfigFileCommand,
 						// Render: multi-line description built as a document fragment.
 						render: (setting: Setting) => {
-							const descFragment = activeDocument.createDocumentFragment();
-							descFragment.createEl('div', { text: 'Path to the config file relative to the vault root. Use ../config.ts or ../../astro.config.mjs.' });
-							descFragment.createEl('div', { text: 'Absolute paths work also.' });
+							const descFragment = createFragment();
+							descFragment.createDiv({ text: 'Path to the config file relative to the vault root. Use ../config.ts or ../../astro.config.mjs.' });
+							descFragment.createDiv({ text: 'Absolute paths work also.' });
 							setting
 								.setDesc(descFragment)
 								.addText(text =>
@@ -845,10 +845,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			this.terminalCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenTerminalCommand);
 
 			developerGroup.addSetting(setting => {
-				const descFragment = activeDocument.createDocumentFragment();
+				const descFragment = createFragment();
 				// Text is already in sentence case; "Obsidian" is a proper noun
-				descFragment.createEl("div", { text: "Path relative to the Obsidian vault root folder. For two levels up, use \"../..\". Leave blank to use the vault folder" });
-				descFragment.createEl("div", { text: "This is where the terminal will open. Absolute paths work also." });
+				descFragment.createDiv({ text: "Path relative to the Obsidian vault root folder. For two levels up, use \"../..\". Leave blank to use the vault folder" });
+				descFragment.createDiv({ text: "This is where the terminal will open. Absolute paths work also." });
 				setting
 					.setName("Project root directory path")
 					.setDesc(descFragment)
@@ -867,11 +867,11 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			});
 
 			developerGroup.addSetting(setting => {
-				const descFragment = activeDocument.createDocumentFragment();
+				const descFragment = createFragment();
 				// Text is already in sentence case; proper nouns or product names like "macOS", "Windows", "Linux"
-				descFragment.createEl("div", { text: "Leave blank to use platform defaults. On macOS, the default is Terminal. On Windows, it's Windows Terminal (Win 11) or cmd.exe (Win 10). On Linux, it's gnome-terminal, konsole, or xterm" });
+				descFragment.createDiv({ text: "Leave blank to use platform defaults. On macOS, the default is Terminal. On Windows, it's Windows Terminal (Win 11) or cmd.exe (Win 10). On Linux, it's gnome-terminal, konsole, or xterm" });
 				// Text is already in sentence case; proper nouns like "Terminal", "iTerm", "PowerShell"
-				descFragment.createEl("div", { text: "Examples include terminal, iTerm, PowerShell, and Alacritty" });
+				descFragment.createDiv({ text: "Examples include terminal, iTerm, PowerShell, and Alacritty" });
 				setting
 					.setName("Terminal application name")
 					.setDesc(descFragment)
@@ -962,9 +962,9 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			this.configCommandContainer.classList.toggle("astro-composer-setting-container-hidden", !settings.enableOpenConfigFileCommand);
 
 			developerGroup.addSetting(setting => {
-				const descFragment = activeDocument.createDocumentFragment();
-				descFragment.createEl("div", { text: "Path to the config file relative to the vault root. Use ../config.ts or ../../astro.config.mjs." });
-				descFragment.createEl("div", { text: "Absolute paths work also." });
+				const descFragment = createFragment();
+				descFragment.createDiv({ text: "Path to the config file relative to the vault root. Use ../config.ts or ../../astro.config.mjs." });
+				descFragment.createDiv({ text: "Absolute paths work also." });
 				setting
 					.setName("Config file path")
 					.setDesc(descFragment)
@@ -1288,7 +1288,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 			// Middle left - content type name
 			const headerName = header.createDiv({ cls: "astro-composer-header-name" });
-			headerName.createEl("div", { text: customType.name || `Content ${index + 1}`, cls: "setting-item-name" });
+			headerName.createDiv({ text: customType.name || `Content ${index + 1}`, cls: "setting-item-name" });
 
 			// Middle right - up/down buttons (side-by-side)
 			const reorderContainer = header.createDiv({ cls: "astro-composer-reorder-buttons" });
@@ -1557,10 +1557,10 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 				})
 				.then((setting) => {
 					setting.descEl.empty();
-					const descDiv = setting.descEl.createEl("div");
-					descDiv.createEl("div", { text: "Template for new files of this content type." });
-					descDiv.createEl("div", { text: "Variables include {{title}}, {{date}}, and {{slug}}." });
-					descDiv.createEl("div", { text: "Do not wrap {{date}} in quotes as it represents a datetime value, not a string." });
+					const descDiv = setting.descEl.createDiv();
+					descDiv.createDiv({ text: "Template for new files of this content type." });
+					descDiv.createDiv({ text: "Variables include {{title}}, {{date}}, and {{slug}}." });
+					descDiv.createDiv({ text: "Do not wrap {{date}} in quotes as it represents a datetime value, not a string." });
 				});
 
 			// Remove button at the bottom (no divider)
