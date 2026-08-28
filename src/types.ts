@@ -20,6 +20,8 @@ export interface AstroComposerSettings {
 	migrationCompleted: boolean;
 	showMdxFilesInExplorer: boolean;
 	processBackgroundFileChanges: boolean;
+	/** How to treat notes created outside the plugin (sync, git, other plugins). */
+	externalNoteHandling?: 'off' | 'prompt' | 'convert';
 	syncDraftDate: boolean;
 	draftDetectionMode: 'property' | 'underscore-prefix';
 	draftProperty: string;

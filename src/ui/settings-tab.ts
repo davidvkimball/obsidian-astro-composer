@@ -125,10 +125,18 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 						control: { type: 'toggle' as const, key: 'addTrailingSlashToLinks' },
 					},
 					{
-						name: 'Process background file changes',
+						name: 'Externally created notes',
 						// Technical terms like "Obsidian", "git" are proper nouns in this context
 						desc: 'Automatically process new files when they\'re changed in the background (by Git or other plugins). Disable to prevent modal spam when files are already processed on other devices during a sync.',
-						control: { type: 'toggle' as const, key: 'processBackgroundFileChanges' },
+						control: {
+							type: 'dropdown' as const,
+							key: 'externalNoteHandling',
+							options: {
+								off: 'Ignore',
+								prompt: 'Ask for a title',
+								convert: 'Convert silently',
+							},
+						},
 					},
 					{
 						// "MDX" is a proper noun (file format) and should be capitalized
@@ -632,14 +640,19 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 
 		generalGroup.addSetting(setting => {
 			setting
-				.setName("Process background file changes")
+				.setName("Externally created notes")
 				// Technical terms like "Obsidian", "git" are proper nouns in this context
-				.setDesc("Automatically process new files when they're changed in the background (by Git or other plugins). Disable to prevent modal spam when files are already processed on other devices during a sync.")
-				.addToggle(toggle =>
-					toggle
-						.setValue(settings.processBackgroundFileChanges)
-						.onChange(async (value: boolean) => {
-							settings.processBackgroundFileChanges = value;
+				.setDesc("How to treat notes created outside this plugin, such as by sync, Git or another plugin. Convert silently applies the content type structure with no modal, which avoids the modal spam that makes prompting impractical during a sync.")
+				.addDropdown(dropdown =>
+					dropdown
+						.addOption("off", "Ignore")
+						.addOption("prompt", "Ask for a title")
+						.addOption("convert", "Convert silently")
+						.setValue(settings.externalNoteHandling ?? (settings.processBackgroundFileChanges ? "prompt" : "off"))
+						.onChange(async (value: string) => {
+							settings.externalNoteHandling = value as 'off' | 'prompt' | 'convert';
+							// Keep the legacy boolean consistent for older installs.
+							settings.processBackgroundFileChanges = value !== "off";
 							await this.plugin.saveSettings();
 						})
 				);

@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS: AstroComposerSettings = {
 	},
 	showMdxFilesInExplorer: false,
 	processBackgroundFileChanges: true,
+	externalNoteHandling: 'prompt',
 	syncDraftDate: false,
 	draftDetectionMode: "property",
 	draftProperty: "",

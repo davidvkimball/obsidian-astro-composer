@@ -249,6 +249,19 @@ export class TitleModal extends Modal {
 		});
 	}
 
+	/**
+	 * Apply the same conversion submit() performs, without showing the modal.
+	 * Used when a note created outside the plugin should be restructured
+	 * silently, so the logic stays in one place.
+	 */
+	async convertSilently(title: string): Promise<void> {
+		if (!this.file) return;
+		const newFile = await this.fileOps.createFile({ file: this.file, title, type: this.type });
+		if (newFile && this.plugin.settings.autoInsertProperties) {
+			await this.addPropertiesToFile(newFile, title, this.type);
+		}
+	}
+
 	async submit() {
 		const title = this.titleInput.value.trim();
 

@@ -127,7 +127,11 @@ export class CreateEventService {
 
             if (!isUntitled) {
                 // Not an Untitled file. Only process if background processing is enabled.
-                if (!this.plugin.settings.processBackgroundFileChanges) {
+                // Notes created outside the plugin. Legacy installs only carry the
+                // boolean, so fall back to it when the newer setting is absent.
+                const handling = this.plugin.settings.externalNoteHandling
+                    ?? (this.plugin.settings.processBackgroundFileChanges ? 'prompt' : 'off');
+                if (handling === 'off') {
                     suppressor.dispose();
                     return;
                 }
@@ -170,7 +174,18 @@ export class CreateEventService {
                 this.lastProcessedFiles.delete(file.path);
             }, CONSTANTS.DEBOUNCE_MS + 100);
 
-            new TitleModal(this.app, file, this.plugin, matchedContentTypeId, false, true).open();
+            const modal = new TitleModal(this.app, file, this.plugin, matchedContentTypeId, false, true);
+            const handlingMode = this.plugin.settings.externalNoteHandling
+                ?? (this.plugin.settings.processBackgroundFileChanges ? 'prompt' : 'off');
+            const isUntitledFile = /^Untitled(\s\d+)?$/.test(file.basename);
+            if (handlingMode === 'convert' && !isUntitledFile) {
+                // Already-named note from sync, git or another plugin: restructure it
+                // using its own name, with no modal. An Untitled file still needs the
+                // prompt, since there is no title to work from.
+                void modal.convertSilently(file.basename);
+            } else {
+                modal.open();
+            }
             // suppressor auto-disconnects when it sees AC's modal added; the
             // 2s safety timer in installRenameModalSuppressor catches anything
             // weird (no need to manually dispose on the happy path).
