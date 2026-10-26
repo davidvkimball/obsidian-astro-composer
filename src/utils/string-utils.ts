@@ -1,4 +1,32 @@
 /**
+ * Makes a title safe to use as a file name while keeping it as typed:
+ * "My Note: Part 2?" becomes "My Note Part 2". Removes the characters that
+ * file systems reject or that break Obsidian links (\ / : * ? " < > | # ^ [ ]),
+ * plus control and bidi characters, and avoids Windows reserved names.
+ * @param str The title
+ * @returns A file name without extension, or "" if nothing usable is left
+ */
+export function toSafeFileName(str: string): string {
+    const cleaned = str
+        .normalize("NFC")
+        .replace(/[‎‏‪-‮⁦-⁩]/g, "")
+        .split("")
+        .filter(char => char.charCodeAt(0) >= 32)
+        .join("")
+        .replace(/[\\/:*?"<>|#^[\]]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        // A leading dot hides the file; trailing dots and spaces are dropped by Windows.
+        .replace(/^\.+/, "")
+        .replace(/[.\s]+$/g, "");
+
+    if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(cleaned)) {
+        return `${cleaned} file`;
+    }
+    return cleaned;
+}
+
+/**
  * Converts a string to kebab-case.
  * @param str The string to convert
  * @returns Kebab-case string

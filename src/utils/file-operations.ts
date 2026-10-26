@@ -1,7 +1,7 @@
 import { App, TFile, TFolder, Notice } from "obsidian";
 import { AstroComposerSettings, FileCreationOptions, RenameOptions, ContentType, ContentTypeId, AstroComposerPluginInterface } from "../types";
 import { matchesFolderPattern, sortByPatternSpecificity } from "./path-matching";
-import { toKebabCase } from "./string-utils";
+import { toKebabCase, toSafeFileName } from "./string-utils";
 
 export class FileOperations {
 	constructor(private app: App, private settings: AstroComposerSettings, private plugin?: AstroComposerPluginInterface) { }
@@ -15,7 +15,9 @@ export class FileOperations {
 		return this.settings;
 	}
 
-	private createSafeStem(title: string): string {
+	/** A file or folder name from a title, in the content type's file name format. */
+	private createSafeStem(title: string, contentType?: ContentType | null): string {
+		if (contentType?.fileNameFormat === "title") return toSafeFileName(title) || "Untitled";
 		return toKebabCase(title) || "untitled";
 	}
 
@@ -59,8 +61,8 @@ export class FileOperations {
 		}
 	}
 
-	generateFilename(title: string, enableUnderscorePrefix: boolean = false): string {
-		const safeKebabTitle = this.createSafeStem(title);
+	generateFilename(title: string, enableUnderscorePrefix: boolean = false, contentType?: ContentType | null): string {
+		const safeKebabTitle = this.createSafeStem(title, contentType);
 		const prefix = enableUnderscorePrefix ? "_" : "";
 		return `${prefix}${safeKebabTitle}`;
 	}
@@ -175,7 +177,7 @@ export class FileOperations {
 			return null;
 		}
 
-		const kebabTitle = this.createSafeStem(title);
+		const kebabTitle = this.createSafeStem(title, contentType);
 		const enableUnderscorePrefix = contentType?.enableUnderscorePrefix || false;
 		const prefix = enableUnderscorePrefix ? "_" : "";
 
@@ -403,7 +405,7 @@ export class FileOperations {
 			return null;
 		}
 
-		const kebabTitle = this.createSafeStem(title);
+		const kebabTitle = this.createSafeStem(title, contentType);
 		const prefix = "";
 
 		const creationMode = contentType?.creationMode || "file";

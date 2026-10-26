@@ -76,6 +76,12 @@ export interface ContentType {
 	template: string;
 	enabled: boolean;
 	creationMode: "file" | "folder";
+	/**
+	 * How a new entry's file (or folder) is named from its title. "kebab-case"
+	 * (the default) gives my-note.md; "title" keeps the title as typed, My Note.md,
+	 * as Obsidian names notes. Missing means "kebab-case".
+	 */
+	fileNameFormat?: "kebab-case" | "title";
 	indexFileName: string;
 	ignoreSubfolders: boolean;
 	enableUnderscorePrefix: boolean;

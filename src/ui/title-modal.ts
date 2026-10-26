@@ -358,8 +358,8 @@ export class TitleModal extends Modal {
 		}
 
 		// Create the filename from the title
-		const filename = this.fileOps.generateFilename(title);
 		const contentType = this.fileOps.getContentType(this.type);
+		const filename = this.fileOps.generateFilename(title, false, contentType);
 		const extension = contentType?.useMdxExtension ? ".mdx" : ".md";
 		const filePath = targetFolder ? `${targetFolder}/${filename}${extension}` : `${filename}${extension}`;
 

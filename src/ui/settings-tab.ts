@@ -1240,6 +1240,7 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 			template: '---\ntitle: "{{title}}"\ndate: {{date}}\n---\n',
 			enabled: true,
 			creationMode: "file",
+			fileNameFormat: "kebab-case",
 			indexFileName: "",
 			ignoreSubfolders: false,
 			enableUnderscorePrefix: false,
@@ -1503,6 +1504,21 @@ export class AstroComposerSettingTab extends PluginSettingTab {
 							customType.creationMode = value as "file" | "folder";
 							await this.plugin.saveSettings();
 							this.updateCustomContentTypeIndexFileField(customType.id);
+						})
+				);
+
+			// File name format
+			new Setting(settingsContainer.createDiv())
+				.setName("File name")
+				.setDesc("How new entries are named from their title. Kebab-case gives my-post.md; as typed keeps the title with its capitals and spaces, as Obsidian names notes.")
+				.addDropdown(dropdown =>
+					dropdown
+						.addOption("kebab-case", "Kebab-case (my-post.md)")
+						.addOption("title", "As typed (keeps capitals and spaces)")
+						.setValue(customType.fileNameFormat || "kebab-case")
+						.onChange(async (value: string) => {
+							customType.fileNameFormat = value as "kebab-case" | "title";
+							await this.plugin.saveSettings();
 						})
 				);
 

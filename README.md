@@ -46,6 +46,7 @@ Part of the [Vault CMS](https://github.com/davidvkimball/vault-cms) project.
    - **Excluded directories**: List directories to exclude from automation (e.g., `pages|posts/example`), separated by `|`, when not restricted to the posts folder.
    - **Use underscore prefix for drafts**: Add a prefix (e.g., `_my-post.md`) to hide drafts from Astro.
    - **Creation mode**: Choose file-based (`my-post.md`) or folder-based (`my-post/index.md`) structure.
+   - **File name**: Name new entries in kebab-case (`my-post.md`, the default) or keep the title as typed (`My Post.md`), as Obsidian names notes. Characters that file systems or Obsidian links can't take are removed either way.
    - **Index file name**: Name the main file in folder-based mode (e.g., `index`).
    - **Date format**: Set the properties date format (e.g., `YYYY-MM-DD` or `MMMM D, YYYY`).
    - **Properties template**: Define the template for new posts and standardization. Supports `{{title}}`, `{{date}}`, and `{{slug}}` placeholders (e.g., `---\ntitle: "{{title}}"\ndate: {{date}}\nslug: {{slug}}\ndescription: ""\ntags: []\n---`).
